@@ -1,0 +1,14 @@
+{
+  "budget_limit_bps": 3000.0,
+  "within_budget": true,
+  "peak_wire_bps": 294.0,
+  "peak_serial_bps": 610.0,
+  "peak_max_bps": 610.0,
+  "current_wire_bps": 66.0,
+  "current_serial_bps": 138.0,
+  "utilization_peak_pct": 20.33,
+  "total_wire_bytes": 711,
+  "total_serial_bytes": 1480,
+  "violations_count": 0,
+  "violations": []
+}
