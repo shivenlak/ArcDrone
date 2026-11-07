@@ -7,8 +7,8 @@
   "current_wire_bps": 66.0,
   "current_serial_bps": 138.0,
   "utilization_peak_pct": 20.33,
-  "total_wire_bytes": 711,
-  "total_serial_bytes": 1480,
+  "total_wire_bytes": 735,
+  "total_serial_bytes": 1530,
   "violations_count": 0,
   "violations": []
 }

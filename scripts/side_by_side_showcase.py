@@ -285,7 +285,7 @@ def run_side_by_side_showcase(
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
 
         # Render Right Panel: Ground Control Station
-        bw_sample = bw_monitor.sample()
+        bw_sample = bw_monitor.current_rate()
         latest = received_alerts[-1] if received_alerts else None
         right_frame = render_tactical_ground_panel(
             width=panel_w,
@@ -295,7 +295,7 @@ def run_side_by_side_showcase(
             stats=ground_link.summary(),
             mode_name="PATROL",
             drone_pos=(drone_lat, drone_lon),
-            bw_wire_bps=bw_sample["current_wire_bps"],
+            bw_wire_bps=bw_sample["wire_bytes_per_sec"],
         )
 
         # Combine into side-by-side composite
@@ -333,7 +333,8 @@ def run_side_by_side_showcase(
     print(f"\n[COMPLETE] Rendered video output: '{output_video_path}'")
     print(f"[COMPLETE] Rendered snapshot:     '{output_snapshot_path}'")
     print(f"[AUDIT]    Total Alerts Delivered: {len(received_alerts)}")
-    print(f"[AUDIT]    Peak Wire Bandwidth:   {bw_monitor.peak_wire_bps:.1f} B/s (Budget: {BUDGET_BYTES_PER_SEC} B/s)")
+    bw_sum = bw_monitor.summary()
+    print(f"[AUDIT]    Peak Wire Bandwidth:   {bw_sum['peak_wire_bps']:.1f} B/s (Budget: {BUDGET_BYTES_PER_SEC} B/s)")
 
 
 if __name__ == "__main__":
