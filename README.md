@@ -50,6 +50,19 @@ python -m pytest -q          # protocol tests, ~15 s
 
 **Team rules** (file ownership, git workflow, interface contracts): see [CLAUDE.md](CLAUDE.md#team-workflow-avoid-blocking-and-merge-conflicts).
 
+## Scene reconstructor (operator view)
+
+Alongside reliable DETECTION alerts, the drone streams a compact scene vector feed (SceneCodec v2, UDP, 12 Hz, ≤ 2.0 kbps). A browser page rebuilds the tactical view, shows what each target is doing, logs behavior changes, and lets you trace and replay one target’s movement.
+
+**Quick UI check (no camera or radio):**
+
+```bash
+python3 -m drone_node.scene_ws_relay
+# http://127.0.0.1:8080/reconstructor.html?demo=1
+```
+
+**Full 3-terminal run + step-by-step checklist for reviewers:** [drone_node/static/RECONSTRUCTOR_SETUP.md](drone_node/static/RECONSTRUCTOR_SETUP.md).
+
 ## Progress
 
 - [ ] **Phase 0:** Radio smoke test (hex lines echo both ways)
