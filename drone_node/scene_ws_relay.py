@@ -58,6 +58,14 @@ class SceneUdpProtocol(asyncio.DatagramProtocol):
         frame = _decode_udp(data)
         if frame is None:
             return
+        msg_types = {1: "HEARTBEAT", 2: "KEYFRAME", 3: "DELTA"}
+        if len(data) >= 2 and data[0] == 0xAE:
+            mt = (data[1] >> 4) & 0x0F
+            frame["msg_type"] = mt
+            frame["msg_name"] = msg_types.get(mt, "FRAME")
+        elif data[0] == 0xAD:
+            frame["msg_name"] = "V1"
+        frame["wire_hex"] = " ".join(f"{b:02X}" for b in data)
         asyncio.run_coroutine_threadsafe(_broadcast(frame), self._loop)
 
 
