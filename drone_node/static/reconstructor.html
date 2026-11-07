@@ -1,0 +1,1904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARCDRONE // SCENE RECONSTRUCTOR (2.0 KBPS VECTOR LINK)</title>
+  <style>
+    :root {
+      --bg-void: #060a0d;
+      --bg-panel: #0b1217;
+      --bg-panel-alt: #0f181f;
+      --bg-elevated: #132029;
+      --border-dim: #1b2c38;
+      --border-bright: #2b4558;
+      --text-primary: #e4f0f6;
+      --text-secondary: #8ba3b5;
+      --text-muted: #526a7a;
+
+      --accent-cyan: #00e5ff;
+      --accent-green: #00e676;
+      --accent-amber: #ffb300;
+      --accent-red: #ff5252;
+      --accent-reserve: #7c4dff;
+
+      /* Class Category Colors */
+      --cls-person: #00e5ff;   /* 1 pedestrian, 2 people */
+      --cls-light: #00e676;    /* 3 bicycle, 7 tricycle, 8 awning-tricycle, 10 motor */
+      --cls-vehicle: #ffb300;  /* 4 car, 5 van */
+      --cls-heavy: #ff5252;    /* 6 truck, 9 bus */
+
+      --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Monaco, 'Cascadia Mono', Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-void);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.35;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Subtle tactical CRT scanline overlay */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.18) 50%
+      );
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.35;
+    }
+
+    /* ==================== MASTER LAYOUT (1280x800 ZERO SCROLL) ==================== */
+    .app-shell {
+      display: grid;
+      grid-template-rows: 54px 1fr 172px;
+      height: 100vh;
+      width: 100vw;
+      gap: 6px;
+      padding: 6px;
+    }
+
+    /* ==================== TOP HEADER BAR ==================== */
+    .topbar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      gap: 12px;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 10px;
+      height: 28px;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .pill-tag {
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      color: var(--accent-cyan);
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border-radius: 2px;
+      white-space: nowrap;
+    }
+
+    .pill-tag.amber {
+      background: rgba(255, 179, 0, 0.1);
+      border-color: rgba(255, 179, 0, 0.4);
+      color: var(--accent-amber);
+    }
+
+    /* Link Budget Bar */
+    .budget-widget {
+      flex: 1;
+      max-width: 410px;
+      background: var(--bg-void);
+      border: 1px solid var(--border-dim);
+      padding: 5px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .budget-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    .budget-title {
+      color: var(--text-secondary);
+      font-weight: 700;
+    }
+
+    .budget-readout {
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+
+    .budget-track {
+      position: relative;
+      height: 10px;
+      width: 100%;
+      background: #0d161d;
+      border: 1px solid var(--border-dim);
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Full 2.0 kbps cap for scene vectors; alerts use serial link */
+    .budget-scene-zone {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      border-right: 2px solid var(--accent-amber);
+    }
+
+    .budget-scene-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00b8d4, #00e676);
+      transition: width 0.12s ease-out, background 0.15s ease;
+    }
+
+    .budget-scene-fill.warn {
+      background: linear-gradient(90deg, #ffb300, #ff5252);
+    }
+
+    .budget-reserve-zone {
+      width: 20%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(124, 77, 255, 0.18),
+        rgba(124, 77, 255, 0.18) 4px,
+        rgba(124, 77, 255, 0.35) 4px,
+        rgba(124, 77, 255, 0.35) 8px
+      );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      color: #b388ff;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    /* Telemetry Counters & Status */
+    .telemetry-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .tele-box {
+      background: var(--bg-void);
+      border: 1px solid var(--border-dim);
+      padding: 4px 8px;
+      min-width: 72px;
+    }
+
+    .tele-label {
+      font-size: 9px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .tele-val {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* LIVE / STALE Indicator */
+    .link-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border-radius: 2px;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      border: 1px solid;
+      min-width: 112px;
+      justify-content: center;
+    }
+
+    .link-badge.live {
+      background: rgba(0, 230, 118, 0.12);
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    .link-badge.stale {
+      background: rgba(255, 82, 82, 0.16);
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+      animation: pulse-alert 0.8s infinite alternate;
+    }
+
+    .link-badge.paused {
+      background: rgba(255, 179, 0, 0.15);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    @keyframes pulse-alert {
+      from { opacity: 1; }
+      to { opacity: 0.45; }
+    }
+
+    /* Control Buttons */
+    .ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-bright);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 6px 9px;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: all 0.12s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: #1c3140;
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .btn.active {
+      background: rgba(255, 179, 0, 0.2);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
+    }
+
+    .btn.danger.active {
+      background: rgba(255, 82, 82, 0.22);
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    /* ==================== MAIN WORKSPACE (FOV + MANIFEST) ==================== */
+    .workspace {
+      display: grid;
+      grid-template-columns: 61% 1fr;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      position: relative;
+    }
+
+    .panel-header {
+      height: 30px;
+      background: var(--bg-panel-alt);
+      border-bottom: 1px solid var(--border-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .panel-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+    }
+
+    /* Synthetic FOV Container */
+    .fov-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #0a141c 0%, #05080b 100%);
+      position: relative;
+      padding: 8px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      height: 100%;
+      max-width: 100%;
+      border: 1px solid var(--border-bright);
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.7);
+      background: #060b0f;
+    }
+
+    #fovCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+
+    /* HUD Overlay Badges inside FOV */
+    .fov-hud-top {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      font-size: 10px;
+      color: rgba(228, 240, 246, 0.75);
+    }
+
+    .fov-legend {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      font-size: 10px;
+      background: rgba(6, 10, 13, 0.78);
+      border: 1px solid var(--border-dim);
+      padding: 4px 8px;
+    }
+
+    .legend-items {
+      display: flex;
+      gap: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .legend-swatch {
+      width: 8px;
+      height: 8px;
+      border-radius: 1px;
+    }
+
+    /* Stale Overlay Banner inside FOV */
+    .stale-banner {
+      position: absolute;
+      top: 42px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 82, 82, 0.92);
+      color: #000;
+      font-weight: 900;
+      padding: 4px 14px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      border: 1px solid #fff;
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+    }
+
+    .stale-banner.visible {
+      display: block;
+    }
+
+    /* ==================== RIGHT PANEL: TACTICAL MANIFEST ==================== */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      padding: 6px 8px;
+      background: var(--bg-void);
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .filter-chips {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 7px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+
+    .chip:hover {
+      border-color: var(--text-secondary);
+      color: var(--text-primary);
+    }
+
+    .chip.active {
+      background: rgba(0, 229, 255, 0.14);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .manifest-table-wrap {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    table.manifest-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    table.manifest-table th {
+      position: sticky;
+      top: 0;
+      background: #0d161d;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-dim);
+      z-index: 5;
+    }
+
+    table.manifest-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid rgba(27, 44, 56, 0.55);
+      white-space: nowrap;
+    }
+
+    table.manifest-table tr.manifest-row {
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+
+    table.manifest-table tr.manifest-row:hover,
+    table.manifest-table tr.manifest-row.highlighted {
+      background: rgba(0, 229, 255, 0.14);
+    }
+
+    .trk-badge {
+      display: inline-block;
+      padding: 1px 5px;
+      font-weight: 800;
+      font-size: 10px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.06);
+      border-left: 3px solid currentColor;
+    }
+
+    .cls-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 700;
+    }
+
+    .conf-sub {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .sector-tag {
+      background: var(--bg-void);
+      border: 1px solid var(--border-dim);
+      padding: 1px 5px;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .motion-cell {
+      font-weight: 700;
+    }
+
+    .motion-stationary {
+      color: var(--text-muted);
+    }
+
+    .motion-moving {
+      color: var(--accent-green);
+    }
+
+    .empty-manifest {
+      padding: 36px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* ==================== BOTTOM DOCK (3 CARDS) ==================== */
+    .bottom-dock {
+      display: grid;
+      grid-template-columns: 270px 1fr 370px;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    /* 1. Sector Occupancy Matrix */
+    .matrix-body {
+      flex: 1;
+      padding: 6px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+      min-height: 0;
+    }
+
+    .sector-cell {
+      background: var(--bg-void);
+      border: 1px solid var(--border-dim);
+      padding: 3px 6px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .sector-cell:hover {
+      border-color: var(--accent-cyan);
+    }
+
+    .sector-cell.occupied {
+      background: rgba(0, 229, 255, 0.08);
+      border-color: rgba(0, 229, 255, 0.45);
+    }
+
+    .sector-cell.heavy-alert {
+      background: rgba(255, 82, 82, 0.14);
+      border-color: rgba(255, 82, 82, 0.65);
+    }
+
+    .sector-cell.selected-filter {
+      outline: 2px solid var(--accent-amber);
+      outline-offset: -2px;
+    }
+
+    .sec-name {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .sec-count {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-primary);
+      align-self: flex-end;
+    }
+
+    /* 2. Auto Scene Brief (SITREP) + Judge Script */
+    .sitrep-body {
+      flex: 1;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .sitrep-text {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-primary);
+      background: var(--bg-void);
+      border-left: 3px solid var(--accent-cyan);
+      padding: 6px 10px;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+    }
+
+    .judge-callout {
+      background: rgba(255, 179, 0, 0.07);
+      border: 1px dashed rgba(255, 179, 0, 0.4);
+      padding: 5px 9px;
+      font-size: 10.5px;
+      color: #ffd54f;
+      line-height: 1.35;
+    }
+
+    .judge-callout strong {
+      color: var(--accent-amber);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* 3. Wire Packet Inspector */
+    .wire-body {
+      flex: 1;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      overflow-y: auto;
+      font-size: 10.5px;
+      background: var(--bg-void);
+    }
+
+    .wire-header-block {
+      padding: 4px 6px;
+      background: rgba(0, 229, 255, 0.07);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      color: var(--accent-cyan);
+      font-weight: 700;
+      word-break: break-all;
+    }
+
+    .wire-obj-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      overflow-y: auto;
+    }
+
+    .wire-obj-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 5px;
+      background: var(--bg-panel);
+      border-left: 2px solid var(--border-bright);
+      color: var(--text-secondary);
+      font-size: 10px;
+    }
+
+    /* ==================== MODAL (PYTHON RELAY & SPECS) ==================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 6, 9, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 24px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--accent-cyan);
+      width: 100%;
+      max-width: 820px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+    }
+
+    .modal-body {
+      padding: 14px;
+      overflow-y: auto;
+      user-select: text;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    pre.code-box {
+      background: #05080b;
+      border: 1px solid var(--border-dim);
+      padding: 10px;
+      color: #a5d6ff;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      overflow-x: auto;
+      line-height: 1.4;
+      user-select: all;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- ==================== 1. TOP HEADER BAR ==================== -->
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">ARCDRONE // SCENE RECONSTRUCTOR</div>
+          <div class="brand-sub">
+            <span class="pill-tag">No video — 6-byte vectors only</span>
+            <span class="pill-tag amber">Simulated GPS</span>
+            <span id="sourceModeLabel" style="color: var(--text-muted);">SRC: SIMULATOR (12Hz)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Link Budget Bar (2.0 kbps scene vector cap; alerts on serial link) -->
+      <div class="budget-widget" title="2.0 kbps scene vector link (reliable alerts on separate serial/radio path)">
+        <div class="budget-header">
+          <span class="budget-title">Scene 2.0 kbps link</span>
+          <span class="budget-readout"><span id="kbpsVal">0.58</span> / 2.00 kbps (<span id="pktBytesVal">36</span>B @ <span id="hzVal">12.0</span>Hz)</span>
+        </div>
+        <div class="budget-track">
+          <div class="budget-scene-zone">
+            <div id="budgetFill" class="budget-scene-fill" style="width: 36%;"></div>
+          </div>
+          <div class="budget-reserve-zone" style="width:0;display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Telemetry Counters -->
+      <div class="telemetry-strip">
+        <div class="tele-box">
+          <div class="tele-label">SEQ #</div>
+          <div class="tele-val" id="seqVal">00116</div>
+        </div>
+        <div class="tele-box">
+          <div class="tele-label">RX PKTS</div>
+          <div class="tele-val" id="rxVal">1,420</div>
+        </div>
+        <div class="tele-box">
+          <div class="tele-label">SIMULATED GPS</div>
+          <div class="tele-val" id="gpsVal">53.5247, -113.5238</div>
+        </div>
+        <div id="linkBadge" class="link-badge live">
+          <span class="status-dot"></span>
+          <span id="linkStateText">LIVE 12Hz</span>
+        </div>
+      </div>
+
+      <!-- Operator Demo Controls -->
+      <div class="ctrl-group">
+        <button id="btnFreeze" class="btn" title="Freeze frame for judge walkthrough">[SPACE] FREEZE</button>
+        <button id="btnDropLink" class="btn danger" title="Stop packets for >1.5s to demonstrate STALE state">[L] DROP LINK</button>
+        <button id="btnClearFov" class="btn" title="Toggle 0-object empty FOV heartbeat">[0] CLEAR FOV</button>
+        <button id="btnRelayModal" class="btn" title="View Python UDP->WebSocket relay & Judge Script">PY RELAY</button>
+      </div>
+    </header>
+
+    <!-- ==================== 2. MAIN WORKSPACE ==================== -->
+    <main class="workspace">
+      <!-- LEFT: SYNTHETIC 720x540 FOV -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-header-left">
+            <span>SYNTHETIC VECTOR FOV (720×540 NORMALIZED 0–255 QUANTIZED GRID)</span>
+          </div>
+          <div class="panel-header-right">
+            <span>3×3 SECTOR MATRIX OVERLAY</span>
+            <span>|</span>
+            <span id="fovCountBadge" style="color: var(--accent-cyan);">4 TARGETS TRACKED</span>
+          </div>
+        </div>
+
+        <div class="fov-stage">
+          <div id="staleBanner" class="stale-banner">
+            LINK STALE (&gt;1.5s NO UDP) — HOLDING LAST KNOWN SCENE VECTORS
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="fovCanvas" width="720" height="540"></canvas>
+
+            <div class="fov-hud-top">
+              <span>WIRE HEADER: 0xAD (12B) + N×6B VECTORS</span>
+              <span id="cursorReadout">FOV: --%, --%</span>
+            </div>
+
+            <div class="fov-legend">
+              <div class="legend-items">
+                <div class="legend-item">
+                  <span class="legend-swatch" style="background: var(--cls-person);"></span>
+                  <span>PERSONNEL (1,2)</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-swatch" style="background: var(--cls-light);"></span>
+                  <span>LIGHT/2W (3,7,8,10)</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-swatch" style="background: var(--cls-vehicle);"></span>
+                  <span>VEHICLE (4,5)</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-swatch" style="background: var(--cls-heavy);"></span>
+                  <span>HEAVY (6,9)</span>
+                </div>
+              </div>
+              <div style="color: var(--text-muted);">TRAIL: 25 FRAMES | ASSOCIATION: ≤80PX</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: TACTICAL MANIFEST -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-header-left">
+            <span>TACTICAL OBJECT MANIFEST</span>
+          </div>
+          <div class="panel-header-right">
+            <span id="activeFilterLabel" style="color: var(--accent-amber);">FILTER: ALL SECTORS</span>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-chips" id="classFilterGroup">
+            <button class="chip active" data-filter="ALL">ALL</button>
+            <button class="chip" data-filter="PERSON">PERSONNEL</button>
+            <button class="chip" data-filter="LIGHT">LIGHT</button>
+            <button class="chip" data-filter="VEHICLE">VEHICLES</button>
+            <button class="chip" data-filter="HEAVY">HEAVY</button>
+          </div>
+          <button id="btnResetSector" class="chip" style="display: none;">CLEAR SECTOR FILTER ✕</button>
+        </div>
+
+        <div class="manifest-table-wrap">
+          <table class="manifest-table">
+            <thead>
+              <tr>
+                <th>TRK ID</th>
+                <th>CLASS (CONF)</th>
+                <th>SECTOR</th>
+                <th>POS (% FOV)</th>
+                <th>MOVEMENT / VEC</th>
+              </tr>
+            </thead>
+            <tbody id="manifestBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- ==================== 3. BOTTOM DOCK ==================== -->
+    <footer class="bottom-dock">
+      <!-- Left: 3x3 Sector Occupancy Matrix -->
+      <section class="panel">
+        <div class="panel-header">
+          <span>SECTOR OCCUPANCY MATRIX</span>
+          <span style="font-size: 9px; color: var(--text-muted);">CLICK TO FILTER</span>
+        </div>
+        <div class="matrix-body" id="sectorMatrix"></div>
+      </section>
+
+      <!-- Center: Auto Scene Brief + Judge Pitch -->
+      <section class="panel">
+        <div class="panel-header">
+          <span>AUTO SCENE BRIEF (TACTICAL SITREP)</span>
+          <span id="sitrepTimestamp" style="color: var(--accent-cyan);">SYNTHESIZED @ 12Hz</span>
+        </div>
+        <div class="sitrep-body">
+          <div class="sitrep-text" id="sceneBriefText">
+            Initializing vector reconstructor...
+          </div>
+          <div class="judge-callout">
+            <strong>JUDGE DEMO SCRIPT:</strong> “Video can’t fit on a 2 kbps tactical link—so the drone sends 6-byte target vectors at 12 Hz for operator situational awareness, while reliable alerts and HOLD/RTB ride the separate serial protocol.”
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Raw Binary Wire Inspector -->
+      <section class="panel">
+        <div class="panel-header">
+          <span>UDP :9999 WIRE FRAME INSPECTOR</span>
+          <span id="wireByteSummary" style="color: var(--accent-green);">36 BYTES TOTAL</span>
+        </div>
+        <div class="wire-body">
+          <div class="wire-header-block" id="wireHeaderHex">
+            HDR (12B): AD 00 74 42 56 19 4A C2 E3 0C 2F 04
+          </div>
+          <div class="wire-obj-list" id="wireObjList"></div>
+        </div>
+      </section>
+    </footer>
+  </div>
+
+  <!-- ==================== PYTHON RELAY MODAL ==================== -->
+  <div id="relayModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="panel-header">
+        <span>OPTIONAL PYTHON UDP (:9999) → WEBSOCKET (:8765) BRIDGE</span>
+        <button id="btnCloseModal" class="btn">CLOSE [ESC]</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-secondary);">
+          This UI runs standalone right now using its built-in 12 Hz packet simulator. To pipe live binary UDP datagrams from <code>127.0.0.1:9999</code> into this page without touching the main dashboard's <code>ws://localhost:8000/ws</code>, run this lightweight relay script:
+        </p>
+        <pre class="code-box" id="pyRelayCode"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================================
+    // 1. CLASS DEFINITIONS & DESIGN SYSTEM CONSTANTS
+    // ============================================================================
+    const CLASS_MAP = {
+      1:  { name: "pedestrian",      cat: "PERSON",  color: "#00e5ff" },
+      2:  { name: "people",          cat: "PERSON",  color: "#00e5ff" },
+      3:  { name: "bicycle",         cat: "LIGHT",   color: "#00e676" },
+      4:  { name: "car",             cat: "VEHICLE", color: "#ffb300" },
+      5:  { name: "van",             cat: "VEHICLE", color: "#ffb300" },
+      6:  { name: "truck",           cat: "HEAVY",   color: "#ff5252" },
+      7:  { name: "tricycle",        cat: "LIGHT",   color: "#00e676" },
+      8:  { name: "awning-tricycle", cat: "LIGHT",   color: "#00e676" },
+      9:  { name: "bus",             cat: "HEAVY",   color: "#ff5252" },
+      10: { name: "motor",           cat: "LIGHT",   color: "#00e676" }
+    };
+
+    const SECTORS = [
+      "TOP-LEFT",    "TOP-CENTER",    "TOP-RIGHT",
+      "MID-LEFT",    "CENTER",        "MID-RIGHT",
+      "BOTTOM-LEFT", "BOTTOM-CENTER", "BOTTOM-RIGHT"
+    ];
+
+    const FOV_W = 720;
+    const FOV_H = 540;
+
+    // ============================================================================
+    // 2. APPLICATION STATE
+    // ============================================================================
+    const state = {
+      seq: 116,
+      lat: 53.5247,
+      lon: -113.5238,
+      rxPackets: 1420,
+      lastPacketTs: performance.now(),
+      packetHistory: [], // { ts, bytes } for rolling kbps
+      isPaused: false,
+      simulateDrop: false,
+      simulateEmpty: false,
+      wsConnected: false,
+      hoveredTrackId: null,
+      classFilter: "ALL",
+      sectorFilter: null,
+      currentFrame: null,
+      // Client-side tracker store for raw detections
+      tracks: new Map(),
+      nextTrackId: 1
+    };
+
+    // ============================================================================
+    // 3. CLIENT-SIDE NEAREST-CENTER TRACKER (<= 80px association, 25-pt trail)
+    // ============================================================================
+    function getSectorFromXY(x, y) {
+      const col = Math.min(2, Math.max(0, Math.floor((x / FOV_W) * 3)));
+      const row = Math.min(2, Math.max(0, Math.floor((y / FOV_H) * 3)));
+      return SECTORS[row * 3 + col];
+    }
+
+    function computeCompassMotion(dx, dy) {
+      const mag = Math.hypot(dx, dy);
+      if (mag < 1.15) return "STATIONARY";
+      // Screen coords: +x is East, -y is North
+      const deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+      const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      const idx = Math.round(deg / 45) % 8;
+      return `MOVING ${dirs[idx]}`;
+    }
+
+    function enrichFrameWithClientTracking(frame) {
+      const now = performance.now();
+      const enrichedObjects = [];
+
+      for (const obj of frame.objects) {
+        const clsInfo = CLASS_MAP[obj.cls] || { name: obj.label || "unknown", cat: "VEHICLE", color: "#00e5ff" };
+        const [cx, cy] = obj.center;
+
+        // If backend already provided track_id & trail, keep them; else associate locally
+        if (obj.track_id !== undefined && Array.isArray(obj.trail)) {
+          enrichedObjects.push({
+            ...obj,
+            label: obj.label || clsInfo.name,
+            cat: clsInfo.cat,
+            color: clsInfo.color,
+            sector: obj.sector || getSectorFromXY(cx, cy),
+            motion_str: obj.motion_str || computeCompassMotion(obj.vel?.[0] || 0, obj.vel?.[1] || 0)
+          });
+          continue;
+        }
+
+        // Nearest center within 80px of same class
+        let bestId = null;
+        let bestDist = 80;
+        for (const [tid, trk] of state.tracks.entries()) {
+          if (trk.cls !== obj.cls || trk.usedInFrame) continue;
+          const dist = Math.hypot(cx - trk.cx, cy - trk.cy);
+          if (dist <= bestDist) {
+            bestDist = dist;
+            bestId = tid;
+          }
+        }
+
+        if (bestId === null) {
+          bestId = state.nextTrackId++;
+          state.tracks.set(bestId, {
+            cls: obj.cls,
+            cx,
+            cy,
+            trail: [[cx, cy]],
+            vel: [0, 0],
+            lastSeen: now,
+            usedInFrame: true
+          });
+        } else {
+          const trk = state.tracks.get(bestId);
+          const dx = cx - trk.cx;
+          const dy = cy - trk.cy;
+          trk.vel = [dx * 0.6 + trk.vel[0] * 0.4, dy * 0.6 + trk.vel[1] * 0.4];
+          trk.cx = cx;
+          trk.cy = cy;
+          trk.trail.push([cx, cy]);
+          if (trk.trail.length > 25) trk.trail.shift();
+          trk.lastSeen = now;
+          trk.usedInFrame = true;
+        }
+
+        const trk = state.tracks.get(bestId);
+        enrichedObjects.push({
+          ...obj,
+          label: clsInfo.name,
+          cat: clsInfo.cat,
+          color: clsInfo.color,
+          track_id: bestId,
+          sector: getSectorFromXY(cx, cy),
+          trail: [...trk.trail],
+          vel: [...trk.vel],
+          motion_str: computeCompassMotion(trk.vel[0], trk.vel[1])
+        });
+      }
+
+      // Reset frame flags & prune old tracks
+      for (const [tid, trk] of state.tracks.entries()) {
+        trk.usedInFrame = false;
+        if (now - trk.lastSeen > 3000) state.tracks.delete(tid);
+      }
+
+      return {
+        ...frame,
+        objects: enrichedObjects
+      };
+    }
+
+    // ============================================================================
+    // 4. BUILT-IN 12Hz TACTICAL SCENE SIMULATOR (FALLBACK WHEN NO WS CONNECTED)
+    // ============================================================================
+    const simActors = [
+      { track_id: 1, cls: 1, conf: 0.91, cx: 145, cy: 410, w: 32, h: 58, vx: 0.2,  vy: -0.1, trail: [] },
+      { track_id: 2, cls: 2, conf: 0.87, cx: 182, cy: 425, w: 38, h: 60, vx: 0.15, vy: -0.05, trail: [] },
+      { track_id: 3, cls: 4, conf: 0.95, cx: 365, cy: 265, w: 82, h: 52, vx: 4.4,  vy: -1.8, trail: [] },
+      { track_id: 4, cls: 6, conf: 0.92, cx: 560, cy: 135, w: 110, h: 68, vx: -3.1, vy: 1.9, trail: [] },
+      { track_id: 5, cls: 10, conf: 0.84, cx: 280, cy: 155, w: 40, h: 36, vx: 5.2, vy: 0.4,  trail: [] }
+    ];
+
+    function stepSimulator() {
+      if (state.wsConnected || state.isPaused || state.simulateDrop) return;
+
+      state.seq = (state.seq + 1) & 0xffff;
+      state.lat += (Math.random() - 0.5) * 0.00002;
+      state.lon += (Math.random() - 0.5) * 0.00002;
+
+      const objects = [];
+      if (!state.simulateEmpty) {
+        for (const a of simActors) {
+          // Gentle patrol motion inside 720x540
+          if (a.track_id <= 2) {
+            // Stationary/slow personnel in BOTTOM-LEFT
+            a.cx += Math.sin(state.seq * 0.08 + a.track_id) * 0.35;
+            a.cy += Math.cos(state.seq * 0.08 + a.track_id) * 0.25;
+            a.vx = 0.2;
+            a.vy = -0.1;
+          } else {
+            a.cx += a.vx;
+            a.cy += a.vy;
+            if (a.cx < 60 || a.cx > FOV_W - 60) a.vx *= -1;
+            if (a.cy < 55 || a.cy > FOV_H - 55) a.vy *= -1;
+          }
+
+          a.trail.push([Math.round(a.cx), Math.round(a.cy)]);
+          if (a.trail.length > 25) a.trail.shift();
+
+          const x1 = Math.round(a.cx - a.w / 2);
+          const y1 = Math.round(a.cy - a.h / 2);
+          const x2 = Math.round(a.cx + a.w / 2);
+          const y2 = Math.round(a.cy + a.h / 2);
+
+          const clsInfo = CLASS_MAP[a.cls];
+          objects.push({
+            cls: a.cls,
+            label: clsInfo.name,
+            cat: clsInfo.cat,
+            color: clsInfo.color,
+            conf: a.conf,
+            bbox: [x1, y1, x2, y2],
+            center: [Math.round(a.cx), Math.round(a.cy)],
+            track_id: a.track_id,
+            sector: getSectorFromXY(a.cx, a.cy),
+            motion_str: computeCompassMotion(a.vx, a.vy),
+            trail: [...a.trail],
+            vel: [a.vx, a.vy]
+          });
+        }
+      }
+
+      const bytes = 12 + objects.length * 6;
+      ingestFrame({
+        seq: state.seq,
+        lat: Number(state.lat.toFixed(4)),
+        lon: Number(state.lon.toFixed(4)),
+        count: objects.length,
+        bytes,
+        objects
+      });
+    }
+
+    // ============================================================================
+    // 5. PACKET INGESTION & ROLLING TELEMETRY
+    // ============================================================================
+    function ingestFrame(rawFrame) {
+      if (state.isPaused) return;
+      const now = performance.now();
+      state.lastPacketTs = now;
+      state.rxPackets += 1;
+
+      const bytes = rawFrame.bytes || (12 + (rawFrame.objects?.length || 0) * 6);
+      state.packetHistory.push({ ts: now, bytes });
+      // Keep 2-second rolling window
+      while (state.packetHistory.length && now - state.packetHistory[0].ts > 2000) {
+        state.packetHistory.shift();
+      }
+
+      state.currentFrame = enrichFrameWithClientTracking({
+        ...rawFrame,
+        bytes,
+        count: rawFrame.objects?.length || 0
+      });
+
+      renderAll();
+    }
+
+    // ============================================================================
+    // 6. SYNTHETIC 720x540 FOV CANVAS RENDERER
+    // ============================================================================
+    const canvas = document.getElementById("fovCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function drawSyntheticFOV() {
+      const now = performance.now();
+      const isStale = (now - state.lastPacketTs) > 1500;
+
+      ctx.clearRect(0, 0, FOV_W, FOV_H);
+
+      // 1. Subtle radar grid background (36px pitch)
+      ctx.strokeStyle = "rgba(27, 44, 56, 0.35)";
+      ctx.lineWidth = 1;
+      for (let x = 36; x < FOV_W; x += 36) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, FOV_H);
+        ctx.stroke();
+      }
+      for (let y = 36; y < FOV_H; y += 36) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(FOV_W, y);
+        ctx.stroke();
+      }
+
+      // 2. 3x3 Sector Grid & Watermarks
+      const secW = FOV_W / 3;
+      const secH = FOV_H / 3;
+
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          const secName = SECTORS[r * 3 + c];
+          const sx = c * secW;
+          const sy = r * secH;
+
+          // Highlight active sector filter
+          if (state.sectorFilter === secName) {
+            ctx.fillStyle = "rgba(255, 179, 0, 0.06)";
+            ctx.fillRect(sx, sy, secW, secH);
+          }
+
+          // Sector label watermark
+          ctx.fillStyle = state.sectorFilter === secName
+            ? "rgba(255, 179, 0, 0.75)"
+            : "rgba(139, 163, 181, 0.28)";
+          ctx.font = "700 10px ui-monospace, monospace";
+          ctx.fillText(secName, sx + 10, sy + 20);
+        }
+      }
+
+      // Major 3x3 dividers
+      ctx.strokeStyle = "rgba(0, 229, 255, 0.24)";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 4]);
+      for (let i = 1; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * secW, 0);
+        ctx.lineTo(i * secW, FOV_H);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i * secH);
+        ctx.lineTo(FOV_W, i * secH);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // Center optical reticle
+      ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
+      ctx.beginPath();
+      ctx.moveTo(FOV_W / 2 - 14, FOV_H / 2);
+      ctx.lineTo(FOV_W / 2 + 14, FOV_H / 2);
+      ctx.moveTo(FOV_W / 2, FOV_H / 2 - 14);
+      ctx.lineTo(FOV_W / 2, FOV_H / 2 + 14);
+      ctx.stroke();
+
+      const frame = state.currentFrame;
+      if (!frame || frame.objects.length === 0) {
+        // Empty FOV State ("no targets in FOV")
+        ctx.fillStyle = "rgba(11, 18, 23, 0.85)";
+        ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.fillRect(FOV_W / 2 - 185, FOV_H / 2 - 42, 370, 84);
+        ctx.strokeRect(FOV_W / 2 - 185, FOV_H / 2 - 42, 370, 84);
+
+        ctx.fillStyle = "#e4f0f6";
+        ctx.font = "800 13px ui-monospace, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("NO TARGETS IN FOV — LINK NOMINAL", FOV_W / 2, FOV_H / 2 - 8);
+        ctx.fillStyle = "#00e676";
+        ctx.font = "600 11px ui-monospace, monospace";
+        ctx.fillText("RX 12B HEADER HEARTBEAT @ 12Hz (0.12 kbps)", FOV_W / 2, FOV_H / 2 + 16);
+        ctx.textAlign = "left";
+        return;
+      }
+
+      // 3. Render Objects (Trails, Velocity Vectors, Corner-Bracket BBoxes, Quantized Hex Tags)
+      for (const obj of frame.objects) {
+        if (!passesFilter(obj)) continue;
+
+        const isHovered = state.hoveredTrackId === obj.track_id;
+        const [x1, y1, x2, y2] = obj.bbox;
+        const [cx, cy] = obj.center;
+        const bw = x2 - x1;
+        const bh = y2 - y1;
+        const color = obj.color || "#00e5ff";
+
+        ctx.save();
+        if (isStale) ctx.globalAlpha = 0.55;
+
+        // A. 25-point Breadcrumb Trail
+        if (obj.trail && obj.trail.length > 1) {
+          for (let i = 1; i < obj.trail.length; i++) {
+            const p0 = obj.trail[i - 1];
+            const p1 = obj.trail[i];
+            const alpha = (i / obj.trail.length) * 0.65;
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = isStale ? alpha * 0.5 : alpha;
+            ctx.lineWidth = isHovered ? 2.5 : 1.6;
+            ctx.beginPath();
+            ctx.moveTo(p0[0], p0[1]);
+            ctx.lineTo(p1[0], p1[1]);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = isStale ? 0.55 : 1.0;
+        }
+
+        // B. Bounding Box Fill & Corner Brackets
+        ctx.fillStyle = color;
+        ctx.globalAlpha = isHovered ? 0.22 : 0.08;
+        ctx.fillRect(x1, y1, bw, bh);
+        ctx.globalAlpha = isStale ? 0.55 : 1.0;
+
+        if (isStale || isHovered) {
+          ctx.strokeStyle = isHovered ? "#ffffff" : color;
+          ctx.lineWidth = isHovered ? 1.8 : 1;
+          if (isStale) ctx.setLineDash([4, 3]);
+          ctx.strokeRect(x1, y1, bw, bh);
+          ctx.setLineDash([]);
+        }
+
+        // Tactical Corner Brackets
+        const cLen = Math.min(10, bw * 0.3, bh * 0.3);
+        ctx.strokeStyle = isHovered ? "#ffffff" : color;
+        ctx.lineWidth = isHovered ? 2.6 : 2.0;
+        ctx.beginPath();
+        // TL
+        ctx.moveTo(x1, y1 + cLen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + cLen, y1);
+        // TR
+        ctx.moveTo(x2 - cLen, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + cLen);
+        // BR
+        ctx.moveTo(x2, y2 - cLen); ctx.lineTo(x2, y2); ctx.lineTo(x2 - cLen, y2);
+        // BL
+        ctx.moveTo(x1 + cLen, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y2 - cLen);
+        ctx.stroke();
+
+        // C. Center Point & Velocity Vector Arrow
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        const [vx, vy] = obj.vel || [0, 0];
+        const speed = Math.hypot(vx, vy);
+        if (speed >= 1.15) {
+          const ax = cx + vx * 8.5;
+          const ay = cy + vy * 8.5;
+          const angle = Math.atan2(ay - cy, ax - cx);
+
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(ax, ay);
+          ctx.stroke();
+
+          // Arrowhead
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(ax - 7 * Math.cos(angle - Math.PI / 6), ay - 7 * Math.sin(angle - Math.PI / 6));
+          ctx.lineTo(ax - 7 * Math.cos(angle + Math.PI / 6), ay - 7 * Math.sin(angle + Math.PI / 6));
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // D. Callout Label above BBox
+        const confPct = Math.round((obj.conf <= 1 ? obj.conf * 100 : obj.conf));
+        const tagText = `#${String(obj.track_id).padStart(2, "0")} ${obj.label.toUpperCase()} ${confPct}%`;
+        ctx.font = "700 10px ui-monospace, monospace";
+        const textW = ctx.measureText(tagText).width + 10;
+        const tagY = Math.max(16, y1 - 4);
+
+        ctx.fillStyle = "rgba(6, 10, 13, 0.88)";
+        ctx.fillRect(x1, tagY - 14, textW, 15);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x1, tagY - 14, textW, 15);
+
+        ctx.fillStyle = isHovered ? "#ffffff" : color;
+        ctx.fillText(tagText, x1 + 5, tagY - 3);
+
+        // E. 6-Byte Vector Quantized Readout (on hover)
+        if (isHovered) {
+          const hex6 = encodeObject6BytesHex(obj);
+          const subText = `6B VEC: [${hex6}]`;
+          const subW = ctx.measureText(subText).width + 10;
+          ctx.fillStyle = "rgba(0, 229, 255, 0.92)";
+          ctx.fillRect(x1, y2 + 3, subW, 15);
+          ctx.fillStyle = "#000000";
+          ctx.fillText(subText, x1 + 5, y2 + 14);
+        }
+
+        ctx.restore();
+      }
+    }
+
+    // ============================================================================
+    // 7. DOM UPDATERS (MANIFEST, MATRIX, SITREP, WIRE INSPECTOR, HEADER)
+    // ============================================================================
+    function passesFilter(obj) {
+      if (state.classFilter !== "ALL" && obj.cat !== state.classFilter) return false;
+      if (state.sectorFilter && obj.sector !== state.sectorFilter) return false;
+      return true;
+    }
+
+    function encodeObject6BytesHex(obj) {
+      const clsB = (obj.cls & 0xff).toString(16).padStart(2, "0");
+      const confInt = Math.round(obj.conf <= 1 ? obj.conf * 100 : obj.conf) & 0xff;
+      const confB = confInt.toString(16).padStart(2, "0");
+      const [x1, y1, x2, y2] = obj.bbox;
+      const cxQ = Math.min(255, Math.max(0, Math.round((obj.center[0] / FOV_W) * 255))).toString(16).padStart(2, "0");
+      const cyQ = Math.min(255, Math.max(0, Math.round((obj.center[1] / FOV_H) * 255))).toString(16).padStart(2, "0");
+      const wQ  = Math.min(255, Math.max(0, Math.round(((x2 - x1) / FOV_W) * 255))).toString(16).padStart(2, "0");
+      const hQ  = Math.min(255, Math.max(0, Math.round(((y2 - y1) / FOV_H) * 255))).toString(16).padStart(2, "0");
+      return `${clsB} ${confB} ${cxQ} ${cyQ} ${wQ} ${hQ}`.toUpperCase();
+    }
+
+    function float32ToHex(val) {
+      const buf = new ArrayBuffer(4);
+      const view = new DataView(buf);
+      view.setFloat32(0, val, false); // big-endian
+      return Array.from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, "0").toUpperCase())
+        .join(" ");
+    }
+
+    function renderAll() {
+      const frame = state.currentFrame;
+      if (!frame) return;
+
+      // 1. Header & Link Budget Bar
+      const now = performance.now();
+      const windowSpanSec = state.packetHistory.length > 1
+        ? Math.max(0.25, (now - state.packetHistory[0].ts) / 1000)
+        : 1 / 12;
+      const totalBytes = state.packetHistory.reduce((acc, p) => acc + p.bytes, 0);
+      const rollingKbps = state.simulateDrop ? 0 : ((totalBytes * 8) / 1000) / windowSpanSec;
+      const rollingHz = state.simulateDrop ? 0 : state.packetHistory.length / windowSpanSec;
+
+      document.getElementById("kbpsVal").textContent = rollingKbps.toFixed(2);
+      document.getElementById("pktBytesVal").textContent = frame.bytes;
+      document.getElementById("hzVal").textContent = rollingHz.toFixed(1);
+
+      const pctOfSceneCap = Math.min(100, (rollingKbps / 2.0) * 100);
+      const fillEl = document.getElementById("budgetFill");
+      fillEl.style.width = `${pctOfSceneCap.toFixed(1)}%`;
+      fillEl.classList.toggle("warn", rollingKbps > 1.85);
+
+      document.getElementById("seqVal").textContent = String(frame.seq).padStart(5, "0");
+      document.getElementById("rxVal").textContent = state.rxPackets.toLocaleString();
+      document.getElementById("gpsVal").textContent = `${frame.lat.toFixed(4)}, ${frame.lon.toFixed(4)}`;
+      document.getElementById("fovCountBadge").textContent = `${frame.objects.length} TARGETS TRACKED`;
+
+      // 2. Tactical Manifest Table
+      const tbody = document.getElementById("manifestBody");
+      const visibleObjs = frame.objects.filter(passesFilter);
+
+      if (visibleObjs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-manifest">NO TARGETS MATCHING CURRENT FILTER / FOV CLEAR</td></tr>`;
+      } else {
+        tbody.innerHTML = visibleObjs.map(obj => {
+          const pctX = Math.round((obj.center[0] / FOV_W) * 100);
+          const pctY = Math.round((obj.center[1] / FOV_H) * 100);
+          const confPct = Math.round(obj.conf <= 1 ? obj.conf * 100 : obj.conf);
+          const isMoving = obj.motion_str !== "STATIONARY";
+          const isHi = state.hoveredTrackId === obj.track_id;
+
+          return `
+            <tr class="manifest-row ${isHi ? "highlighted" : ""}" data-track-id="${obj.track_id}">
+              <td>
+                <span class="trk-badge" style="color: ${obj.color};">#${String(obj.track_id).padStart(2, "0")}</span>
+              </td>
+              <td>
+                <span class="cls-pill" style="color: ${obj.color};">${obj.label.toUpperCase()}</span>
+                <span class="conf-sub">${confPct}%</span>
+              </td>
+              <td><span class="sector-tag">${obj.sector}</span></td>
+              <td style="color: var(--text-secondary);">${pctX}%, ${pctY}%</td>
+              <td class="motion-cell ${isMoving ? "motion-moving" : "motion-stationary"}">${obj.motion_str}</td>
+            </tr>
+          `;
+        }).join("");
+
+        // Row hover listeners
+        tbody.querySelectorAll(".manifest-row").forEach(row => {
+          row.addEventListener("mouseenter", () => {
+            state.hoveredTrackId = Number(row.dataset.trackId);
+            drawSyntheticFOV();
+            row.classList.add("highlighted");
+          });
+          row.addEventListener("mouseleave", () => {
+            state.hoveredTrackId = null;
+            drawSyntheticFOV();
+            row.classList.remove("highlighted");
+          });
+        });
+      }
+
+      // 3. 3x3 Sector Occupancy Matrix
+      const countsBySector = {};
+      const heavyBySector = {};
+      SECTORS.forEach(s => { countsBySector[s] = 0; heavyBySector[s] = false; });
+      for (const obj of frame.objects) {
+        countsBySector[obj.sector] = (countsBySector[obj.sector] || 0) + 1;
+        if (obj.cat === "HEAVY") heavyBySector[obj.sector] = true;
+      }
+
+      const matrixEl = document.getElementById("sectorMatrix");
+      matrixEl.innerHTML = SECTORS.map(sec => {
+        const cnt = countsBySector[sec];
+        const shortName = sec.replace("TOP-", "T-").replace("MID-", "M-").replace("BOTTOM-", "B-");
+        const classes = [
+          "sector-cell",
+          cnt > 0 ? "occupied" : "",
+          heavyBySector[sec] ? "heavy-alert" : "",
+          state.sectorFilter === sec ? "selected-filter" : ""
+        ].join(" ");
+        return `
+          <div class="${classes}" data-sector="${sec}">
+            <span class="sec-name">${shortName}</span>
+            <span class="sec-count">${cnt}</span>
+          </div>
+        `;
+      }).join("");
+
+      matrixEl.querySelectorAll(".sector-cell").forEach(cell => {
+        cell.addEventListener("click", () => {
+          const clickedSec = cell.dataset.sector;
+          state.sectorFilter = (state.sectorFilter === clickedSec) ? null : clickedSec;
+          updateFilterUI();
+          renderAll();
+        });
+      });
+
+      // 4. Auto Scene Brief (SITREP)
+      const briefEl = document.getElementById("sceneBriefText");
+      if (frame.objects.length === 0) {
+        briefEl.innerHTML = `<span><strong>FOV CLEAR:</strong> 0 targets detected across all 9 sectors. Receiving 12-byte heartbeat headers at 12 Hz (0.12 kbps).</span>`;
+      } else {
+        const moving = frame.objects.filter(o => o.motion_str !== "STATIONARY");
+        const stat = frame.objects.filter(o => o.motion_str === "STATIONARY");
+        const parts = [];
+        parts.push(`<strong>${frame.objects.length} ACTIVE TARGETS (${frame.bytes}B FRAME):</strong>`);
+        if (moving.length > 0) {
+          const mvSummary = moving.map(o => `1 ${o.label} [${o.sector}, ${o.motion_str}]`).join("; ");
+          parts.push(`Moving: ${mvSummary}.`);
+        }
+        if (stat.length > 0) {
+          const stSectors = [...new Set(stat.map(o => o.sector))].join(", ");
+          parts.push(`${stat.length} stationary target(s) holding in ${stSectors}.`);
+        }
+        briefEl.innerHTML = `<span>${parts.join(" ")}</span>`;
+      }
+
+      // 5. Binary Wire Packet Inspector
+      const seqHex = ((frame.seq >> 8) & 0xff).toString(16).padStart(2, "0").toUpperCase() + " " +
+                     (frame.seq & 0xff).toString(16).padStart(2, "0").toUpperCase();
+      const cntHex = (frame.objects.length & 0xff).toString(16).padStart(2, "0").toUpperCase();
+      document.getElementById("wireByteSummary").textContent = `${frame.bytes} BYTES (12B HDR + ${frame.objects.length}×6B)`;
+      document.getElementById("wireHeaderHex").textContent =
+        `HDR (12B): AD | SEQ ${seqHex} | LAT ${float32ToHex(frame.lat)} | LON ${float32ToHex(frame.lon)} | CNT ${cntHex}`;
+
+      const wireListEl = document.getElementById("wireObjList");
+      wireListEl.innerHTML = frame.objects.map(obj => `
+        <div class="wire-obj-row">
+          <span style="color: ${obj.color}; font-weight: 700;">TRK #${String(obj.track_id).padStart(2, "0")} (${obj.label})</span>
+          <span>${encodeObject6BytesHex(obj)}</span>
+        </div>
+      `).join("");
+
+      drawSyntheticFOV();
+    }
+
+    // ============================================================================
+    // 8. LIVE / STALE WATCHDOG (1.5 SECOND THRESHOLD)
+    // ============================================================================
+    function checkLinkFreshness() {
+      const now = performance.now();
+      const ageMs = now - state.lastPacketTs;
+      const badge = document.getElementById("linkBadge");
+      const text = document.getElementById("linkStateText");
+      const staleBanner = document.getElementById("staleBanner");
+
+      if (state.isPaused) {
+        badge.className = "link-badge paused";
+        text.textContent = "FROZEN (DEMO)";
+        staleBanner.classList.remove("visible");
+      } else if (ageMs > 1500) {
+        badge.className = "link-badge stale";
+        text.textContent = `STALE +${(ageMs / 1000).toFixed(1)}s`;
+        staleBanner.classList.add("visible");
+        drawSyntheticFOV();
+      } else {
+        badge.className = "link-badge live";
+        text.textContent = "LIVE 12Hz";
+        staleBanner.classList.remove("visible");
+      }
+    }
+
+    // ============================================================================
+    // 9. WEBSOCKET BRIDGE CLIENT (AUTO-CONNECT TO ws://127.0.0.1:8765)
+    // ============================================================================
+    function connectWebSocket() {
+      const wsUrl = "ws://127.0.0.1:8765";
+      let ws;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch (e) {
+        return;
+      }
+
+      ws.onopen = () => {
+        state.wsConnected = true;
+        document.getElementById("sourceModeLabel").textContent = "SRC: UDP :9999 RELAY (LIVE)";
+        document.getElementById("sourceModeLabel").style.color = "var(--accent-green)";
+      };
+
+      ws.onmessage = (event) => {
+        if (state.isPaused || state.simulateDrop) return;
+        try {
+          const payload = JSON.parse(event.data);
+          ingestFrame(payload);
+        } catch (err) {
+          console.warn("Invalid JSON frame on WS:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        state.wsConnected = false;
+        document.getElementById("sourceModeLabel").textContent = "SRC: SIMULATOR (12Hz)";
+        document.getElementById("sourceModeLabel").style.color = "var(--text-muted)";
+        setTimeout(connectWebSocket, 2500);
+      };
+    }
+
+    // ============================================================================
+    // 10. INTERACTIVE CONTROLS & HOVER HIT-TESTING
+    // ============================================================================
+    function updateFilterUI() {
+      const label = document.getElementById("activeFilterLabel");
+      const resetBtn = document.getElementById("btnResetSector");
+      if (state.sectorFilter) {
+        label.textContent = `FILTER: ${state.sectorFilter} (${state.classFilter})`;
+        resetBtn.style.display = "inline-block";
+      } else {
+        label.textContent = `FILTER: ALL SECTORS (${state.classFilter})`;
+        resetBtn.style.display = "none";
+      }
+    }
+
+    // Canvas mouse hover hit-test
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ((e.clientX - rect.left) / rect.width) * FOV_W;
+      const my = ((e.clientY - rect.top) / rect.height) * FOV_H;
+
+      const pctX = Math.min(100, Math.max(0, Math.round((mx / FOV_W) * 100)));
+      const pctY = Math.min(100, Math.max(0, Math.round((my / FOV_H) * 100)));
+      const sec = getSectorFromXY(mx, my);
+      document.getElementById("cursorReadout").textContent = `FOV: ${pctX}%, ${pctY}% [${sec}]`;
+
+      if (!state.currentFrame) return;
+      let hitId = null;
+      for (const obj of state.currentFrame.objects) {
+        if (!passesFilter(obj)) continue;
+        const [x1, y1, x2, y2] = obj.bbox;
+        if (mx >= x1 && mx <= x2 && my >= y1 && my <= y2) {
+          hitId = obj.track_id;
+          break;
+        }
+      }
+
+      if (hitId !== state.hoveredTrackId) {
+        state.hoveredTrackId = hitId;
+        renderAll();
+      }
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      if (state.hoveredTrackId !== null) {
+        state.hoveredTrackId = null;
+        renderAll();
+      }
+    });
+
+    // Class Filter Chips
+    document.querySelectorAll("#classFilterGroup .chip").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#classFilterGroup .chip").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.classFilter = btn.dataset.filter;
+        updateFilterUI();
+        renderAll();
+      });
+    });
+
+    document.getElementById("btnResetSector").addEventListener("click", () => {
+      state.sectorFilter = null;
+      updateFilterUI();
+      renderAll();
+    });
+
+    // Freeze / Pause
+    const btnFreeze = document.getElementById("btnFreeze");
+    btnFreeze.addEventListener("click", () => {
+      state.isPaused = !state.isPaused;
+      btnFreeze.classList.toggle("active", state.isPaused);
+      btnFreeze.textContent = state.isPaused ? "[SPACE] RESUME" : "[SPACE] FREEZE";
+      checkLinkFreshness();
+    });
+
+    // Drop Link (Stale Demo)
+    const btnDropLink = document.getElementById("btnDropLink");
+    btnDropLink.addEventListener("click", () => {
+      state.simulateDrop = !state.simulateDrop;
+      btnDropLink.classList.toggle("active", state.simulateDrop);
+      btnDropLink.textContent = state.simulateDrop ? "[L] RESTORE LINK" : "[L] DROP LINK";
+    });
+
+    // Clear FOV (0-object heartbeat demo)
+    const btnClearFov = document.getElementById("btnClearFov");
+    btnClearFov.addEventListener("click", () => {
+      state.simulateEmpty = !state.simulateEmpty;
+      btnClearFov.classList.toggle("active", state.simulateEmpty);
+    });
+
+    // Modal controls
+    const modal = document.getElementById("relayModal");
+    document.getElementById("btnRelayModal").addEventListener("click", () => modal.classList.add("open"));
+    document.getElementById("btnCloseModal").addEventListener("click", () => modal.classList.remove("open"));
+
+    // Keyboard shortcuts for fast judge demo
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space" && !modal.classList.contains("open")) {
+        e.preventDefault();
+        btnFreeze.click();
+      } else if (e.key.toLowerCase() === "l" && !modal.classList.contains("open")) {
+        btnDropLink.click();
+      } else if (e.key === "0" && !modal.classList.contains("open")) {
+        btnClearFov.click();
+      } else if (e.key === "Escape") {
+        modal.classList.remove("open");
+      }
+    });
+
+    // Populate Python Relay code in modal
+    document.getElementById("pyRelayCode").textContent = `#!/usr/bin/env python3
+"""
+ArcDrone Scene Reconstructor UDP (:9999) -> WebSocket (:8765) Relay
+Decodes big-endian 0xAD binary datagrams and broadcasts logical JSON frames.
+"""
+import asyncio, json, math, struct, websockets
+
+UDP_IP, UDP_PORT = "127.0.0.1", 9999
+WS_PORT = 8765
+FOV_W, FOV_H = 720, 540
+
+CLASSES = {
+    1: "pedestrian", 2: "people", 3: "bicycle", 4: "car", 5: "van",
+    6: "truck", 7: "tricycle", 8: "awning-tricycle", 9: "bus", 10: "motor"
+}
+SECTORS = [
+    "TOP-LEFT", "TOP-CENTER", "TOP-RIGHT",
+    "MID-LEFT", "CENTER", "MID-RIGHT",
+    "BOTTOM-LEFT", "BOTTOM-CENTER", "BOTTOM-RIGHT"
+]
+CLIENTS = set()
+
+def decode_packet(data: bytes) -> dict:
+    if len(data) < 12 or data[0] != 0xAD:
+        return None
+    magic, seq, lat, lon, count = struct.unpack(">BHffB", data[:12])
+    objects = []
+    offset = 12
+    for _ in range(count):
+        if offset + 6 > len(data):
+            break
+        cls_id, conf_u8, cx_q, cy_q, w_q, h_q = struct.unpack(">BBBBBB", data[offset:offset+6])
+        offset += 6
+        cx = int(round((cx_q / 255.0) * FOV_W))
+        cy = int(round((cy_q / 255.0) * FOV_H))
+        w  = int(round((w_q  / 255.0) * FOV_W))
+        h  = int(round((h_q  / 255.0) * FOV_H))
+        col = min(2, max(0, int((cx / FOV_W) * 3)))
+        row = min(2, max(0, int((cy / FOV_H) * 3)))
+        objects.append({
+            "cls": cls_id,
+            "label": CLASSES.get(cls_id, f"cls_{cls_id}"),
+            "conf": round(conf_u8 / 100.0, 2),
+            "bbox": [cx - w // 2, cy - h // 2, cx + w // 2, cy + h // 2],
+            "center": [cx, cy],
+            "sector": SECTORS[row * 3 + col]
+        })
+    return {"seq": seq, "lat": lat, "lon": lon, "count": len(objects), "bytes": len(data), "objects": objects}
+
+class UdpProtocol(asyncio.DatagramProtocol):
+    def datagram_received(self, data, addr):
+        frame = decode_packet(data)
+        if frame and CLIENTS:
+            msg = json.dumps(frame)
+            websockets.broadcast(CLIENTS, msg)
+
+async def ws_handler(websocket):
+    CLIENTS.add(websocket)
+    try:
+        await websocket.wait_closed()
+    finally:
+        CLIENTS.discard(websocket)
+
+async def main():
+    loop = asyncio.get_running_loop()
+    await loop.create_datagram_endpoint(lambda: UdpProtocol(), local_addr=(UDP_IP, UDP_PORT))
+    async with websockets.serve(ws_handler, "127.0.0.1", WS_PORT):
+        print(f"Relay active: UDP {UDP_IP}:{UDP_PORT} -> ws://127.0.0.1:{WS_PORT}")
+        await asyncio.Future()
+
+if __name__ == "__main__":
+    asyncio.run(main())`;
+
+    // ============================================================================
+    // 11. BOOTSTRAP
+    // ============================================================================
+    connectWebSocket();
+    stepSimulator();
+    setInterval(stepSimulator, Math.round(1000 / 12)); // 12 Hz (~83ms)
+    setInterval(checkLinkFreshness, 150);
+  </script>
+</body>
+</html>
