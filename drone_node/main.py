@@ -1,8 +1,8 @@
+"""ArcDrone airborne edge node: CV detection, telemetry, HUD, and command handling."""
 import argparse
-import os
 import queue
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -13,26 +13,9 @@ from protocol import packets as p
 from protocol.link import Link
 
 
-def _resolve_const(names: list, fallback: Any) -> Any:
-    for name in names:
-        if hasattr(p, name):
-            return getattr(p, name)
-    return fallback
-
-
-MODE_PATROL = _resolve_const(["MODE_PATROL", "PATROL"], 0)
-MODE_HOLD = _resolve_const(["MODE_HOLD", "HOLD"], 1)
-MODE_RTB = _resolve_const(["MODE_RTB", "RTB"], 2)
-
-CMD_ACK = _resolve_const(["OPERATOR_ACK", "CMD_OPERATOR_ACK", "CMD_ACK"], "OPERATOR_ACK")
-CMD_HOLD = _resolve_const(["HOLD", "CMD_HOLD"], "HOLD")
-CMD_RESUME = _resolve_const(["RESUME", "CMD_RESUME"], "RESUME")
-CMD_RTB = _resolve_const(["RTB", "CMD_RTB"], "RTB")
-
-
 def draw_hud(
     frame: np.ndarray,
-    mode: Any,
+    mode: int,
     link_up: bool,
     buffered_count: int,
     ack_banner: str,
@@ -63,10 +46,10 @@ def draw_hud(
     # Top header bar
     cv2.rectangle(canvas, (0, 0), (w, 40), (20, 20, 20), -1)
 
-    if mode == MODE_HOLD:
+    if mode == p.MODE_HOLD:
         mode_str = "MODE: HOLD - OPERATOR OVERRIDE"
         mode_color = (0, 165, 255)
-    elif mode == MODE_RTB:
+    elif mode == p.MODE_RTB:
         mode_str = "MODE: RETURNING TO BASE (RTB)"
         mode_color = (0, 0, 255)
     else:
@@ -92,7 +75,7 @@ def draw_hud(
     )
 
     # Center overrides
-    if mode == MODE_HOLD:
+    if mode == p.MODE_HOLD:
         cv2.rectangle(canvas, (0, h // 2 - 30), (w, h // 2 + 20), (0, 0, 0), -1)
         cv2.putText(
             canvas,
@@ -103,7 +86,7 @@ def draw_hud(
             (0, 165, 255),
             2,
         )
-    elif mode == MODE_RTB:
+    elif mode == p.MODE_RTB:
         cv2.rectangle(canvas, (0, h // 2 - 30), (w, h // 2 + 20), (0, 0, 0), -1)
         cv2.putText(
             canvas,
@@ -115,7 +98,7 @@ def draw_hud(
             2,
         )
 
-    # Bottom bar
+    # Bottom status bar
     cv2.rectangle(canvas, (0, h - 35), (w, h), (20, 20, 20), -1)
     gps_str = f"GPS: SIMULATED ({drone_lat:.4f}, {drone_lon:.4f})"
     cv2.putText(
@@ -147,15 +130,19 @@ def draw_hud(
     return canvas
 
 
-def main() -> None:
+def parse_args():
     parser = argparse.ArgumentParser(description="ArcDrone Edge CV & Telemetry Node")
     parser.add_argument("--port", required=True, help="Serial port or fake_bridge pty")
-    parser.add_argument("--video", required=True, help="Path to video clip (e.g. data/clip.mp4)")
+    parser.add_argument("--video", required=True, help="Path to video clip or camera index (e.g. 0)")
     parser.add_argument("--conf", type=float, default=0.5, help="Detection confidence gate")
     parser.add_argument("--cooldown", type=float, default=3.0, help="Per-class cooldown (sec)")
-    parser.add_argument("--fps", type=float, default=1.0, help="Target loop/inference FPS")
-    parser.add_argument("--model", type=str, default=None, help="Optional YOLO weights path")
-    args = parser.parse_args()
+    parser.add_argument("--fps", type=float, default=1.0, help="Target inference loop FPS")
+    parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
 
     cmd_queue: "queue.Queue[Dict[str, Any]]" = queue.Queue()
     state: Dict[str, Any] = {
@@ -165,46 +152,27 @@ def main() -> None:
         "last_tx_str": "",
     }
 
-    def on_event(*ev_args: Any, **ev_kwargs: Any) -> None:
-        if len(ev_args) == 1 and isinstance(ev_args[0], dict):
-            evt = ev_args[0]
-            etype = str(evt.get("event") or evt.get("type") or "")
-            if "up" in etype:
-                state["link_up"] = True
-            elif "down" in etype:
-                state["link_up"] = False
-            elif "deliver" in etype:
-                state["link_up"] = True
-                state["last_rtt"] = evt.get("rtt_ms")
-            print(f"[EVENT] {evt}")
-        elif len(ev_args) >= 1:
-            etype = str(ev_args[0])
-            info = ev_kwargs if ev_kwargs else (ev_args[1] if len(ev_args) > 1 else {})
-            if "up" in etype:
-                state["link_up"] = True
-            elif "down" in etype:
-                state["link_up"] = False
-            elif "deliver" in etype:
-                state["link_up"] = True
-                if isinstance(info, dict):
-                    state["last_rtt"] = info.get("rtt_ms")
-            print(f"[EVENT] {etype} | {info}")
+    def on_event(event_type: str, **kwargs: Any) -> None:
+        if event_type == "up":
+            state["link_up"] = True
+        elif event_type == "down":
+            state["link_up"] = False
+        elif event_type == "deliver":
+            state["link_up"] = True
+            state["last_rtt"] = kwargs.get("rtt_ms")
+        print(f"[EVENT] {event_type} | {kwargs}")
 
-    def on_packet(*pkt_args: Any, **pkt_kwargs: Any) -> None:
-        pkt = pkt_args[0] if pkt_args else pkt_kwargs
-        if isinstance(pkt, dict):
-            cmd_queue.put(pkt)
-        else:
-            cmd_queue.put({"raw": pkt, "args": pkt_args, "kwargs": pkt_kwargs})
+    def on_packet(pkt: Dict[str, Any]) -> None:
+        cmd_queue.put(pkt)
 
     print(f"[MAIN] Initializing Link on {args.port}...")
     link = Link(args.port, on_packet=on_packet, on_event=on_event)
-    link.mode = MODE_PATROL
+    link.mode = p.MODE_PATROL
     link.start()
 
     detector = Detector(
         model_path=args.model,
-        conf_threshold=args.conf,
+        conf_thresh=args.conf,
         cooldown_sec=args.cooldown,
     )
     sim_gps = SimGps()
@@ -224,29 +192,32 @@ def main() -> None:
         while True:
             t0 = time.time()
 
-            # 1. Drain COMMAND queue
+            # 1. Drain COMMAND queue strictly matching protocol contract
             while not cmd_queue.empty():
                 pkt = cmd_queue.get_nowait()
-                cmd = pkt.get("cmd") or pkt.get("command") or pkt.get("action")
-                ref_seq = pkt.get("ref_seq") or pkt.get("seq") or 0
+                if pkt.get("type") != p.COMMAND:
+                    continue
 
-                if cmd == CMD_ACK or str(cmd).upper() == "OPERATOR_ACK":
+                cmd = pkt["cmd"]
+                ref_seq = pkt.get("ref_seq", 0)
+
+                if cmd == p.CMD_OPERATOR_ACK:
                     state["ack_banner"] = f"Alert #{ref_seq} acknowledged"
                     print(f"[CMD] Operator acknowledged Alert #{ref_seq}")
-                elif cmd == CMD_HOLD or str(cmd).upper() == "HOLD":
-                    link.mode = MODE_HOLD
+                elif cmd == p.CMD_HOLD:
+                    link.mode = p.MODE_HOLD
                     print("[CMD] Switching to MODE_HOLD (pausing video)")
-                elif cmd == CMD_RESUME or str(cmd).upper() == "RESUME":
-                    link.mode = MODE_PATROL
+                elif cmd == p.CMD_RESUME:
+                    link.mode = p.MODE_PATROL
                     print("[CMD] Switching to MODE_PATROL (resuming video)")
-                elif cmd == CMD_RTB or str(cmd).upper() == "RTB":
-                    link.mode = MODE_RTB
+                elif cmd == p.CMD_RTB:
+                    link.mode = p.MODE_RTB
                     print("[CMD] Switching to MODE_RTB")
 
-            # 2. Frame advance & GPS calculation
+            # 2. Advance frame and compute GPS
             drone_lat, drone_lon = sim_gps.position_at_frame(frame_idx, fps=args.fps)
 
-            if link.mode != MODE_HOLD or last_frame is None:
+            if link.mode != p.MODE_HOLD or last_frame is None:
                 if cap.isOpened():
                     ret, frame = cap.read()
                     if not ret:
@@ -269,10 +240,10 @@ def main() -> None:
                     )
                     frame_idx += 1
 
-                # 3. Run Inference when not in HOLD
+                # 3. Run inference when not in HOLD
                 current_boxes, alert = detector.process_frame(last_frame)
 
-                # 4. If alert qualified and link ready, fire DETECTION packet
+                # 4. Fire DETECTION packet if an alert qualified
                 if alert is not None:
                     t_lat, t_lon = sim_gps.target_location(
                         drone_lat, drone_lon, alert["bbox"], last_frame.shape[:2]
@@ -296,22 +267,12 @@ def main() -> None:
                         f"lat={t_lat:.5f} lon={t_lon:.5f}"
                     )
 
-            # 5. Buffer count query
-            raw_buf = getattr(link, "buffered", 0)
-            buffered_count = (
-                int(raw_buf())
-                if callable(raw_buf)
-                else len(raw_buf)
-                if isinstance(raw_buf, (list, tuple, set, dict))
-                else int(raw_buf or 0)
-            )
-
-            # 6. Render HUD
+            # 5. Render HUD with exact buffered count
             hud_frame = draw_hud(
                 last_frame,
                 mode=link.mode,
                 link_up=state["link_up"],
-                buffered_count=buffered_count,
+                buffered_count=link.buffered,
                 ack_banner=state["ack_banner"],
                 last_rtt=state["last_rtt"],
                 boxes=current_boxes,
@@ -333,10 +294,7 @@ def main() -> None:
         if cap.isOpened():
             cap.release()
         cv2.destroyAllWindows()
-        if hasattr(link, "stop"):
-            link.stop()
-        elif hasattr(link, "close"):
-            link.close()
+        link.stop()
 
 
 if __name__ == "__main__":

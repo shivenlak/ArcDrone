@@ -33,14 +33,13 @@ COCO_TO_VISDRONE = {
 class Detector:
     def __init__(
         self,
-        model_path: Optional[str] = None,
-        conf_threshold: float = 0.5,
+        model_path: str = "yolov8n.pt",
+        conf_thresh: float = 0.5,
         cooldown_sec: float = 3.0,
-    ) -> None:
-        self.conf_threshold = conf_threshold
+    ):
+        self.conf_thresh = conf_thresh
         self.cooldown_sec = cooldown_sec
         self.last_alert_time: Dict[int, float] = {}
-
         self.repo_classes = getattr(p, "CLASS_NAMES", VISDRONE_CLASSES)
 
         weights = model_path or "yolov8n.pt"
@@ -64,7 +63,7 @@ class Detector:
     ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         now = time.time()
         results = self.model.predict(
-            source=frame_bgr, conf=self.conf_threshold, verbose=False
+            source=frame_bgr, conf=self.conf_thresh, verbose=False
         )
 
         all_boxes: List[Dict[str, Any]] = []
