@@ -4,3 +4,4 @@ opencv-python
 fastapi
 uvicorn
 pytest
+platformio

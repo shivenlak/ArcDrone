@@ -68,4 +68,5 @@ pip install -r requirements.txt
 
 ## Changelog
 
+- **2026-11-06:** `shiven/firmware-link`: ESP32 ESP-NOW bridge firmware (compiles), `protocol/packets.py` + tests (8 passing), Phase 0 smoke test script.
 - **2026-11-06:** Repo scaffolded. Plan finalized: ESP-NOW first, binary protocol, Python dashboard.
