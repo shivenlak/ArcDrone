@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArcDrone | Ground Control</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b1119; --panel: #111a26; --raised: #162232; --line: #26374a;
+  --text: #edf4fc; --muted: #a6b7ca; --cyan: #7cdeee; --green: #82e6ae;
+  --amber: #ffd180; --red: #ff9a9d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+button { font: inherit; cursor: pointer; color: inherit; }
+button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+header, main { max-width: 1400px; margin: auto; padding: 0 32px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 72px; border-bottom: 1px solid var(--line); }
+.brand, .header-status, .panel-title, .map-label, .command-item { display: flex; align-items: center; gap: 12px; }
+.brand strong { font-size: 19px; letter-spacing: -.03em; }
+.logo { width: 34px; height: 34px; border: 1px solid #36536a; border-radius: 8px; display: grid; place-items: center; color: var(--cyan); background: #152737; }
+small, .caption { color: var(--muted); }
+main { padding-top: 30px; padding-bottom: 32px; }
+.eyebrow, .caption, .axis, .badge { font: 700 11px/1.4 ui-monospace, monospace; letter-spacing: .09em; text-transform: uppercase; }
+.eyebrow { color: var(--cyan); margin: 0 0 7px; }
+h1 { font-size: clamp(28px, 4vw, 44px); letter-spacing: -.055em; line-height: 1.1; margin: 0; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; }
+.intro { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
+.intro p + h1 + p { margin-top: 8px; color: var(--muted); }
+.badge { border: 1px solid var(--line); padding: 5px 8px; border-radius: 5px; display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; }
+.good { color: var(--green); background: #132a25; border-color: #2a5243; }
+.warn { color: var(--amber); background: #342a1a; border-color: #665132; }
+.bad { color: var(--red); background: #36212a; border-color: #63404a; }
+.dot { display: inline-block; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.metric, .panel { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); min-width: 0; }
+.metric { padding: 13px 16px; }
+.metric strong { display: block; margin-top: 4px; font-size: 22px; letter-spacing: -.03em; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel-title { padding: 15px 17px; justify-content: space-between; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.map-panel { overflow: hidden; }
+.map { position: relative; min-height: 350px; background: #0c1722; }
+.map svg { display: block; width: 100%; height: auto; min-height: 350px; }
+.map-label { justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.axis { fill: #8198ad; }
+.pin circle:first-child { fill: #7cdeee22; stroke: #7cdeee88; }
+.pin circle:last-child { fill: var(--cyan); }
+.pin.selected circle:first-child { fill: #ffd18022; stroke: var(--amber); }
+.pin.selected circle:last-child { fill: var(--amber); }
+.rail { display: grid; gap: 16px; }
+.feed, .controls, .history { padding: 12px 15px; }
+.feed { max-height: 265px; overflow: auto; }
+.feed > p, .history > p { padding: 5px 0; color: var(--muted); }
+.alert { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; }
+.alert + .alert { margin-top: 7px; }
+.alert[aria-pressed="true"] { border-color: #6899b4; background: #1b3042; }
+.alert small { display: block; margin-top: 3px; font-size: 12px; }
+.actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin: 10px 0; }
+.action { background: var(--raised); border: 1px solid #3a526a; border-radius: 7px; padding: 7px 9px; font-weight: 650; font-size: 13px; }
+.action:hover:not(:disabled) { background: #253c51; }
+.action:disabled { opacity: .45; cursor: default; }
+.action.primary { color: var(--cyan); border-color: #406b83; }
+.history { border-top: 1px solid var(--line); max-height: 152px; overflow: auto; }
+.command-item { justify-content: space-between; padding: 5px 0; font-size: 13px; }
+.simulation { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 780px) {
+  header, main { padding-left: 16px; padding-right: 16px; }
+  .layout { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .map, .map svg { min-height: 240px; }
+}
+@media (max-width: 440px) {
+  .header-status small, .brand small { display: none; }
+  .metric strong { font-size: 19px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg></span>
+    <div><strong>ArcDrone</strong> <small> / Drone Zone</small></div>
+  </div>
+  <div class="header-status"><small>Ground control</small><span class="badge warn">Simulation only</span></div>
+</header>
+<main>
+  <section class="intro" aria-labelledby="title">
+    <div><p class="eyebrow">Ground station / Operator console</p><h1 id="title">Mission overview</h1><p>Monitor detections and review operator commands.</p></div>
+    <div class="simulation" aria-label="Simulation controls">
+      <button class="action" id="new-alert" type="button">Simulate detection</button>
+      <button class="action" id="toggle-link" type="button">Simulate link loss</button>
+    </div>
+  </section>
+  <section class="metrics" aria-label="Mission status">
+    <div class="metric"><span class="caption">Radio connection</span><strong id="link" role="status">Link up</strong></div>
+    <div class="metric"><span class="caption">Drone mode</span><strong id="mode">Patrol</strong></div>
+    <div class="metric"><span class="caption">Buffered alerts</span><strong id="buffered">0</strong></div>
+    <div class="metric"><span class="caption">Detections received</span><strong id="received">0</strong></div>
+  </section>
+  <div class="layout">
+    <section class="panel map-panel" aria-labelledby="map-title">
+      <div class="panel-title"><h2 id="map-title">Operating area</h2><span class="badge">Simulated GPS</span></div>
+      <div class="map">
+        <svg viewBox="0 0 720 390" role="img" aria-labelledby="grid-title grid-description">
+          <title id="grid-title">Simulated detection map</title>
+          <desc id="grid-description">A local grid of recent detection locations. Select a detection in the alert feed for its coordinates.</desc>
+          <defs>
+            <pattern id="minor-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#1b2b3b"/></pattern>
+            <pattern id="major-grid" width="96" height="96" patternUnits="userSpaceOnUse"><rect width="96" height="96" fill="url(#minor-grid)"/><path d="M96 0H0V96" fill="none" stroke="#2d4559"/></pattern>
+          </defs>
+          <rect x="24" y="24" width="672" height="336" fill="url(#major-grid)" stroke="#2d4559"/>
+          <path d="M360 24V360M24 192H696" stroke="#526a80" stroke-dasharray="3 7" opacity=".6"/>
+          <text class="axis" x="38" y="48">LOCAL OPERATING GRID</text>
+          <path d="M662 75V49m-5 6 5-6 5 6" fill="none" stroke="#a6b7ca" stroke-width="1.5"/>
+          <text class="axis" x="658" y="91">N</text>
+          <g id="pins"></g>
+          <text class="axis" x="38" y="345">53.519° N / 113.522° W</text>
+        </svg>
+      </div>
+      <div class="map-label"><span class="caption">Selected detection</span><span id="coordinates">Select an alert</span></div>
+    </section>
+    <aside class="rail" aria-label="Detections and controls">
+      <section class="panel" aria-labelledby="alerts-title">
+        <div class="panel-title"><h2 id="alerts-title">Detection alerts</h2><span class="caption">Newest first</span></div>
+        <div class="feed" id="alerts"><p>Waiting for a detection.</p></div>
+      </section>
+      <section class="panel" aria-labelledby="controls-title">
+        <div class="panel-title"><h2 id="controls-title">Operator controls</h2><span id="target" class="caption">No alert selected</span></div>
+        <div class="controls">
+          <small>Hold and resume change the simulated drone mode.</small>
+          <div class="actions">
+            <button class="action primary" data-command="OPERATOR_ACK" type="button" disabled>Acknowledge</button>
+            <button class="action" data-command="HOLD" type="button">Hold</button>
+            <button class="action" data-command="RESUME" type="button">Resume</button>
+            <button class="action" data-command="RTB" type="button">Return to base</button>
+          </div>
+        </div>
+        <div class="history" id="commands" aria-label="Command history" aria-live="polite"><p>No commands yet.</p></div>
+      </section>
+    </aside>
+  </div>
+</main>
+<script>
+const byId = (id) => document.getElementById(id);
+const alerts = [];
+const commands = [];
+const bufferedAlerts = [];
+const commandLabels = { OPERATOR_ACK: "Acknowledge", HOLD: "Hold", RESUME: "Resume", RTB: "Return to base" };
+const modeAfterCommand = { HOLD: "Hold", RESUME: "Patrol", RTB: "Returning to base" };
+const samples = [
+  { cls: "Pedestrian", count: 1, conf: .87, lat: 53.5214, lon: -113.5206 },
+  { cls: "Car", count: 2, conf: .94, lat: 53.5210, lon: -113.5193 },
+  { cls: "Truck", count: 1, conf: .81, lat: 53.5204, lon: -113.5200 },
+  { cls: "Van", count: 1, conf: .89, lat: 53.5201, lon: -113.5187 }
+];
+let linkUp = true;
+let mode = "Patrol";
+let selected = null;
+let nextAlert = 4709;
+let nextCommand = 812;
+let confirmationTimer = null;
+
+function renderStatus() {
+  byId("link").textContent = linkUp ? "Link up" : "Link lost";
+  byId("link").style.color = linkUp ? "var(--green)" : "var(--red)";
+  byId("mode").textContent = mode;
+  byId("buffered").textContent = bufferedAlerts.length;
+  byId("received").textContent = alerts.length;
+  byId("toggle-link").textContent = linkUp ? "Simulate link loss" : "Restore link";
+}
+
+function selectAlert(alert) {
+  selected = alert;
+  byId("target").textContent = `Alert #${alert.seq}`;
+  byId("coordinates").textContent = `${alert.lat.toFixed(4)}° N, ${Math.abs(alert.lon).toFixed(4)}° W`;
+  document.querySelector('[data-command="OPERATOR_ACK"]').disabled = false;
+  for (const button of byId("alerts").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.seq) === alert.seq));
+  }
+  for (const pin of byId("pins").children) {
+    pin.classList.toggle("selected", Number(pin.dataset.seq) === alert.seq);
+  }
+}
+
+function deliverAlert(alert) {
+  alerts.unshift(alert);
+  const feed = byId("alerts");
+  if (alerts.length === 1) feed.replaceChildren();
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "alert";
+  button.dataset.seq = alert.seq;
+  button.setAttribute("aria-pressed", "false");
+  const details = document.createElement("span");
+  const title = document.createElement("strong");
+  title.textContent = `${alert.cls} ×${alert.count}`;
+  const summary = document.createElement("small");
+  summary.textContent = `#${alert.seq} · ${Math.round(alert.conf * 100)}% confidence · ${new Date(alert.ts_ms).toLocaleTimeString()}`;
+  details.append(title, summary);
+  const badge = document.createElement("span");
+  badge.className = alert.delayed ? "badge warn" : "badge";
+  badge.textContent = alert.delayed ? "Delayed" : "Detection";
+  button.append(details, badge);
+  button.addEventListener("click", () => selectAlert(alert));
+  feed.prepend(button);
+
+  const svg = "http://www.w3.org/2000/svg";
+  const pin = document.createElementNS(svg, "g");
+  pin.classList.add("pin");
+  pin.dataset.seq = alert.seq;
+  const x = 64 + (alert.lon + 113.522) / .004 * 584;
+  const y = 319 - (alert.lat - 53.519) / .003 * 243;
+  pin.setAttribute("transform", `translate(${x} ${y})`);
+  for (const radius of [12, 4]) {
+    const circle = document.createElementNS(svg, "circle");
+    circle.setAttribute("r", radius);
+    pin.append(circle);
+  }
+  byId("pins").append(pin);
+  if (!selected) selectAlert(alert);
+}
+
+function simulateAlert() {
+  const seq = nextAlert++;
+  const sample = samples[(seq - 4709) % samples.length];
+  const alert = { ...sample, seq, ts_ms: Date.now(), delayed: false };
+  if (linkUp) deliverAlert(alert);
+  else bufferedAlerts.push(alert);
+  renderStatus();
+}
+
+function confirmNext() {
+  if (!linkUp || confirmationTimer !== null) return;
+  const pending = commands.find((command) => command.status === "Pending");
+  if (!pending) return;
+  confirmationTimer = setTimeout(() => {
+    confirmationTimer = null;
+    if (!linkUp) return;
+    pending.status = "Confirmed";
+    pending.badge.textContent = pending.status;
+    pending.badge.className = "badge good";
+    mode = modeAfterCommand[pending.cmd] ?? mode;
+    renderStatus();
+    confirmNext();
+  }, 650);
+}
+
+function sendCommand(cmd) {
+  const command = { id: nextCommand++, cmd, ref_seq: selected?.seq ?? 0, status: "Pending" };
+  const history = byId("commands");
+  if (!commands.length) history.replaceChildren();
+  const row = document.createElement("div");
+  row.className = "command-item";
+  const label = document.createElement("span");
+  label.textContent = `#${command.id} · ${commandLabels[cmd]}${command.ref_seq ? ` · Alert #${command.ref_seq}` : ""}`;
+  command.badge = document.createElement("span");
+  command.badge.className = "badge warn";
+  command.badge.textContent = command.status;
+  row.append(label, command.badge);
+  history.prepend(row);
+  commands.push(command);
+  confirmNext();
+}
+
+byId("new-alert").addEventListener("click", simulateAlert);
+byId("toggle-link").addEventListener("click", () => {
+  linkUp = !linkUp;
+  if (linkUp) {
+    for (const alert of bufferedAlerts.splice(0)) {
+      alert.delayed = Date.now() - alert.ts_ms > 3000;
+      deliverAlert(alert);
+    }
+    confirmNext();
+  }
+  renderStatus();
+});
+for (const button of document.querySelectorAll("[data-command]")) {
+  button.addEventListener("click", () => sendCommand(button.dataset.command));
+}
+simulateAlert();
+simulateAlert();
+simulateAlert();
+selectAlert(alerts[0]);
+</script>
+</body>
+</html>
