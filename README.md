@@ -61,10 +61,10 @@ pip install -r requirements.txt
 | Role | Owner |
 |---|---|
 | Firmware + link layer | Shiven |
-| CV / drone node | TBD |
-| Ground server | TBD |
-| Dashboard UI | TBD |
-| Test harness, LoRa, demo/pitch | TBD |
+| CV / drone node | Ishan |
+| Ground server | Samar |
+| Dashboard UI | Marriam |
+| Test harness, LoRa, demo/pitch | Manan |
 
 ## Changelog
 
