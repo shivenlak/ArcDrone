@@ -1,0 +1,6 @@
+pyserial
+ultralytics
+opencv-python
+fastapi
+uvicorn
+pytest

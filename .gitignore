@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# PlatformIO
+.pio/
+.vscode/
+
+# Data & model weights
+data/*
+!data/.gitkeep
+*.pt
+*.onnx
+*_ncnn_model/
+
+# OS
+.DS_Store
