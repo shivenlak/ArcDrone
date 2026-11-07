@@ -115,11 +115,11 @@ class EventLogger:
     ) -> None:
         """Save raw and annotated images using PIL."""
         if not _HAS_PIL:
-            # Create lightweight dummy binary files if PIL not installed
+            # Create lightweight dummy binary files if PIL not installed (>100 bytes)
             with open(img_path, "wb") as f:
-                f.write(b"RAW_IMAGE_DATA")
+                f.write(b"RAW_IMAGE_DATA_PADDING_" * 10)
             with open(bb_path, "wb") as f:
-                f.write(b"ANNOTATED_IMAGE_DATA")
+                f.write(b"ANNOTATED_IMAGE_DATA_PADDING_" * 10)
             return
 
         pil_img: Image.Image
