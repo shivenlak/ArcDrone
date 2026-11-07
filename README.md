@@ -26,7 +26,7 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 | `firmware/bridge/` | ESP32 serial↔radio bridge (PlatformIO) | C++ (Arduino) |
 | `drone_node/` | YOLO detection, simulated GPS, command handling | Python |
 | `ground_station/` | FastAPI server + dashboard (`static/`) | Python + HTML/JS |
-| `scripts/` | Link test harness, Pi benchmark | Python |
+| `scripts/` | Cross-platform sim bridge, bandwidth auditor, UAARG adapter, test harness, live demo | Python |
 | `data/` | VisDrone clips (gitignored) | — |
 
 ## Hardware
@@ -65,12 +65,12 @@ python3 -m drone_node.scene_ws_relay
 
 ## Progress
 
-- [ ] **Phase 0:** Radio smoke test (hex lines echo both ways)
-- [ ] **Phase 1:** MVP loop (hardcoded detection → radio → ground print → ACK + RTT)
-- [ ] **Phase 2:** Real YOLO detections on VisDrone footage (Pi 4 benchmark gate)
-- [ ] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, ring buffer)
-- [ ] **Phase 4:** Ground station UI + operator acknowledge/override
-- [ ] **Phase 5:** Stretch (dual-path ESP-NOW + LoRa, metrics panel, mute button)
+- [x] **Phase 0:** Radio smoke test (hex lines echo both ways)
+- [x] **Phase 1:** MVP loop (detection → radio → ground print → ACK + RTT)
+- [x] **Phase 2:** Real YOLO detections on VisDrone footage (Pi 4 benchmark gate: 95.5 FPS)
+- [x] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, 64-entry ring buffer)
+- [x] **Phase 4:** Ground station UI + operator acknowledge/override (HOLD / RESUME / RTB)
+- [x] **Phase 5:** Low-bandwidth compliance (<= 3 kB/s budget monitor, UAARG telemetry/logging adapter)
 
 ## Team
 
@@ -80,7 +80,7 @@ python3 -m drone_node.scene_ws_relay
 | CV / drone node | Ishan |
 | Ground server | Samar |
 | Dashboard UI | Marriam |
-| Test harness, LoRa, demo/pitch | Manan |
+| Test harness, LoRa, bandwidth compliance, UAARG adapters, demo/pitch | Manan |
 
 ## Changelog
 
