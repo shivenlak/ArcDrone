@@ -7,8 +7,89 @@
 - **Packet spec in §4 is frozen.** Change it only deliberately, and update this file + README together.
 - **Honest wording:** say "resistant to narrowband interference", "no LoRaWAN network overhead", "no router/AP required". Never "jam-resistant", "bypasses duty cycle", or "encrypted" (unless enabled).
 - Shiven is using this hackathon to build embedded/hardware skills — explain firmware/serial/radio decisions rather than hiding them.
-- Keep `README.md` progress checklist and changelog updated as phases complete.
+- Keep `README.md` progress checklist updated and add a line to `CHANGELOG.md` as work lands.
 - Possible future: a real drone. It only changes the frame source (+ optional real GPS); protocol/firmware/ground station stay unchanged. Don't buy until Phase 4 passes.
+- Python code must run on **Python 3.9+** (no `match`, no `X | None` hints). CI tests on 3.9.
+
+---
+
+# Team workflow (avoid blocking and merge conflicts)
+
+## File ownership: only the owner edits these files
+| Path | Owner | Branch |
+|---|---|---|
+| `protocol/`, `firmware/`, `scripts/smoke_test.py` | Shiven | `shiven/firmware-link` |
+| `drone_node/` | Ishan | `ishan/cv-drone-node` |
+| `ground_station/*.py` | Samar | `samar/ground-server` |
+| `ground_station/static/` | Marriam | `marriam/dashboard-ui` |
+| `scripts/` (everything else) | Manan | `manan/test-lora-demo` |
+
+If you need a change in someone else's file, ask them. Don't edit it on your branch.
+
+Shared files, with rules that keep merges clean:
+- `CHANGELOG.md` and `requirements.txt`: **append lines only**, never reorder or edit existing lines. `.gitattributes` merges these by union, so they won't conflict.
+- `CLAUDE.md` and `README.md`: Shiven edits them, or other people do so in a small PR of their own.
+
+## Git rules
+1. Work on your own branch. Commit small and often.
+2. **Pull `main` into your branch at least twice a day:** `git pull origin main`.
+3. Merge into `main` via a **small PR as soon as something works** (at least once per phase). CI (`pytest`) must pass.
+4. **Contracts** (packet spec, `Link` API, WebSocket schema below) change only via a PR from Shiven, announced to the team. Code against them, not against someone's unfinished work.
+5. Never commit `data/`, model weights, `.venv/`, or `.pio/` (already gitignored).
+
+## Building without each other (and without hardware)
+- **No radios?** Run `python -m protocol.fake_bridge`. It prints two virtual serial ports. Give one to the drone side and one to the ground side as `--port`. Press Enter to cut or restore the link, and pass `--loss 0.2` to drop 20% of packets. **Dev only. The demo must use the real ESP32s.**
+- **No server yet?** The dashboard uses a demo mode (`index.html?demo=1`) that generates schema-valid fake events in JS.
+- **No detector yet?** The drone side sends hardcoded DETECTIONs (`drone_node/fake_sender.py`).
+- Run everything from the repo root as modules: `python -m drone_node.main --port ...`, `python -m ground_station.server --port ...`.
+
+# Interface contracts
+
+## `protocol.link.Link` (both sides)
+```python
+from protocol import packets as p
+from protocol.link import Link
+
+link = Link(port, on_packet=fn, on_event=fn).start()   # boot_wait=2.0, retry_timeout=0.3
+seq = link.send(p.DETECTION, ts_ms=p.now_ms(), cls=3, conf=0.91, count=2, lat=53.52, lon=-113.52)
+seq = link.send(p.COMMAND, cmd=p.CMD_HOLD, ref_seq=alert_seq)
+link.mode = p.MODE_HOLD      # drone: reported in heartbeats
+link.up, link.buffered       # current state
+link.summary()               # {"up","buffered","sent","delivered","retries","duplicates","bad_packets","dropped","rtt_ms_avg","rtt_ms_p95"}
+```
+- `on_packet(packet)` receives each **new** DETECTION/COMMAND (already deduped) plus every HEARTBEAT, as a dict like `{"type": p.DETECTION, "seq": 7, "ts_ms": ..., "cls": 3, "conf": 0.91, "count": 2, "lat": ..., "lon": ...}`.
+- `on_event(name, **info)` receives `"link_up"`, `"link_down"`, or `"delivered"` with `seq=` and `rtt_ms=`. A COMMAND is CONFIRMED when its `seq` is delivered.
+- Callbacks run on the link thread. Keep them fast (push to a `queue.Queue`).
+- Names for the UI: `p.CLASS_NAMES[cls]`, `p.CMD_NAMES[cmd]`, `p.MODE_NAMES[mode]`.
+
+## WebSocket schema: `ground_station/server.py` ↔ `static/index.html`
+Endpoint: `ws://localhost:8000/ws`. Messages are JSON objects.
+
+Server → browser:
+```json
+{"event": "alert", "seq": 4711, "cls": "car", "conf": 0.91, "count": 2, "lat": 53.52, "lon": -113.52, "ts_ms": 1730918400123, "delayed": false}
+{"event": "link", "up": true}
+{"event": "drone", "mode": "PATROL", "buffered": 0}
+{"event": "cmd_status", "cmd_id": 812, "cmd": "HOLD", "ref_seq": 4711, "status": "PENDING"}
+{"event": "stats", "up": true, "buffered": 0, "sent": 40, "delivered": 40, "retries": 3, "duplicates": 1, "bad_packets": 0, "dropped": 0, "rtt_ms_avg": 9.2, "rtt_ms_p95": 14.0}
+```
+- `alert.delayed` is true when it arrives more than 3 s after `ts_ms`, meaning it was buffered during link loss.
+- `cmd_status.status` is `"PENDING"` when the command is sent and `"CONFIRMED"` when the drone ACKs it. `cmd_id` is the link seq.
+- `drone` comes from heartbeats (1 Hz). `stats` is sent every 1 s.
+
+Browser → server:
+```json
+{"action": "command", "cmd": "HOLD", "ref_seq": 4711}
+```
+`cmd` is one of `OPERATOR_ACK`, `HOLD`, `RESUME`, `RTB`. `ref_seq` is the alert being answered, or 0.
+
+## Drone reaction to COMMANDs (`drone_node`)
+| cmd | Drone does | `link.mode` |
+|---|---|---|
+| OPERATOR_ACK | Overlay "Alert #ref_seq acknowledged by operator" | unchanged |
+| HOLD | Freeze playback, banner "HOLD — operator override" | `MODE_HOLD` |
+| RESUME | Resume playback | `MODE_PATROL` |
+| RTB | Banner "RETURNING TO BASE" | `MODE_RTB` |
 
 ---
 

@@ -31,6 +31,14 @@ MODE_PATROL = 0
 MODE_HOLD = 1
 MODE_RTB = 2
 
+# DETECTION.cls values: VisDrone class order. A COCO fallback model must map onto these.
+CLASS_NAMES = ["pedestrian", "people", "bicycle", "car", "van", "truck",
+               "tricycle", "awning-tricycle", "bus", "motor"]
+
+# Names used in the dashboard JSON (CLAUDE.md "WebSocket schema").
+CMD_NAMES = {CMD_OPERATOR_ACK: "OPERATOR_ACK", CMD_HOLD: "HOLD", CMD_RESUME: "RESUME", CMD_RTB: "RTB"}
+MODE_NAMES = {MODE_PATROL: "PATROL", MODE_HOLD: "HOLD", MODE_RTB: "RTB"}
+
 HEADER = struct.Struct("<BBH")
 CRC = struct.Struct("<H")
 

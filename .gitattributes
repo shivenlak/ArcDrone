@@ -1,0 +1,3 @@
+# Append-only shared files: merge both sides' lines instead of conflicting.
+CHANGELOG.md merge=union
+requirements.txt merge=union

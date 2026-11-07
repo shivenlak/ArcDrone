@@ -40,12 +40,15 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 
 ## Setup
 
-_TBD: this section gets filled in as each phase lands._
-
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python -m pytest -q          # protocol tests, ~15 s
 ```
+
+**Without hardware:** `python -m protocol.fake_bridge` prints two virtual serial ports. Pass one to each side as `--port`. It's for development only; the demo uses the real radios.
+
+**Team rules** (file ownership, git workflow, interface contracts): see [CLAUDE.md](CLAUDE.md#team-workflow-avoid-blocking-and-merge-conflicts).
 
 ## Progress
 
@@ -68,5 +71,4 @@ pip install -r requirements.txt
 
 ## Changelog
 
-- **2026-11-06:** `shiven/firmware-link`: ESP32 ESP-NOW bridge firmware (compiles), `protocol/packets.py` + tests (8 passing), Phase 0 smoke test script.
-- **2026-11-06:** Repo scaffolded. Plan finalized: ESP-NOW first, binary protocol, Python dashboard.
+See [CHANGELOG.md](CHANGELOG.md).

@@ -23,6 +23,7 @@ time.sleep(2)  # opening the port resets the ESP32; wait for it to boot
 ser.reset_input_buffer()
 
 sent = received = garbled = 0
+rx = b""
 next_send = time.time()
 end = time.time() + args.seconds
 try:
@@ -33,19 +34,22 @@ try:
             sent += 1
             next_send += 0.5
 
-        line = ser.readline().decode(errors="replace").strip()
-        if not line:
-            continue
-        if line.startswith("#"):
-            print(line)
-            continue
-        try:
-            text = bytes.fromhex(line).decode()
-            received += 1
-            print("rx:", text)
-        except ValueError:
-            garbled += 1
-            print("garbled:", line)
+        rx += ser.read(ser.in_waiting or 1)  # a read can stop mid-line, so buffer until '\n'
+        while b"\n" in rx:
+            raw, rx = rx.split(b"\n", 1)
+            line = raw.decode(errors="replace").strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                print(line)
+                continue
+            try:
+                text = bytes.fromhex(line).decode()
+                received += 1
+                print("rx:", text)
+            except ValueError:
+                garbled += 1
+                print("garbled:", line)
 except KeyboardInterrupt:
     pass
 

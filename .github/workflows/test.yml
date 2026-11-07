@@ -1,0 +1,15 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  pytest:
+    runs-on: macos-latest  # fake_bridge uses ptys; macOS matches the team's machines
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - run: pip install pytest pyserial
+      - run: python -m pytest -q
