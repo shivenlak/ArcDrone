@@ -3,24 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ARCDRONE // SCENE RECONSTRUCTOR (2.0 KBPS VECTOR LINK)</title>
+  <title>ARCDRONE // SCENE RECONSTRUCTOR (TACTICAL FOV + TRACE INSPECTOR)</title>
   <style>
     :root {
-      --bg-void: #060a0d;
-      --bg-panel: #0b1217;
-      --bg-panel-alt: #0f181f;
-      --bg-elevated: #132029;
-      --border-dim: #1b2c38;
-      --border-bright: #2b4558;
-      --text-primary: #e4f0f6;
-      --text-secondary: #8ba3b5;
-      --text-muted: #526a7a;
+      --bg-void: #05080b;
+      --bg-panel: #0a1015;
+      --bg-panel-alt: #0e171e;
+      --bg-elevated: #13202a;
+      --border-dim: #1b2c39;
+      --border-bright: #2d495e;
+      --text-primary: #e6f1f8;
+      --text-secondary: #8fa8ba;
+      --text-muted: #546d7e;
 
       --accent-cyan: #00e5ff;
       --accent-green: #00e676;
       --accent-amber: #ffb300;
       --accent-red: #ff5252;
-      --accent-reserve: #7c4dff;
+      --accent-purple: #b388ff;
 
       /* Class Category Colors */
       --cls-person: #00e5ff;   /* 1 pedestrian, 2 people */
@@ -28,8 +28,7 @@
       --cls-vehicle: #ffb300;  /* 4 car, 5 van */
       --cls-heavy: #ff5252;    /* 6 truck, 9 bus */
 
-      --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Monaco, 'Cascadia Mono', Consolas, monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
     }
 
     * {
@@ -46,30 +45,27 @@
       background-color: var(--bg-void);
       color: var(--text-primary);
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 11.5px;
       line-height: 1.35;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Subtle tactical CRT scanline overlay */
+    /* Subtle tactical scanline overlay */
     body::after {
       content: "";
       position: fixed;
       inset: 0;
-      background: linear-gradient(
-        rgba(18, 16, 16, 0) 50%, 
-        rgba(0, 0, 0, 0.18) 50%
-      );
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.16) 50%);
       background-size: 100% 4px;
       pointer-events: none;
       z-index: 999;
-      opacity: 0.35;
+      opacity: 0.3;
     }
 
-    /* ==================== MASTER LAYOUT (1280x800 ZERO SCROLL) ==================== */
+    /* ==================== MASTER LAYOUT ==================== */
     .app-shell {
       display: grid;
-      grid-template-rows: 54px 1fr 172px;
+      grid-template-rows: 48px 1fr;
       height: 100vh;
       width: 100vw;
       gap: 6px;
@@ -83,49 +79,46 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 12px;
-      gap: 12px;
+      padding: 0 10px;
+      gap: 10px;
     }
 
     .brand-group {
       display: flex;
       align-items: center;
-      gap: 10px;
-      min-width: 0;
+      gap: 9px;
     }
 
     .brand-mark {
-      width: 10px;
-      height: 28px;
+      width: 8px;
+      height: 26px;
       background: var(--accent-cyan);
-      box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.55);
     }
 
     .brand-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 800;
       letter-spacing: 0.08em;
-      color: var(--text-primary);
       white-space: nowrap;
     }
 
     .brand-sub {
-      font-size: 10px;
+      font-size: 9.5px;
       color: var(--text-secondary);
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 2px;
+      gap: 5px;
+      margin-top: 1px;
     }
 
     .pill-tag {
       background: rgba(0, 229, 255, 0.1);
       border: 1px solid rgba(0, 229, 255, 0.35);
       color: var(--accent-cyan);
-      padding: 1px 6px;
-      font-size: 10px;
+      padding: 1px 5px;
+      font-size: 9.5px;
       font-weight: 700;
-      letter-spacing: 0.04em;
       border-radius: 2px;
       white-space: nowrap;
     }
@@ -139,36 +132,24 @@
     /* Link Budget Bar */
     .budget-widget {
       flex: 1;
-      max-width: 410px;
+      max-width: 360px;
       background: var(--bg-void);
       border: 1px solid var(--border-dim);
-      padding: 5px 10px;
+      padding: 4px 8px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
     }
 
     .budget-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      font-size: 10px;
-      letter-spacing: 0.04em;
-    }
-
-    .budget-title {
-      color: var(--text-secondary);
-      font-weight: 700;
-    }
-
-    .budget-readout {
-      color: var(--accent-cyan);
+      font-size: 9.5px;
       font-weight: 700;
     }
 
     .budget-track {
-      position: relative;
-      height: 10px;
+      height: 8px;
       width: 100%;
       background: #0d161d;
       border: 1px solid var(--border-dim);
@@ -176,23 +157,20 @@
       overflow: hidden;
     }
 
-    /* Full 2.0 kbps cap for scene vectors; alerts use serial link */
     .budget-scene-zone {
       width: 100%;
       height: 100%;
-      position: relative;
-      border-right: 2px solid var(--accent-amber);
+    }
+
+    .budget-scene-fill.warn {
+      background: linear-gradient(90deg, #ff6d00, #ff5252);
     }
 
     .budget-scene-fill {
       height: 100%;
-      width: 0%;
+      width: 35%;
       background: linear-gradient(90deg, #00b8d4, #00e676);
-      transition: width 0.12s ease-out, background 0.15s ease;
-    }
-
-    .budget-scene-fill.warn {
-      background: linear-gradient(90deg, #ffb300, #ff5252);
+      transition: width 0.12s ease-out;
     }
 
     .budget-reserve-zone {
@@ -200,59 +178,53 @@
       height: 100%;
       background: repeating-linear-gradient(
         45deg,
-        rgba(124, 77, 255, 0.18),
-        rgba(124, 77, 255, 0.18) 4px,
-        rgba(124, 77, 255, 0.35) 4px,
-        rgba(124, 77, 255, 0.35) 8px
+        rgba(124, 77, 255, 0.2),
+        rgba(124, 77, 255, 0.2) 4px,
+        rgba(124, 77, 255, 0.38) 4px,
+        rgba(124, 77, 255, 0.38) 8px
       );
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 8px;
-      color: #b388ff;
+      font-size: 7.5px;
+      color: var(--accent-purple);
       font-weight: 700;
-      letter-spacing: 0.03em;
     }
 
-    /* Telemetry Counters & Status */
     .telemetry-strip {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .tele-box {
       background: var(--bg-void);
       border: 1px solid var(--border-dim);
-      padding: 4px 8px;
-      min-width: 72px;
+      padding: 3px 7px;
+      min-width: 66px;
     }
 
     .tele-label {
-      font-size: 9px;
+      font-size: 8.5px;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
     }
 
     .tele-val {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      color: var(--text-primary);
     }
 
-    /* LIVE / STALE Indicator */
     .link-badge {
       display: flex;
       align-items: center;
-      gap: 7px;
-      padding: 6px 10px;
+      gap: 6px;
+      padding: 5px 9px;
       border-radius: 2px;
       font-weight: 800;
-      font-size: 11px;
-      letter-spacing: 0.06em;
+      font-size: 10.5px;
       border: 1px solid;
-      min-width: 112px;
+      min-width: 104px;
       justify-content: center;
     }
 
@@ -263,10 +235,10 @@
     }
 
     .link-badge.stale {
-      background: rgba(255, 82, 82, 0.16);
+      background: rgba(255, 82, 82, 0.18);
       border-color: var(--accent-red);
       color: var(--accent-red);
-      animation: pulse-alert 0.8s infinite alternate;
+      animation: pulse-alert 0.7s infinite alternate;
     }
 
     .link-badge.paused {
@@ -276,8 +248,8 @@
     }
 
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: currentColor;
       box-shadow: 0 0 8px currentColor;
@@ -285,14 +257,13 @@
 
     @keyframes pulse-alert {
       from { opacity: 1; }
-      to { opacity: 0.45; }
+      to { opacity: 0.4; }
     }
 
-    /* Control Buttons */
     .ctrl-group {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
     .btn {
@@ -302,9 +273,9 @@
       font-family: var(--font-mono);
       font-size: 10px;
       font-weight: 700;
-      padding: 6px 9px;
+      padding: 5px 8px;
       cursor: pointer;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
       transition: all 0.12s ease;
       white-space: nowrap;
     }
@@ -316,21 +287,35 @@
     }
 
     .btn.active {
-      background: rgba(255, 179, 0, 0.2);
+      background: rgba(255, 179, 0, 0.22);
       border-color: var(--accent-amber);
       color: var(--accent-amber);
     }
 
     .btn.danger.active {
-      background: rgba(255, 82, 82, 0.22);
+      background: rgba(255, 82, 82, 0.24);
       border-color: var(--accent-red);
       color: var(--accent-red);
     }
 
-    /* ==================== MAIN WORKSPACE (FOV + MANIFEST) ==================== */
-    .workspace {
+    /* ==================== MAIN CONTENT GRID (BIG LEFT FOV + 3-TIER RIGHT STACK) ==================== */
+    .main-grid {
       display: grid;
-      grid-template-columns: 61% 1fr;
+      grid-template-columns: 65% 35%;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .left-column {
+      display: grid;
+      grid-template-rows: 1fr 92px;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .right-column {
+      display: grid;
+      grid-template-rows: 32% 33% 35%;
       gap: 6px;
       min-height: 0;
     }
@@ -342,57 +327,51 @@
       flex-direction: column;
       min-height: 0;
       position: relative;
+      overflow: hidden;
     }
 
     .panel-header {
-      height: 30px;
+      height: 28px;
       background: var(--bg-panel-alt);
       border-bottom: 1px solid var(--border-dim);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 10px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
+      padding: 0 9px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
       color: var(--text-secondary);
       flex-shrink: 0;
     }
 
-    .panel-header-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .panel-header-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 10px;
-    }
-
-    /* Synthetic FOV Container */
+    /* ==================== MASSIVE SYNTHETIC FOV STAGE ==================== */
     .fov-stage {
       flex: 1;
+      position: relative;
+      background: radial-gradient(circle at center, #0a151e 0%, #04070a 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at center, #0a141c 0%, #05080b 100%);
-      position: relative;
-      padding: 8px;
       min-height: 0;
       overflow: hidden;
+      padding: 4px;
     }
 
-    .canvas-wrap {
-      position: relative;
-      aspect-ratio: 4 / 3;
+    .canvas-container {
+      width: 100%;
       height: 100%;
-      max-width: 100%;
+      position: relative;
       border: 1px solid var(--border-bright);
-      box-shadow: 0 0 24px rgba(0, 0, 0, 0.7);
-      background: #060b0f;
+      background: #05090d;
+      box-shadow: inset 0 0 30px rgba(0, 229, 255, 0.04);
+    }
+
+    .canvas-container.aspect-locked {
+      width: auto;
+      height: 100%;
+      aspect-ratio: 4 / 3;
+      max-width: 100%;
     }
 
     #fovCanvas {
@@ -402,8 +381,7 @@
       cursor: crosshair;
     }
 
-    /* HUD Overlay Badges inside FOV */
-    .fov-hud-top {
+    .fov-hud-overlay {
       position: absolute;
       top: 8px;
       left: 10px;
@@ -412,10 +390,10 @@
       justify-content: space-between;
       pointer-events: none;
       font-size: 10px;
-      color: rgba(228, 240, 246, 0.75);
+      color: rgba(230, 241, 248, 0.78);
     }
 
-    .fov-legend {
+    .fov-bottom-overlay {
       position: absolute;
       bottom: 8px;
       left: 10px;
@@ -425,12 +403,12 @@
       align-items: center;
       pointer-events: none;
       font-size: 10px;
-      background: rgba(6, 10, 13, 0.78);
+      background: rgba(5, 8, 11, 0.84);
       border: 1px solid var(--border-dim);
       padding: 4px 8px;
     }
 
-    .legend-items {
+    .legend-row {
       display: flex;
       gap: 12px;
     }
@@ -440,80 +418,113 @@
       align-items: center;
       gap: 5px;
       color: var(--text-secondary);
-      font-weight: 600;
+      font-weight: 700;
     }
 
-    .legend-swatch {
+    .swatch {
       width: 8px;
       height: 8px;
       border-radius: 1px;
     }
 
-    /* Stale Overlay Banner inside FOV */
     .stale-banner {
       position: absolute;
-      top: 42px;
+      top: 38px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(255, 82, 82, 0.92);
+      background: rgba(255, 82, 82, 0.94);
       color: #000;
       font-weight: 900;
-      padding: 4px 14px;
+      padding: 5px 14px;
       font-size: 11px;
       letter-spacing: 0.08em;
       border: 1px solid #fff;
       pointer-events: none;
       display: none;
-      z-index: 20;
+      z-index: 25;
     }
 
     .stale-banner.visible {
       display: block;
     }
 
-    /* ==================== RIGHT PANEL: TACTICAL MANIFEST ==================== */
-    .filter-bar {
+    /* ==================== LEFT BOTTOM STRIP (MATRIX + SITREP) ==================== */
+    .left-bottom-dock {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .mini-matrix {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 2px;
+      padding: 4px;
+      background: var(--bg-void);
+    }
+
+    .sec-cell {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 4px;
-      padding: 6px 8px;
-      background: var(--bg-void);
-      border-bottom: 1px solid var(--border-dim);
-      flex-shrink: 0;
-      flex-wrap: wrap;
-    }
-
-    .filter-chips {
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-    }
-
-    .chip {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-dim);
-      color: var(--text-secondary);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 700;
-      padding: 3px 7px;
+      padding: 0 5px;
       cursor: pointer;
-      border-radius: 2px;
+      font-size: 9px;
+      color: var(--text-muted);
     }
 
-    .chip:hover {
-      border-color: var(--text-secondary);
+    .sec-cell:hover {
+      border-color: var(--accent-cyan);
+    }
+
+    .sec-cell.occupied {
+      background: rgba(0, 229, 255, 0.1);
+      border-color: rgba(0, 229, 255, 0.45);
+      color: var(--text-secondary);
+    }
+
+    .sec-cell.selected-filter {
+      outline: 1.5px solid var(--accent-amber);
+    }
+
+    .sec-cell strong {
+      font-size: 11px;
       color: var(--text-primary);
     }
 
-    .chip.active {
-      background: rgba(0, 229, 255, 0.14);
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
+    .sitrep-box {
+      flex: 1;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: var(--bg-void);
+      font-size: 11px;
     }
 
-    .manifest-table-wrap {
+    .sitrep-line {
+      color: var(--text-primary);
+      border-left: 3px solid var(--accent-cyan);
+      padding-left: 8px;
+      line-height: 1.35;
+    }
+
+    .wire-inline {
+      font-size: 9.5px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-dim);
+      padding-top: 4px;
+    }
+
+    /* ==================== RIGHT 1: TACTICAL MANIFEST TABLE ==================== */
+    .table-scroll {
       flex: 1;
       overflow-y: auto;
       min-height: 0;
@@ -522,272 +533,302 @@
     table.manifest-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: 10.5px;
     }
 
     table.manifest-table th {
       position: sticky;
       top: 0;
-      background: #0d161d;
+      background: #0c151c;
       color: var(--text-muted);
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+      font-size: 9.5px;
       text-align: left;
-      padding: 6px 8px;
+      padding: 5px 7px;
       border-bottom: 1px solid var(--border-dim);
-      z-index: 5;
+      z-index: 4;
     }
 
     table.manifest-table td {
-      padding: 7px 8px;
-      border-bottom: 1px solid rgba(27, 44, 56, 0.55);
+      padding: 5px 7px;
+      border-bottom: 1px solid rgba(27, 44, 57, 0.55);
       white-space: nowrap;
     }
 
-    table.manifest-table tr.manifest-row {
+    table.manifest-table tr.m-row {
       cursor: pointer;
       transition: background 0.1s ease;
     }
 
-    table.manifest-table tr.manifest-row:hover,
-    table.manifest-table tr.manifest-row.highlighted {
-      background: rgba(0, 229, 255, 0.14);
+    table.manifest-table tr.m-row:hover {
+      background: rgba(0, 229, 255, 0.12);
     }
 
-    .trk-badge {
+    table.manifest-table tr.m-row.selected-row {
+      background: rgba(0, 229, 255, 0.22);
+      outline: 1px solid var(--accent-cyan);
+    }
+
+    .status-pill {
       display: inline-block;
       padding: 1px 5px;
-      font-weight: 800;
-      font-size: 10px;
-      border-radius: 2px;
-      background: rgba(255, 255, 255, 0.06);
-      border-left: 3px solid currentColor;
-    }
-
-    .cls-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-weight: 700;
-    }
-
-    .conf-sub {
-      color: var(--text-muted);
-      font-size: 10px;
-    }
-
-    .sector-tag {
-      background: var(--bg-void);
-      border: 1px solid var(--border-dim);
-      padding: 1px 5px;
-      font-size: 10px;
-      color: var(--text-secondary);
-    }
-
-    .motion-cell {
-      font-weight: 700;
-    }
-
-    .motion-stationary {
-      color: var(--text-muted);
-    }
-
-    .motion-moving {
-      color: var(--accent-green);
-    }
-
-    .empty-manifest {
-      padding: 36px 16px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 11px;
-    }
-
-    /* ==================== BOTTOM DOCK (3 CARDS) ==================== */
-    .bottom-dock {
-      display: grid;
-      grid-template-columns: 270px 1fr 370px;
-      gap: 6px;
-      min-height: 0;
-    }
-
-    /* 1. Sector Occupancy Matrix */
-    .matrix-body {
-      flex: 1;
-      padding: 6px;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 1fr);
-      gap: 4px;
-      min-height: 0;
-    }
-
-    .sector-cell {
-      background: var(--bg-void);
-      border: 1px solid var(--border-dim);
-      padding: 3px 6px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    }
-
-    .sector-cell:hover {
-      border-color: var(--accent-cyan);
-    }
-
-    .sector-cell.occupied {
-      background: rgba(0, 229, 255, 0.08);
-      border-color: rgba(0, 229, 255, 0.45);
-    }
-
-    .sector-cell.heavy-alert {
-      background: rgba(255, 82, 82, 0.14);
-      border-color: rgba(255, 82, 82, 0.65);
-    }
-
-    .sector-cell.selected-filter {
-      outline: 2px solid var(--accent-amber);
-      outline-offset: -2px;
-    }
-
-    .sec-name {
       font-size: 9px;
-      color: var(--text-muted);
-      font-weight: 700;
-    }
-
-    .sec-count {
-      font-size: 14px;
       font-weight: 800;
-      color: var(--text-primary);
-      align-self: flex-end;
+      border-radius: 2px;
+      border: 1px solid currentColor;
     }
 
-    /* 2. Auto Scene Brief (SITREP) + Judge Script */
-    .sitrep-body {
-      flex: 1;
-      padding: 8px 12px;
+    .st-transit { color: var(--accent-green); background: rgba(0, 230, 118, 0.1); }
+    .st-fast    { color: var(--accent-red);   background: rgba(255, 82, 82, 0.14); }
+    .st-loiter  { color: var(--accent-amber); background: rgba(255, 179, 0, 0.12); }
+    .st-hold    { color: var(--text-secondary); background: rgba(143, 168, 186, 0.08); }
+    .st-new     { color: var(--accent-cyan);  background: rgba(0, 229, 255, 0.15); }
+
+    /* ==================== RIGHT 2: INTERACTIVE OBJECT STATUS & ACTIVITY LOG ==================== */
+    .log-toolbar {
       display: flex;
-      flex-direction: column;
       justify-content: space-between;
-      gap: 6px;
-      overflow: hidden;
-    }
-
-    .sitrep-text {
-      font-size: 12px;
-      line-height: 1.45;
-      color: var(--text-primary);
-      background: var(--bg-void);
-      border-left: 3px solid var(--accent-cyan);
-      padding: 6px 10px;
-      min-height: 48px;
-      display: flex;
       align-items: center;
-    }
-
-    .judge-callout {
-      background: rgba(255, 179, 0, 0.07);
-      border: 1px dashed rgba(255, 179, 0, 0.4);
-      padding: 5px 9px;
-      font-size: 10.5px;
-      color: #ffd54f;
-      line-height: 1.35;
-    }
-
-    .judge-callout strong {
-      color: var(--accent-amber);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    /* 3. Wire Packet Inspector */
-    .wire-body {
-      flex: 1;
-      padding: 6px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      overflow-y: auto;
-      font-size: 10.5px;
+      padding: 4px 8px;
       background: var(--bg-void);
+      border-bottom: 1px solid var(--border-dim);
+      font-size: 9.5px;
     }
 
-    .wire-header-block {
-      padding: 4px 6px;
-      background: rgba(0, 229, 255, 0.07);
-      border: 1px solid rgba(0, 229, 255, 0.25);
-      color: var(--accent-cyan);
-      font-weight: 700;
-      word-break: break-all;
-    }
-
-    .wire-obj-list {
+    .log-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
       display: flex;
       flex-direction: column;
       gap: 3px;
+      background: var(--bg-void);
+    }
+
+    .log-item {
+      display: grid;
+      grid-template-columns: 52px 42px 1fr;
+      gap: 6px;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--bg-panel);
+      border-left: 3px solid var(--border-bright);
+      cursor: pointer;
+      font-size: 10px;
+      transition: background 0.1s ease;
+    }
+
+    .log-item:hover {
+      background: rgba(0, 229, 255, 0.12);
+    }
+
+    .log-item.active-track-log {
+      background: rgba(0, 229, 255, 0.16);
+      border-right: 2px solid var(--accent-cyan);
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      font-size: 9.5px;
+    }
+
+    .log-trk {
+      font-weight: 800;
+    }
+
+    .log-msg {
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Live "what is each target doing" cards (panel 2, LIVE ACTIVITY) */
+    .act-card {
+      display: grid;
+      grid-template-columns: 26px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 7px;
+      background: var(--bg-panel);
+      border-left: 3px solid var(--border-bright);
+      cursor: pointer;
+    }
+
+    .act-card:hover {
+      background: rgba(0, 229, 255, 0.12);
+    }
+
+    .act-card.active-track-log {
+      background: rgba(0, 229, 255, 0.16);
+      border-right: 2px solid var(--accent-cyan);
+    }
+
+    .act-arrow {
+      font-size: 20px;
+      font-weight: 900;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .act-title {
+      font-weight: 800;
+      font-size: 10.5px;
+    }
+
+    .act-doing {
+      font-size: 11px;
+      color: var(--text-primary);
+      margin-top: 1px;
+    }
+
+    .act-sub {
+      font-size: 9.5px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .act-sector {
+      font-size: 9.5px;
+      color: var(--text-secondary);
+      text-align: right;
+    }
+
+    .act-empty {
+      padding: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ==================== RIGHT 3 (BOTTOM RIGHT): TARGET MOVEMENT TRACE GRID ==================== */
+    .trace-panel {
+      border-color: rgba(0, 229, 255, 0.45);
+      transition: all 0.18s ease;
+    }
+
+    /* Maximized State for Bottom-Right Trace Grid */
+    .trace-panel.maximized {
+      position: fixed;
+      inset: 58px 12px 12px 12px;
+      z-index: 500;
+      box-shadow: 0 0 0 9999px rgba(2, 5, 8, 0.88), 0 20px 60px #000;
+      border: 2px solid var(--accent-cyan);
+    }
+
+    .trace-workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
+      min-height: 0;
+      background: #04080b;
+    }
+
+    .trace-panel.maximized .trace-workspace {
+      grid-template-columns: 65% 35%;
+      grid-template-rows: 1fr;
+    }
+
+    .trace-canvas-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #traceCanvas {
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      display: block;
+      cursor: pointer;
+    }
+
+    .trace-scrubber-bar {
+      height: 28px;
+      background: var(--bg-panel-alt);
+      border-top: 1px solid var(--border-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      font-size: 9.5px;
+    }
+
+    .trace-scrubber-bar input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent-cyan);
+      cursor: pointer;
+    }
+
+    /* Expanded Dossier Side Panel (Visible when Trace Grid is Maximized) */
+    .trace-dossier {
+      display: none;
+      border-left: 1px solid var(--border-dim);
+      background: var(--bg-panel);
+      padding: 12px;
+      flex-direction: column;
+      gap: 10px;
       overflow-y: auto;
     }
 
-    .wire-obj-row {
+    .trace-panel.maximized .trace-dossier {
       display: flex;
-      justify-content: space-between;
-      padding: 2px 5px;
-      background: var(--bg-panel);
-      border-left: 2px solid var(--border-bright);
-      color: var(--text-secondary);
+    }
+
+    .dossier-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .dossier-stat {
+      background: var(--bg-void);
+      border: 1px solid var(--border-dim);
+      padding: 6px 8px;
+    }
+
+    .dossier-stat-label {
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    .dossier-stat-val {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      margin-top: 2px;
+    }
+
+    .sector-chain {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      background: var(--bg-void);
+      border: 1px solid var(--border-dim);
+      padding: 6px;
       font-size: 10px;
     }
 
-    /* ==================== MODAL (PYTHON RELAY & SPECS) ==================== */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(3, 6, 9, 0.85);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 24px;
+    .chip-mini {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-bright);
+      color: var(--text-secondary);
+      padding: 2px 6px;
+      font-size: 9.5px;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 2px;
     }
 
-    .modal-backdrop.open {
-      display: flex;
-    }
-
-    .modal-card {
-      background: var(--bg-panel);
-      border: 1px solid var(--accent-cyan);
-      width: 100%;
-      max-width: 820px;
-      max-height: 88vh;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
-    }
-
-    .modal-body {
-      padding: 14px;
-      overflow-y: auto;
-      user-select: text;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    pre.code-box {
-      background: #05080b;
-      border: 1px solid var(--border-dim);
-      padding: 10px;
-      color: #a5d6ff;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      overflow-x: auto;
-      line-height: 1.4;
-      user-select: all;
+    .chip-mini.active {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      background: rgba(0, 229, 255, 0.14);
     }
   </style>
 </head>
@@ -800,24 +841,23 @@
         <div>
           <div class="brand-title">ARCDRONE // SCENE RECONSTRUCTOR</div>
           <div class="brand-sub">
-            <span class="pill-tag">No video — 6-byte vectors only</span>
+            <span class="pill-tag">0xAE keyframe/delta vectors</span>
             <span class="pill-tag amber">Simulated GPS</span>
             <span id="sourceModeLabel" style="color: var(--text-muted);">SRC: SIMULATOR (12Hz)</span>
           </div>
         </div>
       </div>
 
-      <!-- Link Budget Bar (2.0 kbps scene vector cap; alerts on serial link) -->
-      <div class="budget-widget" title="2.0 kbps scene vector link (reliable alerts on separate serial/radio path)">
+      <!-- 2.0 kbps Link Budget -->
+      <div class="budget-widget">
         <div class="budget-header">
-          <span class="budget-title">Scene 2.0 kbps link</span>
-          <span class="budget-readout"><span id="kbpsVal">0.58</span> / 2.00 kbps (<span id="pktBytesVal">36</span>B @ <span id="hzVal">12.0</span>Hz)</span>
+          <span style="color: var(--text-secondary);">Scene 2.0 kbps link (alerts on serial)</span>
+          <span style="color: var(--accent-cyan);"><span id="kbpsVal">0.58</span> / 2.00 kbps (<span id="pktBytesVal">36</span>B @ <span id="hzVal">12.0</span>Hz)</span>
         </div>
         <div class="budget-track">
           <div class="budget-scene-zone">
-            <div id="budgetFill" class="budget-scene-fill" style="width: 36%;"></div>
+            <div id="budgetFill" class="budget-scene-fill"></div>
           </div>
-          <div class="budget-reserve-zone" style="width:0;display:none;"></div>
         </div>
       </div>
 
@@ -841,169 +881,181 @@
         </div>
       </div>
 
-      <!-- Operator Demo Controls -->
+      <!-- Demo Controls -->
       <div class="ctrl-group">
-        <button id="btnFreeze" class="btn" title="Freeze frame for judge walkthrough">[SPACE] FREEZE</button>
-        <button id="btnDropLink" class="btn danger" title="Stop packets for >1.5s to demonstrate STALE state">[L] DROP LINK</button>
-        <button id="btnClearFov" class="btn" title="Toggle 0-object empty FOV heartbeat">[0] CLEAR FOV</button>
-        <button id="btnRelayModal" class="btn" title="View Python UDP->WebSocket relay & Judge Script">PY RELAY</button>
+        <button id="btnAspect" class="btn" title="Toggle Full-Stage Stretch vs 4:3 Aspect Ratio">FIT: FULL STAGE</button>
+        <button id="btnFreeze" class="btn" title="Freeze stream for judge inspection">[SPACE] FREEZE</button>
+        <button id="btnDropLink" class="btn danger" title="Simulate radio link loss (>1.5s)">[L] DROP LINK</button>
+        <button id="btnClearFov" class="btn" title="Simulate 0-object FOV">[0] CLEAR FOV</button>
       </div>
     </header>
 
     <!-- ==================== 2. MAIN WORKSPACE ==================== -->
-    <main class="workspace">
-      <!-- LEFT: SYNTHETIC 720x540 FOV -->
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-header-left">
-            <span>SYNTHETIC VECTOR FOV (720×540 NORMALIZED 0–255 QUANTIZED GRID)</span>
-          </div>
-          <div class="panel-header-right">
-            <span>3×3 SECTOR MATRIX OVERLAY</span>
-            <span>|</span>
-            <span id="fovCountBadge" style="color: var(--accent-cyan);">4 TARGETS TRACKED</span>
-          </div>
-        </div>
-
-        <div class="fov-stage">
-          <div id="staleBanner" class="stale-banner">
-            LINK STALE (&gt;1.5s NO UDP) — HOLDING LAST KNOWN SCENE VECTORS
+    <div class="main-grid">
+      <!-- LEFT COLUMN: MASSIVE SYNTHETIC FOV + COMPACT SITREP DOCK -->
+      <div class="left-column">
+        <section class="panel">
+          <div class="panel-header">
+            <span>SYNTHETIC VECTOR FOV — 3×3 SECTOR GRID (CLICK ANY TARGET TO TRACE HISTORY)</span>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span id="cursorReadout" style="color: var(--text-muted);">CURSOR: --%, --%</span>
+              <span id="fovCountBadge" style="color: var(--accent-cyan);">5 ACTIVE TRACKS</span>
+            </div>
           </div>
 
-          <div class="canvas-wrap">
-            <canvas id="fovCanvas" width="720" height="540"></canvas>
-
-            <div class="fov-hud-top">
-              <span>WIRE HEADER: 0xAD (12B) + N×6B VECTORS</span>
-              <span id="cursorReadout">FOV: --%, --%</span>
+          <div class="fov-stage">
+            <div id="staleBanner" class="stale-banner">
+              LINK STALE (&gt;1.5s NO UDP) — HOLDING LAST KNOWN SCENE VECTORS
             </div>
 
-            <div class="fov-legend">
-              <div class="legend-items">
-                <div class="legend-item">
-                  <span class="legend-swatch" style="background: var(--cls-person);"></span>
-                  <span>PERSONNEL (1,2)</span>
+            <div id="canvasContainer" class="canvas-container">
+              <canvas id="fovCanvas" width="960" height="720"></canvas>
+
+              <div class="fov-hud-overlay">
+                <span>PROTOCOL: 0xAE/0xAD VECTOR STREAM | CLICK OBJECT TO LOCK TRACE</span>
+                <span id="lockedTargetHud" style="color: var(--accent-cyan); font-weight: 800;">LOCKED TRACE: — CLICK TARGET</span>
+              </div>
+
+              <div class="fov-bottom-overlay">
+                <div class="legend-row">
+                  <div class="legend-item"><span class="swatch" style="background: var(--cls-person);"></span>PERSONNEL</div>
+                  <div class="legend-item"><span class="swatch" style="background: var(--cls-light);"></span>LIGHT/2W</div>
+                  <div class="legend-item"><span class="swatch" style="background: var(--cls-vehicle);"></span>VEHICLE</div>
+                  <div class="legend-item"><span class="swatch" style="background: var(--cls-heavy);"></span>HEAVY</div>
                 </div>
-                <div class="legend-item">
-                  <span class="legend-swatch" style="background: var(--cls-light);"></span>
-                  <span>LIGHT/2W (3,7,8,10)</span>
+                <div style="color: var(--text-muted);">SHORTCUTS: [CLICK] LOCK/UNLOCK TRACE • [ESC] UNLOCK • [M] MAXIMIZE • [SPACE] PAUSE</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bottom Left Strip: 3x3 Mini Matrix + SITREP + Wire Header -->
+        <div class="left-bottom-dock">
+          <section class="panel">
+            <div class="panel-header">
+              <span>SECTOR MATRIX</span>
+              <span id="clearSecBtn" style="font-size: 9px; color: var(--accent-amber); cursor: pointer; display: none;">[RESET]</span>
+            </div>
+            <div class="mini-matrix" id="sectorMatrix"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <span>AUTO SCENE BRIEF (SITREP) &amp; WIRE TELEMETRY</span>
+              <span id="wireSummaryTag" style="color: var(--accent-green);">36B FRAME</span>
+            </div>
+            <div class="sitrep-box">
+              <div class="sitrep-line" id="sceneBriefText">Initializing tactical scene reconstructor...</div>
+              <div class="wire-inline">
+                <span id="wireHexLine">HDR: AE 25 00 74 | GPS: 53.5247, -113.5238</span>
+                <span style="color: var(--accent-amber);">v2: 4B hb · 12B+5N KF · 4B+2N delta — HOLD/RTB on serial link</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: 1. MANIFEST + 2. INTERACTIVE STATUS LOG + 3. BOTTOM-RIGHT TRACE GRID -->
+      <div class="right-column">
+        <!-- 1. TACTICAL MANIFEST WITH LIVE BEHAVIOR STATUS -->
+        <section class="panel">
+          <div class="panel-header">
+            <span>1. ACTIVE TARGET MANIFEST (CLICK ROW TO TRACE)</span>
+            <span id="filterStatusText" style="color: var(--accent-cyan); font-size: 9.5px;">ALL SECTORS</span>
+          </div>
+          <div class="table-scroll">
+            <table class="manifest-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>CLASS</th>
+                  <th>STATUS / BEHAVIOR</th>
+                  <th>SECTOR</th>
+                  <th>POS / VEC</th>
+                </tr>
+              </thead>
+              <tbody id="manifestBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 2. INTERACTIVE TACTICAL STATUS & EVENT LOG -->
+        <section class="panel">
+          <div class="panel-header">
+            <span>2. WHAT EACH TARGET IS DOING (CLICK TO TRACE)</span>
+            <div style="display: flex; gap: 4px;">
+              <button id="btnLogLive" class="chip-mini active">LIVE ACTIVITY</button>
+              <button id="btnLogHistory" class="chip-mini">EVENT HISTORY</button>
+            </div>
+          </div>
+          <div class="log-list" id="interactiveLogList"></div>
+        </section>
+
+        <!-- 3. BOTTOM-RIGHT HISTORICAL TRACE GRID (MAXIMIZABLE) -->
+        <section id="tracePanel" class="panel trace-panel">
+          <div class="panel-header">
+            <span id="traceHeaderTitle" style="color: var(--accent-cyan);">3. TARGET PAST MOVEMENT TRACE — NONE SELECTED</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button id="btnClearHistory" class="chip-mini" title="Clear stored trail points for selected target">RESET TRAIL</button>
+              <button id="btnMaximizeTrace" class="btn" style="padding: 2px 7px; font-size: 9.5px;">[M] ⤢ MAXIMIZE</button>
+            </div>
+          </div>
+
+          <div class="trace-workspace">
+            <div class="trace-canvas-stage">
+              <canvas id="traceCanvas" width="600" height="450"></canvas>
+              <div class="trace-scrubber-bar">
+                <span style="color: var(--accent-cyan); font-weight: 800;">REPLAY SCRUB:</span>
+                <input type="range" id="traceScrubber" min="1" max="100" value="100" />
+                <span id="scrubLabel" style="min-width: 88px; text-align: right; color: var(--accent-green); font-weight: 700;">LIVE (NOW)</span>
+              </div>
+            </div>
+
+            <!-- Side Dossier (Shown automatically when Maximized) -->
+            <aside class="trace-dossier">
+              <div style="border-bottom: 1px solid var(--border-dim); padding-bottom: 6px;">
+                <div style="font-size: 14px; font-weight: 800; color: var(--accent-cyan);" id="dosTitle">TARGET #03 — CAR</div>
+                <div style="font-size: 10px; color: var(--text-secondary);" id="dosSubtitle">Continuous Vector Reconstruction Dossier</div>
+              </div>
+
+              <div class="dossier-grid">
+                <div class="dossier-stat">
+                  <div class="dossier-stat-label">CURRENT BEHAVIOR STATUS</div>
+                  <div class="dossier-stat-val" id="dosStatus">SECTOR TRANSIT</div>
                 </div>
-                <div class="legend-item">
-                  <span class="legend-swatch" style="background: var(--cls-vehicle);"></span>
-                  <span>VEHICLE (4,5)</span>
+                <div class="dossier-stat">
+                  <div class="dossier-stat-label">STORED HISTORY SAMPLES</div>
+                  <div class="dossier-stat-val" id="dosSamples">142 FRAMES</div>
                 </div>
-                <div class="legend-item">
-                  <span class="legend-swatch" style="background: var(--cls-heavy);"></span>
-                  <span>HEAVY (6,9)</span>
+                <div class="dossier-stat">
+                  <div class="dossier-stat-label">ORIGIN -> CURRENT POS</div>
+                  <div class="dossier-stat-val" id="dosOriginNow" style="font-size: 11px;">(18%, 62%) → (54%, 38%)</div>
+                </div>
+                <div class="dossier-stat">
+                  <div class="dossier-stat-label">TOTAL FOV DISTANCE</div>
+                  <div class="dossier-stat-val" id="dosDist">41.8% FOV</div>
                 </div>
               </div>
-              <div style="color: var(--text-muted);">TRAIL: 25 FRAMES | ASSOCIATION: ≤80PX</div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <!-- RIGHT: TACTICAL MANIFEST -->
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-header-left">
-            <span>TACTICAL OBJECT MANIFEST</span>
-          </div>
-          <div class="panel-header-right">
-            <span id="activeFilterLabel" style="color: var(--accent-amber);">FILTER: ALL SECTORS</span>
-          </div>
-        </div>
+              <div>
+                <div style="font-size: 9.5px; color: var(--text-muted); margin-bottom: 4px; font-weight: 700;">SECTOR TRANSITION CHAIN (CHRONOLOGICAL):</div>
+                <div class="sector-chain" id="dosSectorChain"></div>
+              </div>
 
-        <div class="filter-bar">
-          <div class="filter-chips" id="classFilterGroup">
-            <button class="chip active" data-filter="ALL">ALL</button>
-            <button class="chip" data-filter="PERSON">PERSONNEL</button>
-            <button class="chip" data-filter="LIGHT">LIGHT</button>
-            <button class="chip" data-filter="VEHICLE">VEHICLES</button>
-            <button class="chip" data-filter="HEAVY">HEAVY</button>
+              <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div style="font-size: 9.5px; color: var(--text-muted); margin-bottom: 4px; font-weight: 700;">TARGET-SPECIFIC STATUS HISTORY:</div>
+                <div class="log-list" id="dosTargetLogs" style="border: 1px solid var(--border-dim);"></div>
+              </div>
+            </aside>
           </div>
-          <button id="btnResetSector" class="chip" style="display: none;">CLEAR SECTOR FILTER ✕</button>
-        </div>
-
-        <div class="manifest-table-wrap">
-          <table class="manifest-table">
-            <thead>
-              <tr>
-                <th>TRK ID</th>
-                <th>CLASS (CONF)</th>
-                <th>SECTOR</th>
-                <th>POS (% FOV)</th>
-                <th>MOVEMENT / VEC</th>
-              </tr>
-            </thead>
-            <tbody id="manifestBody"></tbody>
-          </table>
-        </div>
-      </section>
-    </main>
-
-    <!-- ==================== 3. BOTTOM DOCK ==================== -->
-    <footer class="bottom-dock">
-      <!-- Left: 3x3 Sector Occupancy Matrix -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>SECTOR OCCUPANCY MATRIX</span>
-          <span style="font-size: 9px; color: var(--text-muted);">CLICK TO FILTER</span>
-        </div>
-        <div class="matrix-body" id="sectorMatrix"></div>
-      </section>
-
-      <!-- Center: Auto Scene Brief + Judge Pitch -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>AUTO SCENE BRIEF (TACTICAL SITREP)</span>
-          <span id="sitrepTimestamp" style="color: var(--accent-cyan);">SYNTHESIZED @ 12Hz</span>
-        </div>
-        <div class="sitrep-body">
-          <div class="sitrep-text" id="sceneBriefText">
-            Initializing vector reconstructor...
-          </div>
-          <div class="judge-callout">
-            <strong>JUDGE DEMO SCRIPT:</strong> “Video can’t fit on a 2 kbps tactical link—so the drone sends 6-byte target vectors at 12 Hz for operator situational awareness, while reliable alerts and HOLD/RTB ride the separate serial protocol.”
-          </div>
-        </div>
-      </section>
-
-      <!-- Right: Raw Binary Wire Inspector -->
-      <section class="panel">
-        <div class="panel-header">
-          <span>UDP :9999 WIRE FRAME INSPECTOR</span>
-          <span id="wireByteSummary" style="color: var(--accent-green);">36 BYTES TOTAL</span>
-        </div>
-        <div class="wire-body">
-          <div class="wire-header-block" id="wireHeaderHex">
-            HDR (12B): AD 00 74 42 56 19 4A C2 E3 0C 2F 04
-          </div>
-          <div class="wire-obj-list" id="wireObjList"></div>
-        </div>
-      </section>
-    </footer>
-  </div>
-
-  <!-- ==================== PYTHON RELAY MODAL ==================== -->
-  <div id="relayModal" class="modal-backdrop">
-    <div class="modal-card">
-      <div class="panel-header">
-        <span>OPTIONAL PYTHON UDP (:9999) → WEBSOCKET (:8765) BRIDGE</span>
-        <button id="btnCloseModal" class="btn">CLOSE [ESC]</button>
-      </div>
-      <div class="modal-body">
-        <p style="color: var(--text-secondary);">
-          This UI runs standalone right now using its built-in 12 Hz packet simulator. To pipe live binary UDP datagrams from <code>127.0.0.1:9999</code> into this page without touching the main dashboard's <code>ws://localhost:8000/ws</code>, run this lightweight relay script:
-        </p>
-        <pre class="code-box" id="pyRelayCode"></pre>
+        </section>
       </div>
     </div>
   </div>
 
   <script>
     // ============================================================================
-    // 1. CLASS DEFINITIONS & DESIGN SYSTEM CONSTANTS
+    // 1. CONSTANTS & CLASS CONFIGURATION
     // ============================================================================
     const CLASS_MAP = {
       1:  { name: "pedestrian",      cat: "PERSON",  color: "#00e5ff" },
@@ -1024,196 +1076,382 @@
       "BOTTOM-LEFT", "BOTTOM-CENTER", "BOTTOM-RIGHT"
     ];
 
-    const FOV_W = 720;
-    const FOV_H = 540;
+    const LOGICAL_W = 720;
+    const LOGICAL_H = 540;
 
     // ============================================================================
-    // 2. APPLICATION STATE
+    // 2. STATE & PERSISTENT OBJECT MEMORY ARCHIVE
     // ============================================================================
     const state = {
-      seq: 116,
+      seq: 200,
       lat: 53.5247,
       lon: -113.5238,
-      rxPackets: 1420,
+      rxPackets: 1840,
       lastPacketTs: performance.now(),
-      packetHistory: [], // { ts, bytes } for rolling kbps
+      packetHistory: [],
       isPaused: false,
       simulateDrop: false,
       simulateEmpty: false,
+      aspectLocked: false,
       wsConnected: false,
+
+      selectedTrackId: null,
       hoveredTrackId: null,
-      classFilter: "ALL",
       sectorFilter: null,
+      logView: "live", // "live" = per-target activity cards, "history" = event log
+      traceMaximized: false,
+      scrubPct: 100, // 100 = LIVE, <100 = historical scrub
+
       currentFrame: null,
-      // Client-side tracker store for raw detections
-      tracks: new Map(),
-      nextTrackId: 1
+      // Persistent historical archive per track_id:
+      // { track_id, cls, label, color, firstSeq, lastSeq, history: [{seq, ts, x, y, w, h, sector, motion_str, statusCode, statusText, speed}], sectorsVisited: [], waypoints: [], stationaryTicks: 0 }
+      archive: new Map(),
+      eventLogs: [] // { id, tsStr, seq, track_id, label, color, statusText, detail }
     };
 
-    // ============================================================================
-    // 3. CLIENT-SIDE NEAREST-CENTER TRACKER (<= 80px association, 25-pt trail)
-    // ============================================================================
     function getSectorFromXY(x, y) {
-      const col = Math.min(2, Math.max(0, Math.floor((x / FOV_W) * 3)));
-      const row = Math.min(2, Math.max(0, Math.floor((y / FOV_H) * 3)));
+      const col = Math.min(2, Math.max(0, Math.floor((x / LOGICAL_W) * 3)));
+      const row = Math.min(2, Math.max(0, Math.floor((y / LOGICAL_H) * 3)));
       return SECTORS[row * 3 + col];
     }
 
     function computeCompassMotion(dx, dy) {
       const mag = Math.hypot(dx, dy);
-      if (mag < 1.15) return "STATIONARY";
-      // Screen coords: +x is East, -y is North
+      if (mag < 1.0) return "STATIONARY";
       const deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
       const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-      const idx = Math.round(deg / 45) % 8;
-      return `MOVING ${dirs[idx]}`;
+      return `MOVING ${dirs[Math.round(deg / 45) % 8]}`;
     }
 
-    function enrichFrameWithClientTracking(frame) {
-      const now = performance.now();
-      const enrichedObjects = [];
+    function formatTimeNow() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const ss = String(d.getSeconds()).padStart(2, "0");
+      const ms = String(Math.floor(d.getMilliseconds() / 100));
+      return `${hh}:${mm}:${ss}.${ms}`;
+    }
 
-      for (const obj of frame.objects) {
-        const clsInfo = CLASS_MAP[obj.cls] || { name: obj.label || "unknown", cat: "VEHICLE", color: "#00e5ff" };
-        const [cx, cy] = obj.center;
+    function pushActivityLog(rec, tag, detail) {
+      const entry = {
+        id: `${state.seq}-${rec.track_id}-${Math.random()}`,
+        ts: performance.now(),
+        tsStr: formatTimeNow(),
+        seq: state.seq,
+        track_id: rec.track_id,
+        label: rec.label,
+        color: rec.color,
+        statusText: tag,
+        detail
+      };
+      state.eventLogs.unshift(entry);
+      if (state.eventLogs.length > 200) state.eventLogs.pop();
+      rec.lastEvent = entry;
+    }
 
-        // If backend already provided track_id & trail, keep them; else associate locally
-        if (obj.track_id !== undefined && Array.isArray(obj.trail)) {
-          enrichedObjects.push({
-            ...obj,
-            label: obj.label || clsInfo.name,
-            cat: clsInfo.cat,
-            color: clsInfo.color,
-            sector: obj.sector || getSectorFromXY(cx, cy),
-            motion_str: obj.motion_str || computeCompassMotion(obj.vel?.[0] || 0, obj.vel?.[1] || 0)
-          });
-          continue;
-        }
+    // ============================================================================
+    // 3. BEHAVIOR ANALYZER & HISTORICAL ARCHIVE RECORDER
+    // ============================================================================
+    const DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    const DIR_WORDS = {
+      N: "NORTH", NE: "NORTH-EAST", E: "EAST", SE: "SOUTH-EAST",
+      S: "SOUTH", SW: "SOUTH-WEST", W: "WEST", NW: "NORTH-WEST"
+    };
+    const DIR_ARROWS = { N: "↑", NE: "↗", E: "→", SE: "↘", S: "↓", SW: "↙", W: "←", NW: "↖" };
 
-        // Nearest center within 80px of same class
-        let bestId = null;
-        let bestDist = 80;
-        for (const [tid, trk] of state.tracks.entries()) {
-          if (trk.cls !== obj.cls || trk.usedInFrame) continue;
-          const dist = Math.hypot(cx - trk.cx, cy - trk.cy);
-          if (dist <= bestDist) {
-            bestDist = dist;
-            bestId = tid;
-          }
-        }
+    // Speeds are % of FOV per second over the last ~0.6 s, so thresholds mean the
+    // same thing for the 12 Hz simulator and for live 0xAE keyframe/delta frames.
+    const STILL_PCT_S = 2.0;
+    const SLOW_PCT_S = 4.0;
+    const FAST_PCT_S = 8.0;
+    const LOITER_MS = 5000;
+    const LOST_MS = 1500;
+    // A new behavior must hold for this many samples (~0.4 s) before it is logged.
+    const BEHAVIOR_CONFIRM = 5;
 
-        if (bestId === null) {
-          bestId = state.nextTrackId++;
-          state.tracks.set(bestId, {
-            cls: obj.cls,
-            cx,
-            cy,
-            trail: [[cx, cy]],
-            vel: [0, 0],
-            lastSeen: now,
-            usedInFrame: true
-          });
-        } else {
-          const trk = state.tracks.get(bestId);
-          const dx = cx - trk.cx;
-          const dy = cy - trk.cy;
-          trk.vel = [dx * 0.6 + trk.vel[0] * 0.4, dy * 0.6 + trk.vel[1] * 0.4];
-          trk.cx = cx;
-          trk.cy = cy;
-          trk.trail.push([cx, cy]);
-          if (trk.trail.length > 25) trk.trail.shift();
-          trk.lastSeen = now;
-          trk.usedInFrame = true;
-        }
+    function formatDuration(ms) {
+      const s = ms / 1000;
+      if (s < 60) return `${s.toFixed(1)}s`;
+      return `${Math.floor(s / 60)}m ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
+    }
 
-        const trk = state.tracks.get(bestId);
-        enrichedObjects.push({
-          ...obj,
-          label: clsInfo.name,
-          cat: clsInfo.cat,
-          color: clsInfo.color,
-          track_id: bestId,
-          sector: getSectorFromXY(cx, cy),
-          trail: [...trk.trail],
-          vel: [...trk.vel],
-          motion_str: computeCompassMotion(trk.vel[0], trk.vel[1])
-        });
-      }
-
-      // Reset frame flags & prune old tracks
-      for (const [tid, trk] of state.tracks.entries()) {
-        trk.usedInFrame = false;
-        if (now - trk.lastSeen > 3000) state.tracks.delete(tid);
-      }
-
+    function measureMotion(hist) {
+      const latest = hist[hist.length - 1];
+      let i = hist.length - 1;
+      while (i > 0 && latest.ts - hist[i - 1].ts <= 600) i--;
+      const ref = hist[i];
+      const dt = (latest.ts - ref.ts) / 1000;
+      if (dt < 0.15) return null;
+      const vx = (latest.x - ref.x) / dt;
+      const vy = (latest.y - ref.y) / dt;
+      const deg = (Math.atan2(vx, -vy) * 180 / Math.PI + 360) % 360;
       return {
-        ...frame,
-        objects: enrichedObjects
+        vx,
+        vy,
+        pctPerSec: Math.hypot(vx / LOGICAL_W, vy / LOGICAL_H) * 100,
+        dir: DIRS[Math.round(deg / 45) % 8]
       };
     }
 
+    function paceOf(pctPerSec) {
+      if (pctPerSec < STILL_PCT_S) return "STILL";
+      if (pctPerSec < SLOW_PCT_S) return "SLOW";
+      if (pctPerSec < FAST_PCT_S) return "STEADY";
+      return "FAST";
+    }
+
+    function headingText(latest, m) {
+      const px = latest.x + m.vx * 1.5;
+      const py = latest.y + m.vy * 1.5;
+      if (px < 0 || px > LOGICAL_W || py < 0 || py > LOGICAL_H) {
+        return `about to leave FOV (${DIR_WORDS[m.dir].toLowerCase()} edge)`;
+      }
+      const next = getSectorFromXY(px, py);
+      return next !== latest.sector ? `heading to ${next}` : `staying in ${latest.sector}`;
+    }
+
+    function moveDir(key) {
+      return key.startsWith("MOVE:") ? key.slice(5) : null;
+    }
+
+    function newArchiveRecord(obj, clsInfo, frame, sector, now) {
+      return {
+        track_id: obj.track_id,
+        cls: obj.cls,
+        label: clsInfo.name,
+        color: clsInfo.color,
+        conf: obj.conf,
+        firstSeq: frame.seq,
+        lastSeq: frame.seq,
+        lastSeenTs: now,
+        lost: false,
+        history: [],
+        sectorsVisited: [sector],
+        waypoints: [{ x: obj.center[0], y: obj.center[1], tag: "ORIGIN", seq: frame.seq, sector }],
+        behaviorKey: "NEW",
+        behaviorSince: now,
+        pendingKey: null,
+        pendingCount: 0,
+        loiterLogged: false,
+        lastMoveDir: null,
+        behavior: null,
+        lastEvent: null
+      };
+    }
+
+    function updateBehavior(rec, now) {
+      const latest = rec.history[rec.history.length - 1];
+      const m = measureMotion(rec.history);
+      const pace = m ? paceOf(m.pctPerSec) : "STILL";
+      const rawKey = !m ? rec.behaviorKey : pace === "STILL" ? "STILL" : `MOVE:${m.dir}`;
+
+      if (rawKey !== rec.behaviorKey) {
+        if (rawKey === rec.pendingKey) rec.pendingCount += 1;
+        else { rec.pendingKey = rawKey; rec.pendingCount = 1; }
+
+        if (rec.pendingCount >= BEHAVIOR_CONFIRM || rec.behaviorKey === "NEW") {
+          const prevDir = moveDir(rec.behaviorKey);
+          const nextDir = moveDir(rawKey);
+          const heldFor = formatDuration(now - rec.behaviorSince);
+          if (rec.behaviorKey !== "NEW") {
+            if (prevDir && !nextDir) {
+              pushActivityLog(rec, "STOPPED",
+                `Stopped in ${latest.sector} after moving ${DIR_WORDS[prevDir]} for ${heldFor}`);
+            } else if (!prevDir && nextDir) {
+              pushActivityLog(rec, "STARTED MOVING",
+                `Started moving ${DIR_WORDS[nextDir]} from ${latest.sector} (was still ${heldFor})`);
+            } else if (prevDir && nextDir) {
+              pushActivityLog(rec, "TURNED",
+                `Turned ${DIR_WORDS[prevDir]} → ${DIR_WORDS[nextDir]} in ${latest.sector}`);
+            }
+          }
+          rec.behaviorKey = rawKey;
+          rec.behaviorSince = now;
+          rec.pendingKey = null;
+          rec.pendingCount = 0;
+          rec.loiterLogged = false;
+          if (nextDir) rec.lastMoveDir = nextDir;
+        }
+      } else {
+        rec.pendingKey = null;
+        rec.pendingCount = 0;
+      }
+
+      const key = rec.behaviorKey;
+      const dir = moveDir(key);
+      const heldMs = now - rec.behaviorSince;
+
+      if (key === "STILL" && heldMs > LOITER_MS && !rec.loiterLogged) {
+        rec.loiterLogged = true;
+        pushActivityLog(rec, "LOITERING",
+          `Holding position in ${latest.sector} for ${formatDuration(heldMs)}`);
+      }
+
+      let b;
+      if (key === "NEW") {
+        b = { code: "st-new", status: "NEW CONTACT", arrow: "✦",
+              doing: "Just acquired", heading: `in ${latest.sector}` };
+      } else if (key === "STILL") {
+        const loiter = heldMs > LOITER_MS;
+        b = {
+          code: loiter ? "st-loiter" : "st-hold",
+          status: loiter ? "LOITERING" : "STATIONARY",
+          arrow: loiter ? "◉" : "●",
+          doing: `${loiter ? "Loitering" : "Stationary"} for ${formatDuration(heldMs)}`,
+          heading: rec.lastMoveDir
+            ? `in ${latest.sector}, last moved ${DIR_WORDS[rec.lastMoveDir]}`
+            : `in ${latest.sector}`
+        };
+      } else {
+        const movingPace = pace === "STILL" ? "SLOW" : pace;
+        b = {
+          code: movingPace === "FAST" ? "st-fast" : "st-transit",
+          status: `${movingPace === "FAST" ? "FAST" : "MOVING"} ${dir}`,
+          arrow: DIR_ARROWS[dir],
+          doing: `Moving ${DIR_WORDS[dir]} · ${movingPace} · ${formatDuration(heldMs)}`,
+          heading: m ? headingText(latest, m) : `in ${latest.sector}`
+        };
+      }
+      b.pctPerSec = m ? m.pctPerSec : 0;
+      rec.behavior = b;
+      return b;
+    }
+
+    function recordFrameIntoArchive(frame) {
+      const now = performance.now();
+      const seen = new Set();
+
+      for (const obj of frame.objects) {
+        const tid = obj.track_id;
+        seen.add(tid);
+        const clsInfo = CLASS_MAP[obj.cls] || { name: obj.label || "target", cat: "VEHICLE", color: "#00e5ff" };
+        const [cx, cy] = obj.center;
+        const [x1, y1, x2, y2] = obj.bbox;
+        const sector = obj.sector || getSectorFromXY(cx, cy);
+
+        let rec = state.archive.get(tid);
+        // Drone track IDs come from a 0..15 pool, so a reused ID with a new class is a new object.
+        if (!rec || rec.cls !== obj.cls) {
+          rec = newArchiveRecord(obj, clsInfo, frame, sector, now);
+          state.archive.set(tid, rec);
+          pushActivityLog(rec, "NEW CONTACT",
+            `Acquired ${clsInfo.name.toUpperCase()} in ${sector} (${Math.round(cx / LOGICAL_W * 100)}%, ${Math.round(cy / LOGICAL_H * 100)}%)`);
+        } else if (rec.lost) {
+          rec.lost = false;
+          pushActivityLog(rec, "REACQUIRED",
+            `Back in view in ${sector} after ${formatDuration(now - rec.lastSeenTs)}`);
+        }
+
+        const prevSector = rec.sectorsVisited[rec.sectorsVisited.length - 1];
+        rec.lastSeq = frame.seq;
+        rec.lastSeenTs = now;
+        rec.conf = obj.conf;
+        rec.history.push({ seq: frame.seq, ts: now, x: cx, y: cy, w: x2 - x1, h: y2 - y1, sector, speed: 0 });
+        if (rec.history.length > 300) rec.history.shift();
+
+        const b = updateBehavior(rec, now);
+        const latest = rec.history[rec.history.length - 1];
+        latest.speed = b.pctPerSec;
+        latest.statusText = b.status;
+
+        // Ignore sector flips while still, so box jitter on a boundary doesn't spam the log.
+        if (prevSector !== sector && rec.behaviorKey !== "STILL") {
+          rec.sectorsVisited.push(sector);
+          rec.waypoints.push({ x: cx, y: cy, tag: sector, seq: frame.seq, sector });
+          if (rec.waypoints.length > 12) rec.waypoints.shift();
+          const dir = moveDir(rec.behaviorKey);
+          pushActivityLog(rec, "ENTERED SECTOR",
+            `${prevSector} → ${sector}${dir ? `, moving ${DIR_WORDS[dir]}` : ""}`);
+        }
+
+        obj.color = clsInfo.color;
+        obj.label = clsInfo.name;
+        obj.statusCode = b.code;
+        obj.statusText = b.status;
+        obj.sector = sector;
+        obj.motion_str = moveDir(rec.behaviorKey) ? `MOVING ${moveDir(rec.behaviorKey)}` : "STATIONARY";
+      }
+
+      for (const rec of state.archive.values()) {
+        if (seen.has(rec.track_id) || rec.lost || now - rec.lastSeenTs < LOST_MS) continue;
+        rec.lost = true;
+        const last = rec.history[rec.history.length - 1];
+        const dir = moveDir(rec.behaviorKey);
+        pushActivityLog(rec, "LOST CONTACT",
+          `Last seen in ${last.sector}${dir ? `, moving ${DIR_WORDS[dir]}` : ", stationary"}`);
+      }
+    }
+
     // ============================================================================
-    // 4. BUILT-IN 12Hz TACTICAL SCENE SIMULATOR (FALLBACK WHEN NO WS CONNECTED)
+    // 4. BUILT-IN 12Hz SIMULATOR WITH INTERESTING CURVED & PATROL PATHS
     // ============================================================================
-    const simActors = [
-      { track_id: 1, cls: 1, conf: 0.91, cx: 145, cy: 410, w: 32, h: 58, vx: 0.2,  vy: -0.1, trail: [] },
-      { track_id: 2, cls: 2, conf: 0.87, cx: 182, cy: 425, w: 38, h: 60, vx: 0.15, vy: -0.05, trail: [] },
-      { track_id: 3, cls: 4, conf: 0.95, cx: 365, cy: 265, w: 82, h: 52, vx: 4.4,  vy: -1.8, trail: [] },
-      { track_id: 4, cls: 6, conf: 0.92, cx: 560, cy: 135, w: 110, h: 68, vx: -3.1, vy: 1.9, trail: [] },
-      { track_id: 5, cls: 10, conf: 0.84, cx: 280, cy: 155, w: 40, h: 36, vx: 5.2, vy: 0.4,  trail: [] }
+    const simTargets = [
+      { track_id: 1, cls: 1, conf: 0.92, cx: 135, cy: 420, w: 30, h: 54, vx: 0.15, vy: -0.1, mode: "loiter" },
+      { track_id: 2, cls: 2, conf: 0.88, cx: 210, cy: 390, w: 34, h: 56, vx: 1.8,  vy: -1.4, mode: "patrol" },
+      { track_id: 3, cls: 4, conf: 0.96, cx: 140, cy: 290, w: 76, h: 48, vx: 4.5,  vy: -2.1, mode: "sweep" },
+      { track_id: 4, cls: 6, conf: 0.93, cx: 590, cy: 130, w: 104, h: 64, vx: -3.2, vy: 2.2, mode: "transit" },
+      { track_id: 5, cls: 10, conf: 0.86, cx: 360, cy: 120, w: 38, h: 34, vx: 5.1,  vy: 2.6, mode: "fast" }
     ];
 
     function stepSimulator() {
       if (state.wsConnected || state.isPaused || state.simulateDrop) return;
 
       state.seq = (state.seq + 1) & 0xffff;
-      state.lat += (Math.random() - 0.5) * 0.00002;
-      state.lon += (Math.random() - 0.5) * 0.00002;
+      state.lat += (Math.random() - 0.5) * 0.000015;
+      state.lon += (Math.random() - 0.5) * 0.000015;
 
       const objects = [];
       if (!state.simulateEmpty) {
-        for (const a of simActors) {
-          // Gentle patrol motion inside 720x540
-          if (a.track_id <= 2) {
-            // Stationary/slow personnel in BOTTOM-LEFT
-            a.cx += Math.sin(state.seq * 0.08 + a.track_id) * 0.35;
-            a.cy += Math.cos(state.seq * 0.08 + a.track_id) * 0.25;
-            a.vx = 0.2;
-            a.vy = -0.1;
+        for (const t of simTargets) {
+          if (t.mode === "loiter") {
+            t.vx = Math.sin(state.seq * 0.05) * 0.35;
+            t.vy = Math.cos(state.seq * 0.05) * 0.3;
           } else {
-            a.cx += a.vx;
-            a.cy += a.vy;
-            if (a.cx < 60 || a.cx > FOV_W - 60) a.vx *= -1;
-            if (a.cy < 55 || a.cy > FOV_H - 55) a.vy *= -1;
+            // Add slight organic curve to trajectories
+            t.vx += Math.sin(state.seq * 0.04 + t.track_id) * 0.08;
+            t.vy += Math.cos(state.seq * 0.03 + t.track_id) * 0.08;
+            const maxSpd = t.mode === "fast" ? 5.6 : 4.3;
+            const curSpd = Math.hypot(t.vx, t.vy);
+            if (curSpd > maxSpd) {
+              t.vx = (t.vx / curSpd) * maxSpd;
+              t.vy = (t.vy / curSpd) * maxSpd;
+            }
           }
 
-          a.trail.push([Math.round(a.cx), Math.round(a.cy)]);
-          if (a.trail.length > 25) a.trail.shift();
+          t.cx += t.vx;
+          t.cy += t.vy;
 
-          const x1 = Math.round(a.cx - a.w / 2);
-          const y1 = Math.round(a.cy - a.h / 2);
-          const x2 = Math.round(a.cx + a.w / 2);
-          const y2 = Math.round(a.cy + a.h / 2);
+          if (t.cx < 55)  { t.cx = 55;  t.vx = Math.abs(t.vx); }
+          if (t.cx > LOGICAL_W - 55) { t.cx = LOGICAL_W - 55; t.vx = -Math.abs(t.vx); }
+          if (t.cy < 50)  { t.cy = 50;  t.vy = Math.abs(t.vy); }
+          if (t.cy > LOGICAL_H - 50) { t.cy = LOGICAL_H - 50; t.vy = -Math.abs(t.vy); }
 
-          const clsInfo = CLASS_MAP[a.cls];
+          const rec = state.archive.get(t.track_id);
+          const recentTrail = rec ? rec.history.slice(-25).map(p => [p.x, p.y]) : [[Math.round(t.cx), Math.round(t.cy)]];
+
           objects.push({
-            cls: a.cls,
-            label: clsInfo.name,
-            cat: clsInfo.cat,
-            color: clsInfo.color,
-            conf: a.conf,
-            bbox: [x1, y1, x2, y2],
-            center: [Math.round(a.cx), Math.round(a.cy)],
-            track_id: a.track_id,
-            sector: getSectorFromXY(a.cx, a.cy),
-            motion_str: computeCompassMotion(a.vx, a.vy),
-            trail: [...a.trail],
-            vel: [a.vx, a.vy]
+            cls: t.cls,
+            label: CLASS_MAP[t.cls].name,
+            conf: t.conf,
+            bbox: [
+              Math.round(t.cx - t.w / 2),
+              Math.round(t.cy - t.h / 2),
+              Math.round(t.cx + t.w / 2),
+              Math.round(t.cy + t.h / 2)
+            ],
+            center: [Math.round(t.cx), Math.round(t.cy)],
+            track_id: t.track_id,
+            sector: getSectorFromXY(t.cx, t.cy),
+            motion_str: computeCompassMotion(t.vx, t.vy),
+            trail: recentTrail,
+            vel: [t.vx, t.vy]
           });
         }
       }
 
-      const bytes = 12 + objects.length * 6;
+      // Mimic v2 sizing: keyframe (12B + 5B/obj) every 6th tick, 2B/obj deltas otherwise.
+      const bytes = objects.length === 0 ? 4
+        : state.seq % 6 === 0 ? 12 + objects.length * 5 : 4 + objects.length * 2;
       ingestFrame({
         seq: state.seq,
         lat: Number(state.lat.toFixed(4)),
@@ -1224,62 +1462,250 @@
       });
     }
 
-    // ============================================================================
-    // 5. PACKET INGESTION & ROLLING TELEMETRY
-    // ============================================================================
-    function ingestFrame(rawFrame) {
+    function ingestFrame(frame) {
       if (state.isPaused) return;
       const now = performance.now();
       state.lastPacketTs = now;
       state.rxPackets += 1;
 
-      const bytes = rawFrame.bytes || (12 + (rawFrame.objects?.length || 0) * 6);
+      const bytes = frame.bytes || (12 + (frame.objects?.length || 0) * 5);
       state.packetHistory.push({ ts: now, bytes });
-      // Keep 2-second rolling window
       while (state.packetHistory.length && now - state.packetHistory[0].ts > 2000) {
         state.packetHistory.shift();
       }
 
-      state.currentFrame = enrichFrameWithClientTracking({
-        ...rawFrame,
-        bytes,
-        count: rawFrame.objects?.length || 0
-      });
+      recordFrameIntoArchive(frame);
+      state.currentFrame = frame;
 
       renderAll();
     }
 
     // ============================================================================
-    // 6. SYNTHETIC 720x540 FOV CANVAS RENDERER
+    // 5. MAIN SYNTHETIC FOV CANVAS RENDERER (LARGE LEFT STAGE)
     // ============================================================================
-    const canvas = document.getElementById("fovCanvas");
-    const ctx = canvas.getContext("2d");
+    const fovCanvas = document.getElementById("fovCanvas");
+    const fovCtx = fovCanvas.getContext("2d");
 
-    function drawSyntheticFOV() {
-      const now = performance.now();
-      const isStale = (now - state.lastPacketTs) > 1500;
+    function drawMainFOV() {
+      const W = fovCanvas.width;
+      const H = fovCanvas.height;
+      const scaleX = W / LOGICAL_W;
+      const scaleY = H / LOGICAL_H;
+      const isStale = (performance.now() - state.lastPacketTs) > 1500;
 
-      ctx.clearRect(0, 0, FOV_W, FOV_H);
+      fovCtx.clearRect(0, 0, W, H);
 
-      // 1. Subtle radar grid background (36px pitch)
-      ctx.strokeStyle = "rgba(27, 44, 56, 0.35)";
-      ctx.lineWidth = 1;
-      for (let x = 36; x < FOV_W; x += 36) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, FOV_H);
-        ctx.stroke();
+      // 1. Tactical fine sub-grid
+      fovCtx.strokeStyle = "rgba(27, 44, 57, 0.42)";
+      fovCtx.lineWidth = 1;
+      const stepX = W / 18;
+      const stepY = H / 12;
+      for (let x = stepX; x < W; x += stepX) {
+        fovCtx.beginPath(); fovCtx.moveTo(x, 0); fovCtx.lineTo(x, H); fovCtx.stroke();
       }
-      for (let y = 36; y < FOV_H; y += 36) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(FOV_W, y);
-        ctx.stroke();
+      for (let y = stepY; y < H; y += stepY) {
+        fovCtx.beginPath(); fovCtx.moveTo(0, y); fovCtx.lineTo(W, y); fovCtx.stroke();
       }
 
-      // 2. 3x3 Sector Grid & Watermarks
-      const secW = FOV_W / 3;
-      const secH = FOV_H / 3;
+      // 2. Prominent 3x3 Sector Grid
+      const secW = W / 3;
+      const secH = H / 3;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          const secName = SECTORS[r * 3 + c];
+          const sx = c * secW;
+          const sy = r * secH;
+
+          if (state.sectorFilter === secName) {
+            fovCtx.fillStyle = "rgba(255, 179, 0, 0.08)";
+            fovCtx.fillRect(sx, sy, secW, secH);
+          }
+
+          fovCtx.fillStyle = state.sectorFilter === secName
+            ? "rgba(255, 179, 0, 0.85)"
+            : "rgba(143, 168, 186, 0.34)";
+          fovCtx.font = "800 13px ui-monospace, monospace";
+          fovCtx.fillText(secName, sx + 14, sy + 26);
+        }
+      }
+
+      fovCtx.strokeStyle = "rgba(0, 229, 255, 0.32)";
+      fovCtx.lineWidth = 1.5;
+      fovCtx.setLineDash([8, 5]);
+      for (let i = 1; i <= 2; i++) {
+        fovCtx.beginPath(); fovCtx.moveTo(i * secW, 0); fovCtx.lineTo(i * secW, H); fovCtx.stroke();
+        fovCtx.beginPath(); fovCtx.moveTo(0, i * secH); fovCtx.lineTo(W, i * secH); fovCtx.stroke();
+      }
+      fovCtx.setLineDash([]);
+
+      // Center optical boresight crosshair
+      fovCtx.strokeStyle = "rgba(0, 229, 255, 0.4)";
+      fovCtx.lineWidth = 1.2;
+      fovCtx.beginPath();
+      fovCtx.moveTo(W / 2 - 18, H / 2); fovCtx.lineTo(W / 2 + 18, H / 2);
+      fovCtx.moveTo(W / 2, H / 2 - 18); fovCtx.lineTo(W / 2, H / 2 + 18);
+      fovCtx.stroke();
+
+      const frame = state.currentFrame;
+      if (!frame || frame.objects.length === 0) {
+        fovCtx.fillStyle = "rgba(10, 16, 21, 0.88)";
+        fovCtx.strokeStyle = "rgba(0, 229, 255, 0.4)";
+        fovCtx.fillRect(W / 2 - 210, H / 2 - 44, 420, 88);
+        fovCtx.strokeRect(W / 2 - 210, H / 2 - 44, 420, 88);
+        fovCtx.fillStyle = "#e6f1f8";
+        fovCtx.font = "800 15px ui-monospace, monospace";
+        fovCtx.textAlign = "center";
+        fovCtx.fillText("NO TARGETS IN FOV — LINK NOMINAL", W / 2, H / 2 - 8);
+        fovCtx.fillStyle = "#00e676";
+        fovCtx.font = "700 12px ui-monospace, monospace";
+        fovCtx.fillText("HEARTBEAT ACTIVE @ 12Hz", W / 2, H / 2 + 18);
+        fovCtx.textAlign = "left";
+        return;
+      }
+
+      // 3. Draw Tracked Objects
+      for (const obj of frame.objects) {
+        if (state.sectorFilter && obj.sector !== state.sectorFilter) continue;
+
+        const tid = obj.track_id;
+        const isSelected = tid === state.selectedTrackId;
+        const isHovered = tid === state.hoveredTrackId;
+        const color = obj.color || "#00e5ff";
+
+        const [lx1, ly1, lx2, ly2] = obj.bbox;
+        const x1 = lx1 * scaleX;
+        const y1 = ly1 * scaleY;
+        const x2 = lx2 * scaleX;
+        const y2 = ly2 * scaleY;
+        const bw = x2 - x1;
+        const bh = y2 - y1;
+        const cx = obj.center[0] * scaleX;
+        const cy = obj.center[1] * scaleY;
+
+        fovCtx.save();
+        if (isStale) fovCtx.globalAlpha = 0.55;
+
+        // A. Recent 25-point trail on main FOV
+        const rec = state.archive.get(tid);
+        const recentPts = rec ? rec.history.slice(-28) : [];
+        if (recentPts.length > 1) {
+          for (let i = 1; i < recentPts.length; i++) {
+            const p0 = recentPts[i - 1];
+            const p1 = recentPts[i];
+            fovCtx.strokeStyle = color;
+            fovCtx.globalAlpha = (i / recentPts.length) * (isSelected ? 0.85 : 0.5);
+            fovCtx.lineWidth = isSelected ? 3.0 : 1.8;
+            fovCtx.beginPath();
+            fovCtx.moveTo(p0.x * scaleX, p0.y * scaleY);
+            fovCtx.lineTo(p1.x * scaleX, p1.y * scaleY);
+            fovCtx.stroke();
+          }
+          fovCtx.globalAlpha = isStale ? 0.55 : 1.0;
+        }
+
+        // B. Target Lock Ring if Selected for Bottom-Right Trace Grid
+        if (isSelected) {
+          fovCtx.strokeStyle = "rgba(0, 229, 255, 0.7)";
+          fovCtx.lineWidth = 1.5;
+          fovCtx.setLineDash([5, 4]);
+          fovCtx.strokeRect(x1 - 7, y1 - 7, bw + 14, bh + 14);
+          fovCtx.setLineDash([]);
+        }
+
+        // C. Bounding Box Fill & Tactical Corner Brackets
+        fovCtx.fillStyle = color;
+        fovCtx.globalAlpha = isSelected || isHovered ? 0.22 : 0.09;
+        fovCtx.fillRect(x1, y1, bw, bh);
+        fovCtx.globalAlpha = isStale ? 0.55 : 1.0;
+
+        const cLen = Math.min(14, bw * 0.32, bh * 0.32);
+        fovCtx.strokeStyle = isSelected || isHovered ? "#ffffff" : color;
+        fovCtx.lineWidth = isSelected || isHovered ? 2.8 : 2.2;
+        fovCtx.beginPath();
+        fovCtx.moveTo(x1, y1 + cLen); fovCtx.lineTo(x1, y1); fovCtx.lineTo(x1 + cLen, y1);
+        fovCtx.moveTo(x2 - cLen, y1); fovCtx.lineTo(x2, y1); fovCtx.lineTo(x2, y1 + cLen);
+        fovCtx.moveTo(x2, y2 - cLen); fovCtx.lineTo(x2, y2); fovCtx.lineTo(x2 - cLen, y2);
+        fovCtx.moveTo(x1 + cLen, y2); fovCtx.lineTo(x1, y2); fovCtx.lineTo(x1, y2 - cLen);
+        fovCtx.stroke();
+
+        // D. Velocity Vector Arrow
+        const [vx, vy] = obj.vel || [0, 0];
+        if (Math.hypot(vx, vy) >= 1.0) {
+          const ax = cx + vx * 10 * scaleX;
+          const ay = cy + vy * 10 * scaleY;
+          const ang = Math.atan2(ay - cy, ax - cx);
+          fovCtx.strokeStyle = color;
+          fovCtx.lineWidth = 2.2;
+          fovCtx.beginPath();
+          fovCtx.moveTo(cx, cy);
+          fovCtx.lineTo(ax, ay);
+          fovCtx.stroke();
+
+          fovCtx.fillStyle = color;
+          fovCtx.beginPath();
+          fovCtx.moveTo(ax, ay);
+          fovCtx.lineTo(ax - 8 * Math.cos(ang - Math.PI / 6), ay - 8 * Math.sin(ang - Math.PI / 6));
+          fovCtx.lineTo(ax - 8 * Math.cos(ang + Math.PI / 6), ay - 8 * Math.sin(ang + Math.PI / 6));
+          fovCtx.closePath();
+          fovCtx.fill();
+        }
+
+        // E. Callout Header Badge + Live Behavior Status Pill
+        const confPct = Math.round((obj.conf <= 1 ? obj.conf * 100 : obj.conf));
+        const labelStr = `#${String(tid).padStart(2, "0")} ${obj.label.toUpperCase()} (${confPct}%)`;
+        const statusStr = `[${obj.statusText}]`;
+
+        fovCtx.font = "800 11px ui-monospace, monospace";
+        const w1 = fovCtx.measureText(labelStr).width + 10;
+        const ty = Math.max(20, y1 - 5);
+
+        fovCtx.fillStyle = "rgba(5, 8, 11, 0.9)";
+        fovCtx.fillRect(x1, ty - 16, w1, 17);
+        fovCtx.strokeStyle = isSelected ? "#ffffff" : color;
+        fovCtx.lineWidth = 1;
+        fovCtx.strokeRect(x1, ty - 16, w1, 17);
+        fovCtx.fillStyle = isSelected ? "#ffffff" : color;
+        fovCtx.fillText(labelStr, x1 + 5, ty - 4);
+
+        // Status tag below bbox
+        fovCtx.font = "700 10px ui-monospace, monospace";
+        const w2 = fovCtx.measureText(statusStr).width + 8;
+        fovCtx.fillStyle = "rgba(5, 8, 11, 0.88)";
+        fovCtx.fillRect(x1, y2 + 3, w2, 15);
+        fovCtx.fillStyle = "#e6f1f8";
+        fovCtx.fillText(statusStr, x1 + 4, y2 + 14);
+
+        fovCtx.restore();
+      }
+    }
+
+    // ============================================================================
+    // 6. BOTTOM-RIGHT HISTORICAL TRACE GRID RENDERER (SINGLE-TARGET PAST PATH)
+    // ============================================================================
+    const traceCanvas = document.getElementById("traceCanvas");
+    const traceCtx = traceCanvas.getContext("2d");
+
+    function drawTargetTraceGrid() {
+      const W = traceCanvas.width;
+      const H = traceCanvas.height;
+      const scaleX = W / LOGICAL_W;
+      const scaleY = H / LOGICAL_H;
+
+      traceCtx.clearRect(0, 0, W, H);
+
+      if (state.selectedTrackId == null) {
+        traceCtx.fillStyle = "#8fa8ba";
+        traceCtx.font = "700 12px ui-monospace, monospace";
+        traceCtx.textAlign = "center";
+        traceCtx.fillText("CLICK ANY OBJECT OR LOG TO TRACE PAST MOVEMENTS", W / 2, H / 2);
+        traceCtx.textAlign = "left";
+        return;
+      }
+
+      // 1. 3x3 Sector Grid Background
+      const secW = W / 3;
+      const secH = H / 3;
+      const rec = state.archive.get(state.selectedTrackId);
 
       for (let r = 0; r < 3; r++) {
         for (let c = 0; c < 3; c++) {
@@ -1287,504 +1713,502 @@
           const sx = c * secW;
           const sy = r * secH;
 
-          // Highlight active sector filter
-          if (state.sectorFilter === secName) {
-            ctx.fillStyle = "rgba(255, 179, 0, 0.06)";
-            ctx.fillRect(sx, sy, secW, secH);
+          // Highlight sectors this object has visited in the past
+          const visited = rec && rec.sectorsVisited.includes(secName);
+          if (visited) {
+            traceCtx.fillStyle = "rgba(0, 229, 255, 0.06)";
+            traceCtx.fillRect(sx, sy, secW, secH);
           }
 
-          // Sector label watermark
-          ctx.fillStyle = state.sectorFilter === secName
-            ? "rgba(255, 179, 0, 0.75)"
-            : "rgba(139, 163, 181, 0.28)";
-          ctx.font = "700 10px ui-monospace, monospace";
-          ctx.fillText(secName, sx + 10, sy + 20);
+          traceCtx.fillStyle = visited ? "rgba(0, 229, 255, 0.65)" : "rgba(143, 168, 186, 0.25)";
+          traceCtx.font = "700 10px ui-monospace, monospace";
+          traceCtx.fillText(secName, sx + 8, sy + 16);
         }
       }
 
-      // Major 3x3 dividers
-      ctx.strokeStyle = "rgba(0, 229, 255, 0.24)";
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([6, 4]);
+      traceCtx.strokeStyle = "rgba(0, 229, 255, 0.25)";
+      traceCtx.lineWidth = 1;
+      traceCtx.setLineDash([5, 4]);
       for (let i = 1; i <= 2; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * secW, 0);
-        ctx.lineTo(i * secW, FOV_H);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(0, i * secH);
-        ctx.lineTo(FOV_W, i * secH);
-        ctx.stroke();
+        traceCtx.beginPath(); traceCtx.moveTo(i * secW, 0); traceCtx.lineTo(i * secW, H); traceCtx.stroke();
+        traceCtx.beginPath(); traceCtx.moveTo(0, i * secH); traceCtx.lineTo(W, i * secH); traceCtx.stroke();
       }
-      ctx.setLineDash([]);
+      traceCtx.setLineDash([]);
 
-      // Center optical reticle
-      ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
-      ctx.beginPath();
-      ctx.moveTo(FOV_W / 2 - 14, FOV_H / 2);
-      ctx.lineTo(FOV_W / 2 + 14, FOV_H / 2);
-      ctx.moveTo(FOV_W / 2, FOV_H / 2 - 14);
-      ctx.lineTo(FOV_W / 2, FOV_H / 2 + 14);
-      ctx.stroke();
-
-      const frame = state.currentFrame;
-      if (!frame || frame.objects.length === 0) {
-        // Empty FOV State ("no targets in FOV")
-        ctx.fillStyle = "rgba(11, 18, 23, 0.85)";
-        ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
-        ctx.lineWidth = 1;
-        ctx.fillRect(FOV_W / 2 - 185, FOV_H / 2 - 42, 370, 84);
-        ctx.strokeRect(FOV_W / 2 - 185, FOV_H / 2 - 42, 370, 84);
-
-        ctx.fillStyle = "#e4f0f6";
-        ctx.font = "800 13px ui-monospace, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("NO TARGETS IN FOV — LINK NOMINAL", FOV_W / 2, FOV_H / 2 - 8);
-        ctx.fillStyle = "#00e676";
-        ctx.font = "600 11px ui-monospace, monospace";
-        ctx.fillText("RX 12B HEADER HEARTBEAT @ 12Hz (0.12 kbps)", FOV_W / 2, FOV_H / 2 + 16);
-        ctx.textAlign = "left";
+      if (!rec || rec.history.length === 0) {
+        traceCtx.fillStyle = "#8fa8ba";
+        traceCtx.font = "700 12px ui-monospace, monospace";
+        traceCtx.textAlign = "center";
+        traceCtx.fillText("CLICK ANY OBJECT OR LOG TO TRACE PAST MOVEMENTS", W / 2, H / 2);
+        traceCtx.textAlign = "left";
         return;
       }
 
-      // 3. Render Objects (Trails, Velocity Vectors, Corner-Bracket BBoxes, Quantized Hex Tags)
-      for (const obj of frame.objects) {
-        if (!passesFilter(obj)) continue;
+      const totalPts = rec.history.length;
+      const cutoffIdx = Math.max(1, Math.round((state.scrubPct / 100) * totalPts));
+      const slice = rec.history.slice(0, cutoffIdx);
+      const firstPt = slice[0];
+      const activePt = slice[slice.length - 1];
 
-        const isHovered = state.hoveredTrackId === obj.track_id;
-        const [x1, y1, x2, y2] = obj.bbox;
-        const [cx, cy] = obj.center;
-        const bw = x2 - x1;
-        const bh = y2 - y1;
-        const color = obj.color || "#00e5ff";
-
-        ctx.save();
-        if (isStale) ctx.globalAlpha = 0.55;
-
-        // A. 25-point Breadcrumb Trail
-        if (obj.trail && obj.trail.length > 1) {
-          for (let i = 1; i < obj.trail.length; i++) {
-            const p0 = obj.trail[i - 1];
-            const p1 = obj.trail[i];
-            const alpha = (i / obj.trail.length) * 0.65;
-            ctx.strokeStyle = color;
-            ctx.globalAlpha = isStale ? alpha * 0.5 : alpha;
-            ctx.lineWidth = isHovered ? 2.5 : 1.6;
-            ctx.beginPath();
-            ctx.moveTo(p0[0], p0[1]);
-            ctx.lineTo(p1[0], p1[1]);
-            ctx.stroke();
-          }
-          ctx.globalAlpha = isStale ? 0.55 : 1.0;
+      // 2. Ghost Future Path (if scrubbing backward in time)
+      if (cutoffIdx < totalPts) {
+        traceCtx.strokeStyle = "rgba(143, 168, 186, 0.25)";
+        traceCtx.lineWidth = 1.5;
+        traceCtx.setLineDash([3, 3]);
+        traceCtx.beginPath();
+        for (let i = cutoffIdx - 1; i < totalPts; i++) {
+          const p = rec.history[i];
+          if (i === cutoffIdx - 1) traceCtx.moveTo(p.x * scaleX, p.y * scaleY);
+          else traceCtx.lineTo(p.x * scaleX, p.y * scaleY);
         }
-
-        // B. Bounding Box Fill & Corner Brackets
-        ctx.fillStyle = color;
-        ctx.globalAlpha = isHovered ? 0.22 : 0.08;
-        ctx.fillRect(x1, y1, bw, bh);
-        ctx.globalAlpha = isStale ? 0.55 : 1.0;
-
-        if (isStale || isHovered) {
-          ctx.strokeStyle = isHovered ? "#ffffff" : color;
-          ctx.lineWidth = isHovered ? 1.8 : 1;
-          if (isStale) ctx.setLineDash([4, 3]);
-          ctx.strokeRect(x1, y1, bw, bh);
-          ctx.setLineDash([]);
-        }
-
-        // Tactical Corner Brackets
-        const cLen = Math.min(10, bw * 0.3, bh * 0.3);
-        ctx.strokeStyle = isHovered ? "#ffffff" : color;
-        ctx.lineWidth = isHovered ? 2.6 : 2.0;
-        ctx.beginPath();
-        // TL
-        ctx.moveTo(x1, y1 + cLen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + cLen, y1);
-        // TR
-        ctx.moveTo(x2 - cLen, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + cLen);
-        // BR
-        ctx.moveTo(x2, y2 - cLen); ctx.lineTo(x2, y2); ctx.lineTo(x2 - cLen, y2);
-        // BL
-        ctx.moveTo(x1 + cLen, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y2 - cLen);
-        ctx.stroke();
-
-        // C. Center Point & Velocity Vector Arrow
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        const [vx, vy] = obj.vel || [0, 0];
-        const speed = Math.hypot(vx, vy);
-        if (speed >= 1.15) {
-          const ax = cx + vx * 8.5;
-          const ay = cy + vy * 8.5;
-          const angle = Math.atan2(ay - cy, ax - cx);
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(ax, ay);
-          ctx.stroke();
-
-          // Arrowhead
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(ax - 7 * Math.cos(angle - Math.PI / 6), ay - 7 * Math.sin(angle - Math.PI / 6));
-          ctx.lineTo(ax - 7 * Math.cos(angle + Math.PI / 6), ay - 7 * Math.sin(angle + Math.PI / 6));
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        // D. Callout Label above BBox
-        const confPct = Math.round((obj.conf <= 1 ? obj.conf * 100 : obj.conf));
-        const tagText = `#${String(obj.track_id).padStart(2, "0")} ${obj.label.toUpperCase()} ${confPct}%`;
-        ctx.font = "700 10px ui-monospace, monospace";
-        const textW = ctx.measureText(tagText).width + 10;
-        const tagY = Math.max(16, y1 - 4);
-
-        ctx.fillStyle = "rgba(6, 10, 13, 0.88)";
-        ctx.fillRect(x1, tagY - 14, textW, 15);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x1, tagY - 14, textW, 15);
-
-        ctx.fillStyle = isHovered ? "#ffffff" : color;
-        ctx.fillText(tagText, x1 + 5, tagY - 3);
-
-        // E. 6-Byte Vector Quantized Readout (on hover)
-        if (isHovered) {
-          const hex6 = encodeObject6BytesHex(obj);
-          const subText = `6B VEC: [${hex6}]`;
-          const subW = ctx.measureText(subText).width + 10;
-          ctx.fillStyle = "rgba(0, 229, 255, 0.92)";
-          ctx.fillRect(x1, y2 + 3, subW, 15);
-          ctx.fillStyle = "#000000";
-          ctx.fillText(subText, x1 + 5, y2 + 14);
-        }
-
-        ctx.restore();
+        traceCtx.stroke();
+        traceCtx.setLineDash([]);
       }
+
+      // 3. Full Past Trajectory Line (Color-coded by speed)
+      if (slice.length > 1) {
+        for (let i = 1; i < slice.length; i++) {
+          const p0 = slice[i - 1];
+          const p1 = slice[i];
+          const fastSeg = p1.speed >= FAST_PCT_S;
+          traceCtx.strokeStyle = fastSeg ? "#ff5252" : rec.color;
+          traceCtx.lineWidth = state.traceMaximized ? 3.2 : 2.4;
+          traceCtx.globalAlpha = 0.35 + (i / slice.length) * 0.65;
+          traceCtx.beginPath();
+          traceCtx.moveTo(p0.x * scaleX, p0.y * scaleY);
+          traceCtx.lineTo(p1.x * scaleX, p1.y * scaleY);
+          traceCtx.stroke();
+        }
+        traceCtx.globalAlpha = 1.0;
+      }
+
+      // 4. Historical Breadcrumb Dots + Sector Transition Waypoints
+      const step = Math.max(1, Math.floor(slice.length / 18));
+      for (let i = 0; i < slice.length; i += step) {
+        const p = slice[i];
+        traceCtx.fillStyle = rec.color;
+        traceCtx.beginPath();
+        traceCtx.arc(p.x * scaleX, p.y * scaleY, 2.2, 0, Math.PI * 2);
+        traceCtx.fill();
+      }
+
+      // Waypoint markers where sector transitions occurred
+      for (const wp of rec.waypoints) {
+        if (wp.seq > activePt.seq) continue;
+        const wx = wp.x * scaleX;
+        const wy = wp.y * scaleY;
+        traceCtx.fillStyle = "#ffb300";
+        traceCtx.fillRect(wx - 3, wy - 3, 6, 6);
+        if (state.traceMaximized) {
+          traceCtx.font = "700 9.5px ui-monospace, monospace";
+          traceCtx.fillStyle = "#ffd54f";
+          traceCtx.fillText(`SEQ ${wp.seq} [${wp.tag}]`, wx + 6, wy - 4);
+        }
+      }
+
+      // 5. ORIGIN Marker [ORG]
+      const ox = firstPt.x * scaleX;
+      const oy = firstPt.y * scaleY;
+      traceCtx.fillStyle = "#00e676";
+      traceCtx.beginPath();
+      traceCtx.arc(ox, oy, 5, 0, Math.PI * 2);
+      traceCtx.fill();
+      traceCtx.font = "800 10px ui-monospace, monospace";
+      traceCtx.fillText("ORG", ox + 7, oy + 3);
+
+      // 6. Active / Scrubbed Target Position & Bounding Box
+      const ax = activePt.x * scaleX;
+      const ay = activePt.y * scaleY;
+      const bw = activePt.w * scaleX;
+      const bh = activePt.h * scaleY;
+
+      traceCtx.strokeStyle = "#ffffff";
+      traceCtx.lineWidth = 2;
+      traceCtx.strokeRect(ax - bw / 2, ay - bh / 2, bw, bh);
+
+      traceCtx.fillStyle = rec.color;
+      traceCtx.beginPath();
+      traceCtx.arc(ax, ay, 4.5, 0, Math.PI * 2);
+      traceCtx.fill();
+
+      const nowTag = state.scrubPct === 100
+        ? `NOW [${activePt.sector}]`
+        : `SEQ ${activePt.seq} [${activePt.sector}]`;
+      traceCtx.fillStyle = "rgba(5, 8, 11, 0.9)";
+      const tw = traceCtx.measureText(nowTag).width + 8;
+      traceCtx.fillRect(ax + 8, ay - 10, tw, 15);
+      traceCtx.fillStyle = "#00e5ff";
+      traceCtx.fillText(nowTag, ax + 12, ay + 1);
     }
 
     // ============================================================================
-    // 7. DOM UPDATERS (MANIFEST, MATRIX, SITREP, WIRE INSPECTOR, HEADER)
+    // 7. DOM RENDERING (MANIFEST, INTERACTIVE LOG, DOSSIER, TELEMETRY)
     // ============================================================================
-    function passesFilter(obj) {
-      if (state.classFilter !== "ALL" && obj.cat !== state.classFilter) return false;
-      if (state.sectorFilter && obj.sector !== state.sectorFilter) return false;
-      return true;
-    }
-
-    function encodeObject6BytesHex(obj) {
-      const clsB = (obj.cls & 0xff).toString(16).padStart(2, "0");
-      const confInt = Math.round(obj.conf <= 1 ? obj.conf * 100 : obj.conf) & 0xff;
-      const confB = confInt.toString(16).padStart(2, "0");
-      const [x1, y1, x2, y2] = obj.bbox;
-      const cxQ = Math.min(255, Math.max(0, Math.round((obj.center[0] / FOV_W) * 255))).toString(16).padStart(2, "0");
-      const cyQ = Math.min(255, Math.max(0, Math.round((obj.center[1] / FOV_H) * 255))).toString(16).padStart(2, "0");
-      const wQ  = Math.min(255, Math.max(0, Math.round(((x2 - x1) / FOV_W) * 255))).toString(16).padStart(2, "0");
-      const hQ  = Math.min(255, Math.max(0, Math.round(((y2 - y1) / FOV_H) * 255))).toString(16).padStart(2, "0");
-      return `${clsB} ${confB} ${cxQ} ${cyQ} ${wQ} ${hQ}`.toUpperCase();
-    }
-
-    function float32ToHex(val) {
-      const buf = new ArrayBuffer(4);
-      const view = new DataView(buf);
-      view.setFloat32(0, val, false); // big-endian
-      return Array.from(new Uint8Array(buf))
-        .map(b => b.toString(16).padStart(2, "0").toUpperCase())
-        .join(" ");
-    }
-
     function renderAll() {
       const frame = state.currentFrame;
       if (!frame) return;
 
-      // 1. Header & Link Budget Bar
+      // 1. Header Telemetry
       const now = performance.now();
-      const windowSpanSec = state.packetHistory.length > 1
+      const spanSec = state.packetHistory.length > 1
         ? Math.max(0.25, (now - state.packetHistory[0].ts) / 1000)
         : 1 / 12;
-      const totalBytes = state.packetHistory.reduce((acc, p) => acc + p.bytes, 0);
-      const rollingKbps = state.simulateDrop ? 0 : ((totalBytes * 8) / 1000) / windowSpanSec;
-      const rollingHz = state.simulateDrop ? 0 : state.packetHistory.length / windowSpanSec;
+      const totalBytes = state.packetHistory.reduce((s, p) => s + p.bytes, 0);
+      const kbps = state.simulateDrop ? 0 : ((totalBytes * 8) / 1000) / spanSec;
+      const hz = state.simulateDrop ? 0 : state.packetHistory.length / spanSec;
 
-      document.getElementById("kbpsVal").textContent = rollingKbps.toFixed(2);
+      document.getElementById("kbpsVal").textContent = kbps.toFixed(2);
       document.getElementById("pktBytesVal").textContent = frame.bytes;
-      document.getElementById("hzVal").textContent = rollingHz.toFixed(1);
-
-      const pctOfSceneCap = Math.min(100, (rollingKbps / 2.0) * 100);
+      document.getElementById("hzVal").textContent = hz.toFixed(1);
       const fillEl = document.getElementById("budgetFill");
-      fillEl.style.width = `${pctOfSceneCap.toFixed(1)}%`;
-      fillEl.classList.toggle("warn", rollingKbps > 1.85);
+      fillEl.style.width = `${Math.min(100, (kbps / 2.0) * 100)}%`;
+      fillEl.classList.toggle("warn", kbps > 1.85);
 
       document.getElementById("seqVal").textContent = String(frame.seq).padStart(5, "0");
       document.getElementById("rxVal").textContent = state.rxPackets.toLocaleString();
       document.getElementById("gpsVal").textContent = `${frame.lat.toFixed(4)}, ${frame.lon.toFixed(4)}`;
-      document.getElementById("fovCountBadge").textContent = `${frame.objects.length} TARGETS TRACKED`;
+      document.getElementById("fovCountBadge").textContent = `${frame.objects.length} ACTIVE TRACKS`;
 
-      // 2. Tactical Manifest Table
-      const tbody = document.getElementById("manifestBody");
-      const visibleObjs = frame.objects.filter(passesFilter);
-
-      if (visibleObjs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty-manifest">NO TARGETS MATCHING CURRENT FILTER / FOV CLEAR</td></tr>`;
+      const selRec =
+        state.selectedTrackId != null ? state.archive.get(state.selectedTrackId) : null;
+      if (selRec) {
+        const titleStr = `#${String(selRec.track_id).padStart(2, "0")} ${selRec.label.toUpperCase()}`;
+        document.getElementById("lockedTargetHud").textContent = `LOCKED TRACE: ${titleStr}`;
+        document.getElementById("traceHeaderTitle").textContent =
+          `3. TARGET PAST MOVEMENT TRACE — ${titleStr} (${selRec.history.length} PTS)`;
       } else {
-        tbody.innerHTML = visibleObjs.map(obj => {
-          const pctX = Math.round((obj.center[0] / FOV_W) * 100);
-          const pctY = Math.round((obj.center[1] / FOV_H) * 100);
-          const confPct = Math.round(obj.conf <= 1 ? obj.conf * 100 : obj.conf);
-          const isMoving = obj.motion_str !== "STATIONARY";
-          const isHi = state.hoveredTrackId === obj.track_id;
-
-          return `
-            <tr class="manifest-row ${isHi ? "highlighted" : ""}" data-track-id="${obj.track_id}">
-              <td>
-                <span class="trk-badge" style="color: ${obj.color};">#${String(obj.track_id).padStart(2, "0")}</span>
-              </td>
-              <td>
-                <span class="cls-pill" style="color: ${obj.color};">${obj.label.toUpperCase()}</span>
-                <span class="conf-sub">${confPct}%</span>
-              </td>
-              <td><span class="sector-tag">${obj.sector}</span></td>
-              <td style="color: var(--text-secondary);">${pctX}%, ${pctY}%</td>
-              <td class="motion-cell ${isMoving ? "motion-moving" : "motion-stationary"}">${obj.motion_str}</td>
-            </tr>
-          `;
-        }).join("");
-
-        // Row hover listeners
-        tbody.querySelectorAll(".manifest-row").forEach(row => {
-          row.addEventListener("mouseenter", () => {
-            state.hoveredTrackId = Number(row.dataset.trackId);
-            drawSyntheticFOV();
-            row.classList.add("highlighted");
-          });
-          row.addEventListener("mouseleave", () => {
-            state.hoveredTrackId = null;
-            drawSyntheticFOV();
-            row.classList.remove("highlighted");
-          });
-        });
+        document.getElementById("lockedTargetHud").textContent = "LOCKED TRACE: — CLICK TARGET";
+        document.getElementById("traceHeaderTitle").textContent =
+          "3. TARGET PAST MOVEMENT TRACE — NONE SELECTED";
       }
 
-      // 3. 3x3 Sector Occupancy Matrix
-      const countsBySector = {};
-      const heavyBySector = {};
-      SECTORS.forEach(s => { countsBySector[s] = 0; heavyBySector[s] = false; });
-      for (const obj of frame.objects) {
-        countsBySector[obj.sector] = (countsBySector[obj.sector] || 0) + 1;
-        if (obj.cat === "HEAVY") heavyBySector[obj.sector] = true;
+      // 2. Manifest Table
+      const tbody = document.getElementById("manifestBody");
+      const visibleObjs = frame.objects.filter(o => !state.sectorFilter || o.sector === state.sectorFilter);
+
+      tbody.innerHTML = visibleObjs.map(obj => {
+        const isSel = obj.track_id === state.selectedTrackId;
+        const pctX = Math.round((obj.center[0] / LOGICAL_W) * 100);
+        const pctY = Math.round((obj.center[1] / LOGICAL_H) * 100);
+        return `
+          <tr class="m-row ${isSel ? "selected-row" : ""}" data-tid="${obj.track_id}">
+            <td style="color: ${obj.color}; font-weight: 800;">#${String(obj.track_id).padStart(2, "0")}</td>
+            <td style="color: ${obj.color}; font-weight: 700;">${obj.label.toUpperCase()}</td>
+            <td><span class="status-pill ${obj.statusCode}">${obj.statusText}</span></td>
+            <td>${obj.sector}</td>
+            <td style="color: var(--text-secondary);">${pctX}%,${pctY}% • ${obj.motion_str.replace("MOVING ", "")}</td>
+          </tr>
+        `;
+      }).join("");
+
+      // 3. Panel 2: what each target is doing now, or the behavior-change history
+      const logContainer = document.getElementById("interactiveLogList");
+      if (state.logView === "live") {
+        const cards = visibleObjs
+          .map(obj => ({ obj, rec: state.archive.get(obj.track_id) }))
+          .filter(c => c.rec && c.rec.behavior)
+          .sort((a, b) =>
+            (b.obj.track_id === state.selectedTrackId) - (a.obj.track_id === state.selectedTrackId)
+            || b.rec.behavior.pctPerSec - a.rec.behavior.pctPerSec);
+
+        logContainer.innerHTML = cards.length === 0
+          ? `<div class="act-empty">No targets in view.</div>`
+          : cards.map(({ obj, rec }) => {
+            const b = rec.behavior;
+            const isSel = obj.track_id === state.selectedTrackId;
+            const last = rec.lastEvent
+              ? ` · last: ${rec.lastEvent.statusText.toLowerCase()} ${formatDuration(now - rec.lastEvent.ts)} ago`
+              : "";
+            return `
+              <div class="act-card ${isSel ? "active-track-log" : ""}" data-tid="${obj.track_id}" style="border-left-color: ${obj.color};">
+                <span class="act-arrow" style="color: ${obj.color};">${b.arrow}</span>
+                <div style="min-width: 0;">
+                  <div class="act-title" style="color: ${obj.color};">#${String(obj.track_id).padStart(2, "0")} ${obj.label.toUpperCase()} <span class="status-pill ${b.code}">${b.status}</span></div>
+                  <div class="act-doing">${b.doing}</div>
+                  <div class="act-sub">${b.heading}${last}</div>
+                </div>
+                <span class="act-sector">${obj.sector}</span>
+              </div>
+            `;
+          }).join("");
+      } else {
+        const history = state.selectedTrackId !== null
+          ? state.eventLogs.filter(l => l.track_id === state.selectedTrackId)
+          : state.eventLogs;
+
+        logContainer.innerHTML = history.length === 0
+          ? `<div class="act-empty">No events yet.</div>`
+          : history.slice(0, 60).map(item => {
+            const isSel = item.track_id === state.selectedTrackId;
+            return `
+              <div class="log-item ${isSel ? "active-track-log" : ""}" data-tid="${item.track_id}" style="border-left-color: ${item.color};">
+                <span class="log-time">${item.tsStr}</span>
+                <span class="log-trk" style="color: ${item.color};">#${String(item.track_id).padStart(2, "0")}</span>
+                <span class="log-msg"><strong>[${item.statusText}]</strong> ${item.detail}</span>
+              </div>
+            `;
+          }).join("");
       }
+
+      // 4. Sector Occupancy Mini-Matrix
+      const counts = {};
+      SECTORS.forEach(s => counts[s] = 0);
+      frame.objects.forEach(o => counts[o.sector] = (counts[o.sector] || 0) + 1);
 
       const matrixEl = document.getElementById("sectorMatrix");
       matrixEl.innerHTML = SECTORS.map(sec => {
-        const cnt = countsBySector[sec];
-        const shortName = sec.replace("TOP-", "T-").replace("MID-", "M-").replace("BOTTOM-", "B-");
-        const classes = [
-          "sector-cell",
-          cnt > 0 ? "occupied" : "",
-          heavyBySector[sec] ? "heavy-alert" : "",
-          state.sectorFilter === sec ? "selected-filter" : ""
-        ].join(" ");
+        const cnt = counts[sec];
+        const short = sec.replace("TOP-", "T-").replace("MID-", "M-").replace("BOTTOM-", "B-");
         return `
-          <div class="${classes}" data-sector="${sec}">
-            <span class="sec-name">${shortName}</span>
-            <span class="sec-count">${cnt}</span>
+          <div class="sec-cell ${cnt > 0 ? "occupied" : ""} ${state.sectorFilter === sec ? "selected-filter" : ""}" data-sec="${sec}">
+            <span>${short}</span>
+            <strong>${cnt}</strong>
           </div>
         `;
       }).join("");
 
-      matrixEl.querySelectorAll(".sector-cell").forEach(cell => {
+      matrixEl.querySelectorAll(".sec-cell").forEach(cell => {
         cell.addEventListener("click", () => {
-          const clickedSec = cell.dataset.sector;
-          state.sectorFilter = (state.sectorFilter === clickedSec) ? null : clickedSec;
-          updateFilterUI();
+          const s = cell.dataset.sec;
+          state.sectorFilter = state.sectorFilter === s ? null : s;
+          document.getElementById("filterStatusText").textContent = state.sectorFilter || "ALL SECTORS";
+          document.getElementById("clearSecBtn").style.display = state.sectorFilter ? "inline" : "none";
           renderAll();
         });
       });
 
-      // 4. Auto Scene Brief (SITREP)
+      // 5. Auto SITREP & Maximized Dossier
       const briefEl = document.getElementById("sceneBriefText");
       if (frame.objects.length === 0) {
-        briefEl.innerHTML = `<span><strong>FOV CLEAR:</strong> 0 targets detected across all 9 sectors. Receiving 12-byte heartbeat headers at 12 Hz (0.12 kbps).</span>`;
+        briefEl.innerHTML = `<strong>FOV CLEAR:</strong> 0 targets in sight. Receiving 12 Hz heartbeat packets.`;
       } else {
-        const moving = frame.objects.filter(o => o.motion_str !== "STATIONARY");
-        const stat = frame.objects.filter(o => o.motion_str === "STATIONARY");
-        const parts = [];
-        parts.push(`<strong>${frame.objects.length} ACTIVE TARGETS (${frame.bytes}B FRAME):</strong>`);
-        if (moving.length > 0) {
-          const mvSummary = moving.map(o => `1 ${o.label} [${o.sector}, ${o.motion_str}]`).join("; ");
-          parts.push(`Moving: ${mvSummary}.`);
-        }
-        if (stat.length > 0) {
-          const stSectors = [...new Set(stat.map(o => o.sector))].join(", ");
-          parts.push(`${stat.length} stationary target(s) holding in ${stSectors}.`);
-        }
-        briefEl.innerHTML = `<span>${parts.join(" ")}</span>`;
+        const moving = frame.objects.filter(o => o.statusCode === "st-transit" || o.statusCode === "st-fast");
+        const still = frame.objects.filter(o => o.statusCode === "st-hold" || o.statusCode === "st-loiter");
+        const dirCounts = {};
+        moving.forEach(o => {
+          const d = o.motion_str.replace("MOVING ", "");
+          dirCounts[d] = (dirCounts[d] || 0) + 1;
+        });
+        const topDir = Object.keys(dirCounts).sort((a, b) => dirCounts[b] - dirCounts[a])[0];
+        const flow = topDir && dirCounts[topDir] >= 2
+          ? ` Main flow: <strong>${dirCounts[topDir]} heading ${DIR_WORDS[topDir]}</strong>.`
+          : "";
+        const selLbl =
+          state.selectedTrackId != null
+            ? `#${String(state.selectedTrackId).padStart(2, "0")}`
+            : "—";
+        briefEl.innerHTML = `<strong>${frame.objects.length} TRACKED:</strong> ${moving.length} moving, ${still.length} stationary/loitering.${flow} Tracing <strong>${selLbl}</strong> in bottom-right inspector.`;
       }
 
-      // 5. Binary Wire Packet Inspector
-      const seqHex = ((frame.seq >> 8) & 0xff).toString(16).padStart(2, "0").toUpperCase() + " " +
-                     (frame.seq & 0xff).toString(16).padStart(2, "0").toUpperCase();
-      const cntHex = (frame.objects.length & 0xff).toString(16).padStart(2, "0").toUpperCase();
-      document.getElementById("wireByteSummary").textContent = `${frame.bytes} BYTES (12B HDR + ${frame.objects.length}×6B)`;
-      document.getElementById("wireHeaderHex").textContent =
-        `HDR (12B): AD | SEQ ${seqHex} | LAT ${float32ToHex(frame.lat)} | LON ${float32ToHex(frame.lon)} | CNT ${cntHex}`;
-
-      const wireListEl = document.getElementById("wireObjList");
-      wireListEl.innerHTML = frame.objects.map(obj => `
-        <div class="wire-obj-row">
-          <span style="color: ${obj.color}; font-weight: 700;">TRK #${String(obj.track_id).padStart(2, "0")} (${obj.label})</span>
-          <span>${encodeObject6BytesHex(obj)}</span>
-        </div>
-      `).join("");
-
-      drawSyntheticFOV();
-    }
-
-    // ============================================================================
-    // 8. LIVE / STALE WATCHDOG (1.5 SECOND THRESHOLD)
-    // ============================================================================
-    function checkLinkFreshness() {
-      const now = performance.now();
-      const ageMs = now - state.lastPacketTs;
-      const badge = document.getElementById("linkBadge");
-      const text = document.getElementById("linkStateText");
-      const staleBanner = document.getElementById("staleBanner");
-
-      if (state.isPaused) {
-        badge.className = "link-badge paused";
-        text.textContent = "FROZEN (DEMO)";
-        staleBanner.classList.remove("visible");
-      } else if (ageMs > 1500) {
-        badge.className = "link-badge stale";
-        text.textContent = `STALE +${(ageMs / 1000).toFixed(1)}s`;
-        staleBanner.classList.add("visible");
-        drawSyntheticFOV();
+      const msgLabel = frame.msg_name ? `${frame.msg_name} ` : "";
+      document.getElementById("wireSummaryTag").textContent = `${msgLabel}${frame.bytes}B`;
+      if (frame.wire_hex) {
+        const hexShort =
+          frame.wire_hex.length > 96 ? `${frame.wire_hex.slice(0, 96)}…` : frame.wire_hex;
+        document.getElementById("wireHexLine").textContent =
+          `${msgLabel}${hexShort} | GPS ${frame.lat.toFixed(4)}, ${frame.lon.toFixed(4)}`;
       } else {
-        badge.className = "link-badge live";
-        text.textContent = "LIVE 12Hz";
-        staleBanner.classList.remove("visible");
+        document.getElementById("wireHexLine").textContent =
+          `SEQ ${frame.seq} | GPS ${frame.lat.toFixed(4)}, ${frame.lon.toFixed(4)} | ${frame.objects.length} VECTORS`;
       }
+
+      updateMaximizedDossier();
+      drawMainFOV();
+      drawTargetTraceGrid();
     }
 
-    // ============================================================================
-    // 9. WEBSOCKET BRIDGE CLIENT (AUTO-CONNECT TO ws://127.0.0.1:8765)
-    // ============================================================================
-    function connectWebSocket() {
-      const wsUrl = "ws://127.0.0.1:8765";
-      let ws;
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch (e) {
+    function updateMaximizedDossier() {
+      if (!state.traceMaximized) return;
+      const rec = state.archive.get(state.selectedTrackId);
+      if (!rec || rec.history.length === 0) {
+        document.getElementById("dosTitle").textContent = "NO TARGET LOCKED";
+        document.getElementById("dosSubtitle").textContent = "Click a target to inspect its behavior";
+        ["dosStatus", "dosSamples", "dosOriginNow", "dosDist"].forEach(
+          id => { document.getElementById(id).textContent = "—"; }
+        );
+        document.getElementById("dosSectorChain").innerHTML = "";
+        document.getElementById("dosTargetLogs").innerHTML = "";
         return;
       }
 
-      ws.onopen = () => {
-        state.wsConnected = true;
-        document.getElementById("sourceModeLabel").textContent = "SRC: UDP :9999 RELAY (LIVE)";
-        document.getElementById("sourceModeLabel").style.color = "var(--accent-green)";
-      };
+      const first = rec.history[0];
+      const latest = rec.history[rec.history.length - 1];
 
-      ws.onmessage = (event) => {
-        if (state.isPaused || state.simulateDrop) return;
-        try {
-          const payload = JSON.parse(event.data);
-          ingestFrame(payload);
-        } catch (err) {
-          console.warn("Invalid JSON frame on WS:", err);
-        }
-      };
-
-      ws.onclose = () => {
-        state.wsConnected = false;
-        document.getElementById("sourceModeLabel").textContent = "SRC: SIMULATOR (12Hz)";
-        document.getElementById("sourceModeLabel").style.color = "var(--text-muted)";
-        setTimeout(connectWebSocket, 2500);
-      };
-    }
-
-    // ============================================================================
-    // 10. INTERACTIVE CONTROLS & HOVER HIT-TESTING
-    // ============================================================================
-    function updateFilterUI() {
-      const label = document.getElementById("activeFilterLabel");
-      const resetBtn = document.getElementById("btnResetSector");
-      if (state.sectorFilter) {
-        label.textContent = `FILTER: ${state.sectorFilter} (${state.classFilter})`;
-        resetBtn.style.display = "inline-block";
-      } else {
-        label.textContent = `FILTER: ALL SECTORS (${state.classFilter})`;
-        resetBtn.style.display = "none";
+      let totalPxDist = 0;
+      for (let i = 1; i < rec.history.length; i++) {
+        totalPxDist += Math.hypot(
+          rec.history[i].x - rec.history[i - 1].x,
+          rec.history[i].y - rec.history[i - 1].y
+        );
       }
+      const fovDistPct = ((totalPxDist / Math.hypot(LOGICAL_W, LOGICAL_H)) * 100).toFixed(1);
+
+      document.getElementById("dosTitle").textContent =
+        `TARGET #${String(rec.track_id).padStart(2, "0")} — ${rec.label.toUpperCase()}`;
+      const b = rec.behavior;
+      document.getElementById("dosStatus").textContent = b ? b.status : "—";
+      document.getElementById("dosSubtitle").textContent = rec.lost
+        ? "Contact lost — showing last known track"
+        : b ? `${b.doing} — ${b.heading}` : "";
+      document.getElementById("dosSamples").textContent = `${rec.history.length} FRAMES`;
+      document.getElementById("dosOriginNow").textContent =
+        `(${Math.round(first.x/LOGICAL_W*100)}%, ${Math.round(first.y/LOGICAL_H*100)}%) → (${Math.round(latest.x/LOGICAL_W*100)}%, ${Math.round(latest.y/LOGICAL_H*100)}%)`;
+      document.getElementById("dosDist").textContent = `${fovDistPct}% FOV`;
+
+      document.getElementById("dosSectorChain").innerHTML = rec.sectorsVisited
+        .map((s, idx) => `<span class="pill-tag">${idx + 1}. ${s}</span>`)
+        .join(`<span style="color: var(--text-muted);">→</span>`);
+
+      const targetLogs = state.eventLogs.filter(l => l.track_id === rec.track_id);
+      document.getElementById("dosTargetLogs").innerHTML = targetLogs.map(item => `
+        <div class="log-item" style="border-left-color: ${item.color};">
+          <span class="log-time">${item.tsStr}</span>
+          <span class="log-trk" style="color: ${item.color};">SEQ ${item.seq}</span>
+          <span class="log-msg"><strong>[${item.statusText}]</strong> ${item.detail}</span>
+        </div>
+      `).join("");
     }
 
-    // Canvas mouse hover hit-test
-    canvas.addEventListener("mousemove", (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = ((e.clientX - rect.left) / rect.width) * FOV_W;
-      const my = ((e.clientY - rect.top) / rect.height) * FOV_H;
+    // Clicking the already-locked target again unlocks it (null = no lock).
+    function selectTargetForTrace(trackId) {
+      state.selectedTrackId = state.selectedTrackId === trackId ? null : trackId;
+      state.scrubPct = 100;
+      document.getElementById("traceScrubber").value = 100;
+      document.getElementById("scrubLabel").textContent = "LIVE (NOW)";
+      renderAll();
+    }
 
-      const pctX = Math.min(100, Math.max(0, Math.round((mx / FOV_W) * 100)));
-      const pctY = Math.min(100, Math.max(0, Math.round((my / FOV_H) * 100)));
-      const sec = getSectorFromXY(mx, my);
-      document.getElementById("cursorReadout").textContent = `FOV: ${pctX}%, ${pctY}% [${sec}]`;
+    // ============================================================================
+    // 8. USER INTERACTIONS (CLICK FOV TO TRACE, MAXIMIZE, SCRUBBER, SHORTCUTS)
+    // ============================================================================
+    fovCanvas.addEventListener("mousemove", (e) => {
+      const rect = fovCanvas.getBoundingClientRect();
+      const lx = ((e.clientX - rect.left) / rect.width) * LOGICAL_W;
+      const ly = ((e.clientY - rect.top) / rect.height) * LOGICAL_H;
+
+      const pctX = Math.min(100, Math.max(0, Math.round((lx / LOGICAL_W) * 100)));
+      const pctY = Math.min(100, Math.max(0, Math.round((ly / LOGICAL_H) * 100)));
+      document.getElementById("cursorReadout").textContent =
+        `CURSOR: ${pctX}%, ${pctY}% [${getSectorFromXY(lx, ly)}]`;
 
       if (!state.currentFrame) return;
-      let hitId = null;
+      let hit = null;
       for (const obj of state.currentFrame.objects) {
-        if (!passesFilter(obj)) continue;
         const [x1, y1, x2, y2] = obj.bbox;
-        if (mx >= x1 && mx <= x2 && my >= y1 && my <= y2) {
-          hitId = obj.track_id;
+        if (lx >= x1 - 8 && lx <= x2 + 8 && ly >= y1 - 8 && ly <= y2 + 8) {
+          hit = obj.track_id;
           break;
         }
       }
-
-      if (hitId !== state.hoveredTrackId) {
-        state.hoveredTrackId = hitId;
-        renderAll();
+      if (hit !== state.hoveredTrackId) {
+        state.hoveredTrackId = hit;
+        drawMainFOV();
       }
     });
 
-    canvas.addEventListener("mouseleave", () => {
+    fovCanvas.addEventListener("click", () => {
       if (state.hoveredTrackId !== null) {
-        state.hoveredTrackId = null;
+        selectTargetForTrace(state.hoveredTrackId);
+      } else if (state.selectedTrackId !== null) {
+        selectTargetForTrace(state.selectedTrackId);
+      }
+    });
+
+    // Maximize / Minimize Bottom-Right Trace Panel
+    const tracePanel = document.getElementById("tracePanel");
+    const btnMax = document.getElementById("btnMaximizeTrace");
+    function toggleMaximizeTrace() {
+      state.traceMaximized = !state.traceMaximized;
+      tracePanel.classList.toggle("maximized", state.traceMaximized);
+      btnMax.textContent = state.traceMaximized ? "[ESC] ✕ MINIMIZE" : "[M] ⤢ MAXIMIZE";
+      btnMax.classList.toggle("active", state.traceMaximized);
+      renderAll();
+    }
+    btnMax.addEventListener("click", toggleMaximizeTrace);
+
+    // Scrubber slider for replaying target history
+    const scrubber = document.getElementById("traceScrubber");
+    scrubber.addEventListener("input", (e) => {
+      state.scrubPct = Number(e.target.value);
+      const rec = state.archive.get(state.selectedTrackId);
+      if (state.scrubPct >= 100 || !rec) {
+        document.getElementById("scrubLabel").textContent = "LIVE (NOW)";
+      } else {
+        const idx = Math.max(0, Math.round((state.scrubPct / 100) * (rec.history.length - 1)));
+        const pt = rec.history[idx];
+        document.getElementById("scrubLabel").textContent = `SEQ ${pt.seq} (${state.scrubPct}%)`;
+      }
+      drawTargetTraceGrid();
+    });
+
+    document.getElementById("btnClearHistory").addEventListener("click", () => {
+      const rec = state.archive.get(state.selectedTrackId);
+      if (rec && rec.history.length > 1) {
+        const last = rec.history[rec.history.length - 1];
+        rec.history = [last];
+        rec.sectorsVisited = [last.sector];
+        rec.waypoints = [{ x: last.x, y: last.y, tag: "RESET", seq: last.seq, sector: last.sector }];
         renderAll();
       }
     });
 
-    // Class Filter Chips
-    document.querySelectorAll("#classFilterGroup .chip").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll("#classFilterGroup .chip").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        state.classFilter = btn.dataset.filter;
-        updateFilterUI();
-        renderAll();
+    const btnLogLive = document.getElementById("btnLogLive");
+    const btnLogHistory = document.getElementById("btnLogHistory");
+    function setLogView(view) {
+      state.logView = view;
+      btnLogLive.classList.toggle("active", view === "live");
+      btnLogHistory.classList.toggle("active", view === "history");
+      renderAll();
+    }
+    btnLogLive.addEventListener("click", () => setLogView("live"));
+    btnLogHistory.addEventListener("click", () => setLogView("history"));
+
+    // These lists are rebuilt 12×/s; a "click" needs down+up on the same node and is
+    // lost if the row is replaced mid-press, so select on pointerdown instead.
+    for (const listId of ["manifestBody", "interactiveLogList"]) {
+      document.getElementById(listId).addEventListener("pointerdown", (e) => {
+        const row = e.target.closest("[data-tid]");
+        if (row) selectTargetForTrace(Number(row.dataset.tid));
       });
+    }
+
+    const manifestBody = document.getElementById("manifestBody");
+    manifestBody.addEventListener("mouseover", (e) => {
+      const row = e.target.closest(".m-row");
+      const tid = row ? Number(row.dataset.tid) : null;
+      if (tid !== state.hoveredTrackId) {
+        state.hoveredTrackId = tid;
+        drawMainFOV();
+      }
+    });
+    manifestBody.addEventListener("mouseleave", () => {
+      state.hoveredTrackId = null;
+      drawMainFOV();
     });
 
-    document.getElementById("btnResetSector").addEventListener("click", () => {
+    // Fit stage vs 4:3 toggle
+    const btnAspect = document.getElementById("btnAspect");
+    btnAspect.addEventListener("click", () => {
+      state.aspectLocked = !state.aspectLocked;
+      document.getElementById("canvasContainer").classList.toggle("aspect-locked", state.aspectLocked);
+      btnAspect.textContent = state.aspectLocked ? "FIT: 4:3 LOCKED" : "FIT: FULL STAGE";
+    });
+
+    document.getElementById("clearSecBtn").addEventListener("click", () => {
       state.sectorFilter = null;
-      updateFilterUI();
+      document.getElementById("filterStatusText").textContent = "ALL SECTORS";
+      document.getElementById("clearSecBtn").style.display = "none";
       renderAll();
     });
 
-    // Freeze / Pause
+    // Header Demo Buttons
     const btnFreeze = document.getElementById("btnFreeze");
     btnFreeze.addEventListener("click", () => {
       state.isPaused = !state.isPaused;
       btnFreeze.classList.toggle("active", state.isPaused);
       btnFreeze.textContent = state.isPaused ? "[SPACE] RESUME" : "[SPACE] FREEZE";
-      checkLinkFreshness();
     });
 
-    // Drop Link (Stale Demo)
     const btnDropLink = document.getElementById("btnDropLink");
     btnDropLink.addEventListener("click", () => {
       state.simulateDrop = !state.simulateDrop;
@@ -1792,113 +2216,95 @@
       btnDropLink.textContent = state.simulateDrop ? "[L] RESTORE LINK" : "[L] DROP LINK";
     });
 
-    // Clear FOV (0-object heartbeat demo)
     const btnClearFov = document.getElementById("btnClearFov");
     btnClearFov.addEventListener("click", () => {
       state.simulateEmpty = !state.simulateEmpty;
       btnClearFov.classList.toggle("active", state.simulateEmpty);
     });
 
-    // Modal controls
-    const modal = document.getElementById("relayModal");
-    document.getElementById("btnRelayModal").addEventListener("click", () => modal.classList.add("open"));
-    document.getElementById("btnCloseModal").addEventListener("click", () => modal.classList.remove("open"));
-
-    // Keyboard shortcuts for fast judge demo
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Space" && !modal.classList.contains("open")) {
-        e.preventDefault();
-        btnFreeze.click();
-      } else if (e.key.toLowerCase() === "l" && !modal.classList.contains("open")) {
-        btnDropLink.click();
-      } else if (e.key === "0" && !modal.classList.contains("open")) {
-        btnClearFov.click();
-      } else if (e.key === "Escape") {
-        modal.classList.remove("open");
+      if (e.code === "Space") { e.preventDefault(); btnFreeze.click(); }
+      else if (e.key.toLowerCase() === "m") { toggleMaximizeTrace(); }
+      else if (e.key.toLowerCase() === "l") { btnDropLink.click(); }
+      else if (e.key === "0") { btnClearFov.click(); }
+      else if (e.key === "Escape") {
+        if (state.traceMaximized) toggleMaximizeTrace();
+        else if (state.selectedTrackId !== null) selectTargetForTrace(state.selectedTrackId);
       }
     });
 
-    // Populate Python Relay code in modal
-    document.getElementById("pyRelayCode").textContent = `#!/usr/bin/env python3
-"""
-ArcDrone Scene Reconstructor UDP (:9999) -> WebSocket (:8765) Relay
-Decodes big-endian 0xAD binary datagrams and broadcasts logical JSON frames.
-"""
-import asyncio, json, math, struct, websockets
+    // Watchdog for LIVE/STALE indicator
+    setInterval(() => {
+      const ageMs = performance.now() - state.lastPacketTs;
+      const badge = document.getElementById("linkBadge");
+      const txt = document.getElementById("linkStateText");
+      const banner = document.getElementById("staleBanner");
 
-UDP_IP, UDP_PORT = "127.0.0.1", 9999
-WS_PORT = 8765
-FOV_W, FOV_H = 720, 540
+      if (state.isPaused) {
+        badge.className = "link-badge paused";
+        txt.textContent = "FROZEN (DEMO)";
+        banner.classList.remove("visible");
+      } else if (ageMs > 1500) {
+        badge.className = "link-badge stale";
+        txt.textContent = `STALE +${(ageMs / 1000).toFixed(1)}s`;
+        banner.classList.add("visible");
+        drawMainFOV();
+      } else {
+        badge.className = "link-badge live";
+        txt.textContent = "LIVE 12Hz";
+        banner.classList.remove("visible");
+      }
+    }, 150);
 
-CLASSES = {
-    1: "pedestrian", 2: "people", 3: "bicycle", 4: "car", 5: "van",
-    6: "truck", 7: "tricycle", 8: "awning-tricycle", 9: "bus", 10: "motor"
-}
-SECTORS = [
-    "TOP-LEFT", "TOP-CENTER", "TOP-RIGHT",
-    "MID-LEFT", "CENTER", "MID-RIGHT",
-    "BOTTOM-LEFT", "BOTTOM-CENTER", "BOTTOM-RIGHT"
-]
-CLIENTS = set()
+    // Optional WebSocket connection to local relay (ws://127.0.0.1:8765)
+    let simTimer = null;
 
-def decode_packet(data: bytes) -> dict:
-    if len(data) < 12 or data[0] != 0xAD:
-        return None
-    magic, seq, lat, lon, count = struct.unpack(">BHffB", data[:12])
-    objects = []
-    offset = 12
-    for _ in range(count):
-        if offset + 6 > len(data):
-            break
-        cls_id, conf_u8, cx_q, cy_q, w_q, h_q = struct.unpack(">BBBBBB", data[offset:offset+6])
-        offset += 6
-        cx = int(round((cx_q / 255.0) * FOV_W))
-        cy = int(round((cy_q / 255.0) * FOV_H))
-        w  = int(round((w_q  / 255.0) * FOV_W))
-        h  = int(round((h_q  / 255.0) * FOV_H))
-        col = min(2, max(0, int((cx / FOV_W) * 3)))
-        row = min(2, max(0, int((cy / FOV_H) * 3)))
-        objects.append({
-            "cls": cls_id,
-            "label": CLASSES.get(cls_id, f"cls_{cls_id}"),
-            "conf": round(conf_u8 / 100.0, 2),
-            "bbox": [cx - w // 2, cy - h // 2, cx + w // 2, cy + h // 2],
-            "center": [cx, cy],
-            "sector": SECTORS[row * 3 + col]
-        })
-    return {"seq": seq, "lat": lat, "lon": lon, "count": len(objects), "bytes": len(data), "objects": objects}
+    function startSimulator() {
+      if (state.wsConnected || simTimer !== null) return;
+      stepSimulator();
+      simTimer = setInterval(stepSimulator, Math.round(1000 / 12));
+    }
 
-class UdpProtocol(asyncio.DatagramProtocol):
-    def datagram_received(self, data, addr):
-        frame = decode_packet(data)
-        if frame and CLIENTS:
-            msg = json.dumps(frame)
-            websockets.broadcast(CLIENTS, msg)
+    function stopSimulator() {
+      if (simTimer !== null) {
+        clearInterval(simTimer);
+        simTimer = null;
+      }
+    }
 
-async def ws_handler(websocket):
-    CLIENTS.add(websocket)
-    try:
-        await websocket.wait_closed()
-    finally:
-        CLIENTS.discard(websocket)
+    function connectWebSocket() {
+      try {
+        const ws = new WebSocket("ws://127.0.0.1:8765");
+        ws.onopen = () => {
+          state.wsConnected = true;
+          stopSimulator();
+          const lbl = document.getElementById("sourceModeLabel");
+          lbl.textContent = "SRC: UDP :9999 RELAY (LIVE)";
+          lbl.style.color = "var(--accent-green)";
+        };
+        ws.onmessage = (ev) => {
+          if (!state.isPaused && !state.simulateDrop) {
+            try {
+              ingestFrame(JSON.parse(ev.data));
+            } catch (_) {}
+          }
+        };
+        ws.onclose = () => {
+          state.wsConnected = false;
+          const lbl = document.getElementById("sourceModeLabel");
+          lbl.textContent = "SRC: SIMULATOR (12Hz)";
+          lbl.style.color = "var(--text-muted)";
+          startSimulator();
+          setTimeout(connectWebSocket, 2500);
+        };
+      } catch (_) {
+        startSimulator();
+      }
+    }
 
-async def main():
-    loop = asyncio.get_running_loop()
-    await loop.create_datagram_endpoint(lambda: UdpProtocol(), local_addr=(UDP_IP, UDP_PORT))
-    async with websockets.serve(ws_handler, "127.0.0.1", WS_PORT):
-        print(f"Relay active: UDP {UDP_IP}:{UDP_PORT} -> ws://127.0.0.1:{WS_PORT}")
-        await asyncio.Future()
-
-if __name__ == "__main__":
-    asyncio.run(main())`;
-
-    // ============================================================================
-    // 11. BOOTSTRAP
-    // ============================================================================
-    connectWebSocket();
-    stepSimulator();
-    setInterval(stepSimulator, Math.round(1000 / 12)); // 12 Hz (~83ms)
-    setInterval(checkLinkFreshness, 150);
+    // ?demo=1 forces the built-in simulator even when the relay is up.
+    if (!new URLSearchParams(location.search).has("demo")) connectWebSocket();
+    startSimulator();
   </script>
 </body>
 </html>
