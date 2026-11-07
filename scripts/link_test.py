@@ -101,6 +101,10 @@ def run_link_test(blackout_duration: float = 3.5) -> Dict[str, Any]:
         assert p2_sent == p2_received, f"Loss recovery failed: sent {p2_sent} != received {p2_received}"
         print(f"  Delivered 5/5 packets over 30% lossy link. Retries triggered: {drone_link.stats['retries']}")
         bridge.set_packet_loss_rate(0.0)
+        t_drain = time.monotonic() + 2.0
+        while drone_link.buffered > 0 and time.monotonic() < t_drain:
+            time.sleep(0.05)
+        assert drone_link.buffered == 0, f"Drone outbox should be 0 before blackout, got {drone_link.buffered}"
         results.append({"phase": "Intermittent Loss (30%)", "passed": True})
 
         # --- Phase 3: Simulated Radio Blackout & Outage Recovery ---
