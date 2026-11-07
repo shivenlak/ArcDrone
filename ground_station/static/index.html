@@ -75,6 +75,7 @@ p { margin: 0; }
   .header-status small, .brand small { display: none; }
   .metric strong { font-size: 19px; }
 }
+[hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -83,20 +84,20 @@ p { margin: 0; }
     <span class="logo" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg></span>
     <div><strong>ArcDrone</strong> <small> / Drone Zone</small></div>
   </div>
-  <div class="header-status"><small>Ground control</small><span class="badge warn">Simulation only</span></div>
+  <div class="header-status"><small>Ground control</small><span id="source-badge" class="badge">Connecting</span></div>
 </header>
 <main>
   <section class="intro" aria-labelledby="title">
     <div><p class="eyebrow">Ground station / Operator console</p><h1 id="title">Mission overview</h1><p>Monitor detections and review operator commands.</p></div>
-    <div class="simulation" aria-label="Simulation controls">
+    <div class="simulation" aria-label="Simulation controls" hidden>
       <button class="action" id="new-alert" type="button">Simulate detection</button>
       <button class="action" id="toggle-link" type="button">Simulate link loss</button>
     </div>
   </section>
   <section class="metrics" aria-label="Mission status">
-    <div class="metric"><span class="caption">Radio connection</span><strong id="link" role="status">Link up</strong></div>
-    <div class="metric"><span class="caption">Drone mode</span><strong id="mode">Patrol</strong></div>
-    <div class="metric"><span class="caption">Buffered alerts</span><strong id="buffered">0</strong></div>
+    <div class="metric"><span class="caption">Radio connection</span><strong id="link" role="status">Connecting</strong></div>
+    <div class="metric"><span class="caption">Drone mode</span><strong id="mode">Waiting for data</strong></div>
+    <div class="metric"><span class="caption">Buffered alerts</span><strong id="buffered">—</strong></div>
     <div class="metric"><span class="caption">Detections received</span><strong id="received">0</strong></div>
   </section>
   <div class="layout">
@@ -116,20 +117,20 @@ p { margin: 0; }
           <path d="M662 75V49m-5 6 5-6 5 6" fill="none" stroke="#a6b7ca" stroke-width="1.5"/>
           <text class="axis" x="658" y="91">N</text>
           <g id="pins"></g>
-          <text class="axis" x="38" y="345">53.519° N / 113.522° W</text>
+          
         </svg>
       </div>
       <div class="map-label"><span class="caption">Selected detection</span><span id="coordinates">Select an alert</span></div>
     </section>
     <aside class="rail" aria-label="Detections and controls">
       <section class="panel" aria-labelledby="alerts-title">
-        <div class="panel-title"><h2 id="alerts-title">Detection alerts</h2><span class="caption">Newest first</span></div>
+        <div class="panel-title"><h2 id="alerts-title">Detection alerts</h2><span class="caption">Latest received first</span></div>
         <div class="feed" id="alerts"><p>Waiting for a detection.</p></div>
       </section>
       <section class="panel" aria-labelledby="controls-title">
         <div class="panel-title"><h2 id="controls-title">Operator controls</h2><span id="target" class="caption">No alert selected</span></div>
         <div class="controls">
-          <small>Hold and resume change the simulated drone mode.</small>
+          <small>Confirmation comes from the ground station.</small>
           <div class="actions">
             <button class="action primary" data-command="OPERATOR_ACK" type="button" disabled>Acknowledge</button>
             <button class="action" data-command="HOLD" type="button">Hold</button>
@@ -145,37 +146,52 @@ p { margin: 0; }
 <script>
 const byId = (id) => document.getElementById(id);
 const alerts = [];
-const commands = [];
+const commands = new Map();
+const demoCommands = [];
+const controls = document.querySelectorAll("[data-command]");
+const params = new URLSearchParams(location.search);
+const demo = params.get("demo") === "1";
+const localFile = location.protocol === "file:";
+const playground = !demo && (localFile || params.get("playground") === "1");
 const bufferedAlerts = [];
 const commandLabels = { OPERATOR_ACK: "Acknowledge", HOLD: "Hold", RESUME: "Resume", RTB: "Return to base" };
 const modeAfterCommand = { HOLD: "Hold", RESUME: "Patrol", RTB: "Returning to base" };
 const samples = [
-  { cls: "Pedestrian", count: 1, conf: .87, lat: 53.5214, lon: -113.5206 },
-  { cls: "Car", count: 2, conf: .94, lat: 53.5210, lon: -113.5193 },
-  { cls: "Truck", count: 1, conf: .81, lat: 53.5204, lon: -113.5200 },
-  { cls: "Van", count: 1, conf: .89, lat: 53.5201, lon: -113.5187 }
+  { cls: "pedestrian", count: 1, conf: .87, lat: 53.5214, lon: -113.5206 },
+  { cls: "car", count: 2, conf: .94, lat: 53.5210, lon: -113.5193 },
+  { cls: "truck", count: 1, conf: .81, lat: 53.5204, lon: -113.5200 },
+  { cls: "van", count: 1, conf: .89, lat: 53.5201, lon: -113.5187 }
 ];
-let linkUp = true;
-let mode = "Patrol";
+let socket;
+let linkUp = demo ? true : null;
+let mode = demo ? "Patrol" : "Waiting for data";
+let buffered = demo ? 0 : null;
 let selected = null;
 let nextAlert = 4709;
 let nextCommand = 812;
 let confirmationTimer = null;
 
 function renderStatus() {
-  byId("link").textContent = linkUp ? "Link up" : "Link lost";
-  byId("link").style.color = linkUp ? "var(--green)" : "var(--red)";
+  const connected = demo || socket?.readyState === WebSocket.OPEN;
+  byId("link").textContent = !connected ? "Server offline" :
+    linkUp === null ? "Awaiting radio status" : linkUp ? "Link up" : "Link lost";
+  byId("link").style.color = linkUp === null ? "var(--muted)" :
+    linkUp ? "var(--green)" : "var(--red)";
   byId("mode").textContent = mode;
-  byId("buffered").textContent = bufferedAlerts.length;
+  byId("buffered").textContent = buffered ?? "—";
   byId("received").textContent = alerts.length;
-  byId("toggle-link").textContent = linkUp ? "Simulate link loss" : "Restore link";
+  byId("toggle-link").textContent = linkUp === false ? "Restore link" : "Simulate link loss";
+  byId("toggle-link").disabled = !connected || linkUp === null;
+  for (const button of controls) {
+    button.disabled = !connected || (button.dataset.command === "OPERATOR_ACK" && !selected);
+  }
 }
 
 function selectAlert(alert) {
   selected = alert;
   byId("target").textContent = `Alert #${alert.seq}`;
   byId("coordinates").textContent = `${alert.lat.toFixed(4)}° N, ${Math.abs(alert.lon).toFixed(4)}° W`;
-  document.querySelector('[data-command="OPERATOR_ACK"]').disabled = false;
+  renderStatus();
   for (const button of byId("alerts").querySelectorAll("button")) {
     button.setAttribute("aria-pressed", String(Number(button.dataset.seq) === alert.seq));
   }
@@ -210,79 +226,169 @@ function deliverAlert(alert) {
   const pin = document.createElementNS(svg, "g");
   pin.classList.add("pin");
   pin.dataset.seq = alert.seq;
-  const x = 64 + (alert.lon + 113.522) / .004 * 584;
-  const y = 319 - (alert.lat - 53.519) / .003 * 243;
-  pin.setAttribute("transform", `translate(${x} ${y})`);
+  pin.dataset.lat = alert.lat;
+  pin.dataset.lon = alert.lon;
   for (const radius of [12, 4]) {
     const circle = document.createElementNS(svg, "circle");
     circle.setAttribute("r", radius);
     pin.append(circle);
   }
-  byId("pins").append(pin);
+  const pins = byId("pins");
+  pins.append(pin);
+  // Fit the plotted points while keeping the map usable for a single detection.
+  const north = Math.max(53.523, ...alerts.map((point) => point.lat));
+  const south = Math.min(53.517, ...alerts.map((point) => point.lat));
+  const east = Math.max(-113.517, ...alerts.map((point) => point.lon));
+  const west = Math.min(-113.528, ...alerts.map((point) => point.lon));
+  for (const marker of pins.children) {
+    const x = 64 + (Number(marker.dataset.lon) - west) / (east - west) * 584;
+    const y = 319 - (Number(marker.dataset.lat) - south) / (north - south) * 243;
+    marker.setAttribute("transform", `translate(${x} ${y})`);
+  }
   if (!selected) selectAlert(alert);
+}
+
+function updateCommand(message) {
+  let badge = commands.get(message.cmd_id);
+  if (!badge) {
+    const history = byId("commands");
+    if (!commands.size) history.replaceChildren();
+    const row = document.createElement("div");
+    row.className = "command-item";
+    const label = document.createElement("span");
+    const reference = message.ref_seq ? ` · Alert #${message.ref_seq}` : "";
+    label.textContent = `#${message.cmd_id} · ${commandLabels[message.cmd] ?? message.cmd}${reference}`;
+    badge = document.createElement("span");
+    row.append(label, badge);
+    history.prepend(row);
+    commands.set(message.cmd_id, badge);
+  }
+  badge.textContent = message.status === "CONFIRMED" ? "Confirmed" : "Pending";
+  badge.className = message.status === "CONFIRMED" ? "badge good" : "badge warn";
+}
+
+function handleMessage(message) {
+  switch (message.event) {
+    case "alert":
+      deliverAlert(message);
+      break;
+    case "link":
+      linkUp = message.up;
+      break;
+    case "drone":
+      mode = { PATROL: "Patrol", HOLD: "Hold", RTB: "Returning to base" }[message.mode] ?? message.mode;
+      buffered = message.buffered;
+      break;
+    case "cmd_status":
+      updateCommand(message);
+      break;
+    case "stats":
+      // In the playground this is the fake drone buffer, including during link loss.
+      // The real server's link stats describe the ground station's own queue.
+      if (playground) buffered = message.buffered;
+      break;
+    default:
+      return;
+  }
+  renderStatus();
+}
+
+function connect() {
+  const url = localFile ? "ws://127.0.0.1:8000/ws" :
+    `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`;
+  socket = new WebSocket(url);
+  socket.addEventListener("open", renderStatus);
+  socket.addEventListener("message", (event) => {
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (message && typeof message === "object") handleMessage(message);
+  });
+  socket.addEventListener("close", () => {
+    linkUp = null;
+    mode = "Waiting for data";
+    buffered = null;
+    renderStatus();
+    setTimeout(connect, 1000);
+  });
+}
+
+function send(message) {
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
 function simulateAlert() {
   const seq = nextAlert++;
   const sample = samples[(seq - 4709) % samples.length];
-  const alert = { ...sample, seq, ts_ms: Date.now(), delayed: false };
-  if (linkUp) deliverAlert(alert);
+  const alert = { event: "alert", ...sample, seq, ts_ms: Date.now(), delayed: false };
+  if (linkUp) handleMessage(alert);
   else bufferedAlerts.push(alert);
+  buffered = bufferedAlerts.length;
   renderStatus();
 }
 
 function confirmNext() {
-  if (!linkUp || confirmationTimer !== null) return;
-  const pending = commands.find((command) => command.status === "Pending");
-  if (!pending) return;
+  if (!linkUp || confirmationTimer !== null || !demoCommands.length) return;
   confirmationTimer = setTimeout(() => {
     confirmationTimer = null;
     if (!linkUp) return;
-    pending.status = "Confirmed";
-    pending.badge.textContent = pending.status;
-    pending.badge.className = "badge good";
-    mode = modeAfterCommand[pending.cmd] ?? mode;
+    const command = demoCommands.shift();
+    handleMessage({ ...command, status: "CONFIRMED" });
+    mode = modeAfterCommand[command.cmd] ?? mode;
     renderStatus();
     confirmNext();
   }, 650);
 }
 
 function sendCommand(cmd) {
-  const command = { id: nextCommand++, cmd, ref_seq: selected?.seq ?? 0, status: "Pending" };
-  const history = byId("commands");
-  if (!commands.length) history.replaceChildren();
-  const row = document.createElement("div");
-  row.className = "command-item";
-  const label = document.createElement("span");
-  label.textContent = `#${command.id} · ${commandLabels[cmd]}${command.ref_seq ? ` · Alert #${command.ref_seq}` : ""}`;
-  command.badge = document.createElement("span");
-  command.badge.className = "badge warn";
-  command.badge.textContent = command.status;
-  row.append(label, command.badge);
-  history.prepend(row);
-  commands.push(command);
+  const ref_seq = selected?.seq ?? 0;
+  if (!demo) {
+    send({ action: "command", cmd, ref_seq });
+    return;
+  }
+  const command = { event: "cmd_status", cmd_id: nextCommand++, cmd, ref_seq, status: "PENDING" };
+  demoCommands.push(command);
+  handleMessage(command);
   confirmNext();
 }
 
+byId("source-badge").textContent = demo ? "Standalone demo" : playground ? "Samar’s playground" : "Ground station";
+byId("source-badge").classList.toggle("warn", demo || playground);
+byId("new-alert").parentElement.hidden = !demo && !playground;
+byId("new-alert").hidden = !demo;
 byId("new-alert").addEventListener("click", simulateAlert);
 byId("toggle-link").addEventListener("click", () => {
+  if (playground) {
+    send({ action: "fake_link", up: !linkUp });
+    return;
+  }
   linkUp = !linkUp;
   if (linkUp) {
     for (const alert of bufferedAlerts.splice(0)) {
       alert.delayed = Date.now() - alert.ts_ms > 3000;
-      deliverAlert(alert);
+      handleMessage(alert);
     }
     confirmNext();
   }
+  buffered = bufferedAlerts.length;
   renderStatus();
 });
-for (const button of document.querySelectorAll("[data-command]")) {
+for (const button of controls) {
   button.addEventListener("click", () => sendCommand(button.dataset.command));
 }
-simulateAlert();
-simulateAlert();
-simulateAlert();
-selectAlert(alerts[0]);
+
+renderStatus();
+if (demo) {
+  simulateAlert();
+  simulateAlert();
+  simulateAlert();
+  selectAlert(alerts[0]);
+} else {
+  connect();
+}
 </script>
 </body>
 </html>
