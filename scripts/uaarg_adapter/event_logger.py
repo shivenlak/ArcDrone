@@ -24,6 +24,8 @@ except ImportError:
 class EventLogger:
     """Manages hierarchical session logging adhering to UAARG shepard standards."""
 
+    _allocation_lock = threading.Lock()
+
     def __init__(
         self,
         base_dir: str = "tmp/log",
@@ -32,31 +34,39 @@ class EventLogger:
         self.base_dir = os.path.abspath(base_dir)
         os.makedirs(self.base_dir, exist_ok=True)
 
-        if run_id is None:
-            self.run_id = self._allocate_run_id()
-        else:
-            self.run_id = str(run_id)
+        with self._allocation_lock:
+            if run_id is None:
+                self.run_id = self._allocate_run_id()
+            else:
+                self.run_id = str(run_id)
 
-        self.run_dir = os.path.join(self.base_dir, str(self.run_id))
-        self.img_dir = os.path.join(self.run_dir, "images")
-        self.bb_dir = os.path.join(self.run_dir, "bb")
+            self.run_dir = os.path.join(self.base_dir, str(self.run_id))
+            self.img_dir = os.path.join(self.run_dir, "images")
+            self.bb_dir = os.path.join(self.run_dir, "bb")
 
-        os.makedirs(self.run_dir, exist_ok=True)
-        os.makedirs(self.img_dir, exist_ok=True)
-        os.makedirs(self.bb_dir, exist_ok=True)
+            os.makedirs(self.run_dir, exist_ok=True)
+            os.makedirs(self.img_dir, exist_ok=True)
+            os.makedirs(self.bb_dir, exist_ok=True)
 
         self._lock = threading.Lock()
         self.logged_seqs: List[int] = []
 
     def _allocate_run_id(self) -> int:
-        """Allocate next sequential numeric run index like UAARG debug_analysis."""
-        existing = os.listdir(self.base_dir)
-        numeric_dirs = []
-        for d in existing:
-            full_path = os.path.join(self.base_dir, d)
-            if os.path.isdir(full_path) and d.isdigit():
-                numeric_dirs.append(int(d))
-        return (max(numeric_dirs) + 1) if numeric_dirs else 0
+        """Allocate next sequential numeric run index like UAARG debug_analysis atomically."""
+        while True:
+            existing = os.listdir(self.base_dir)
+            numeric_dirs = []
+            for d in existing:
+                full_path = os.path.join(self.base_dir, d)
+                if os.path.isdir(full_path) and d.isdigit():
+                    numeric_dirs.append(int(d))
+            candidate = (max(numeric_dirs) + 1) if numeric_dirs else 0
+            candidate_dir = os.path.join(self.base_dir, str(candidate))
+            try:
+                os.makedirs(candidate_dir, exist_ok=False)
+                return candidate
+            except FileExistsError:
+                continue
 
     def log_event(
         self,
