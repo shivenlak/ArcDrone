@@ -71,6 +71,9 @@ python3 -m drone_node.scene_ws_relay
 - [x] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, ring buffer). On real boards: 14 s SW38 mute → LINK_DOWN in 3.1 s, 120/120 delivered exactly once, 30 DELAYED; drone USB unplug/replug → auto-recovered in 2.7 s, 100/100.
 - [x] **Phase 4:** Ground station UI + operator acknowledge/override. On real boards: ACK, HOLD, RESUME, RTB all CONFIRMED; a HOLD sent during a mute stayed PENDING and froze the drone right after restore (43 buffered alerts flushed first); 11 commands queued during an outage were delivered in click order.
 - [ ] **Phase 5:** Stretch (dual-path ESP-NOW + LoRa, metrics panel, mute button)
+  - [x] S1 dual path on 2× Heltec V3 (LoRa 915 MHz, SF7): PRG cycles ESP-NOW+LoRa → LoRa only → muted. Both paths: 60/60, RTT 24.7 ms; ESP-NOW killed: 60/60 over LoRa, 11 retries, RTT 128.5 ms. OLED shows mode, per-radio counts and RSSI.
+  - [x] S2 metrics panel ("On the wire": exact packet bytes, measured bit/s vs LoRa and video)
+  - [x] S3 mute button (SW38 on Feather, PRG on Heltec)
 
 ## Team
 
