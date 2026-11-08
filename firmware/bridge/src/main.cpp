@@ -22,8 +22,9 @@ const int BAUD = 115200;
 const int WIFI_CHANNEL = 1;  // both boards must match; try 6 or 11 if the venue is noisy
 const int MAX_LEN = ESP_NOW_MAX_DATA_LEN;  // 250 bytes
 const uint8_t BROADCAST[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-const int BUTTON_PIN = 0;  // BOOT button on most ESP32 dev boards (active low)
-const int LED_PIN = 2;     // onboard LED on most ESP32 dev boards; change if yours differs
+// Pins differ per board, so platformio.ini sets them for each env.
+const int BUTTON_PIN = MUTE_BUTTON_PIN;  // active low (pull-up)
+const int LED_PIN = ACTIVITY_LED_PIN;
 const unsigned long FLASH_MS = 30;
 const unsigned long DEBOUNCE_MS = 50;
 
@@ -128,7 +129,8 @@ void printPacket(const Packet &p) {
 
 void setup() {
   Serial.begin(BAUD);
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  // GPIO34-39 are input-only with no internal pull-up (the Feather V2 has one on the board).
+  pinMode(BUTTON_PIN, BUTTON_PIN >= 34 ? INPUT : INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
   rxQueue = xQueueCreate(16, sizeof(Packet));
 
