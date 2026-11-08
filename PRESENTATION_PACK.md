@@ -46,7 +46,7 @@ Use this ranked hierarchy to structure your slide deck, investor pitch, and judg
 | **#4** | **Electronic Warfare Blackout Survival** | **Store-and-forward ring buffer.** When RF jamming strikes, the drone automatically buffers up to 64 alerts in a circular queue and flushes them oldest-first with zero duplicates the microsecond the link recovers. | **Tested on hardware: 14 s mute during 120 alerts**; 120/120 delivered in order, link recovered in 3.1 s. | *"Zero telemetry loss across electronic warfare blackouts."* |
 | **#5** | **Two-Way Closed-Loop Tactical Overrides** | **Active command & control over narrowband radio.** Ground operators can issue `HOLD`, `RESUME`, `RTB`, and `OPERATOR_ACK` with guaranteed stop-and-wait delivery and confirmed drone state transitions. | **38/38 hardware commands delivered**; 11 commands queued during blackout executed in exact order upon restore. | *"Not just an aerial sensor; a closed-loop tactical command node."* |
 | **#6** | **Real-Time Browser Radar & Playback Scrubber** | **Interactive operator dashboard with instant replay.** Operators can click any contact to lock its trajectory, view compass directions (N/S/E/W), inspect behavior tags (STATIONARY/MOVING/LOITERING), and drag the replay slider to scrub past motion. | **12 Hz real-time telemetry**; zero installation required (standard browser). | *"Full flight-recorder playback and target tracking in any web browser."* |
-| **#7** | **Physical Silicon Verified (Heltec V3 Dual-Path)** | **Zero vaporware.** Runs on dual Heltec WiFi LoRa 32 V3 boards (ESP-NOW + SX1262 LoRa 915 MHz diversity) with PRG hardware button mute, live OLED telemetry, and USB auto-recovery, backed by automated tests. | **200/200 alerts delivered (0 retries, 19.9 ms RTT)**; auto-recovery in 2.7 s after USB replug. | *"Hardware-proven on physical silicon with dual-frequency radio diversity."* |
+| **#7** | **Physical Silicon Verified (Dual Heltec V3 & MacBook Pro M4 Stack)** | **Zero vaporware.** Runs on dual Heltec WiFi LoRa 32 V3 boards (ESP-NOW + SX1262 LoRa 915 MHz diversity) with MacBook Pro (M4 Pro) powering both the sender (drone node) and receiver (ground station) for 64 ms inferencing, with Raspberry Pi 4 maintained on standby for future flight integration. | **200/200 alerts delivered (0 retries, 19.9 ms RTT)**; auto-recovery in 2.7 s after USB replug. | *"Hardware-proven on physical silicon with dual-frequency radio diversity."* |
 
 ---
 
@@ -117,7 +117,7 @@ ArcDrone Live Demo Traffic (both directions):   ▎                             
 
 ### Slide 6: Team, Tech Stack & natHacks Readiness
 - **Headline:** Production-Grade Engineering, 100% Hardware-Verified.
-- **Talking Points:** 116 headless automated tests passing; verified on physical ESP32 boards; UAARG telemetry adapter integrated; ready for immediate deployment.
+- **Talking Points:** 116 headless automated tests passing; dual MacBook Pro (M4 Pro) sender & receiver nodes interfacing with physical Heltec V3 dual-path radios; Raspberry Pi 4 edge compute target on standby for airframe integration; UAARG telemetry adapter integrated.
 - **Visual:** Team role matrix and live demo callout.
 
 ---

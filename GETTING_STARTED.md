@@ -106,7 +106,7 @@ No Python or servers required—just open in any web browser:
 For developers connecting physical microcontrollers over USB.
 
 ```
-DRONE SIDE (Pi 4 / Laptop)                        GROUND SIDE (Laptop)
+DRONE SENDER (MacBook Pro M4, Pi 4 standby)       GROUND RECEIVER (MacBook Pro M4)
 drone_node: video → YOLO → gate                   ground_station: FastAPI + WebSocket
   → protocol.Link (seq, ACK, retry, buffer)         → protocol.Link (same module)
         │ USB serial (hex lines)                    → browser dashboard (localhost:8000)

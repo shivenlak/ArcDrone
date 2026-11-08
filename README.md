@@ -9,7 +9,7 @@ Every number below was measured on our own hardware. See [Measured results](#mea
 ## Architecture
 
 ```
-DRONE SIDE (Pi 4 / MacBook)                     GROUND SIDE (MacBook)
+DRONE SENDER (MacBook Pro M4, Pi 4 standby)     GROUND RECEIVER (MacBook Pro M4)
 drone_node: video → YOLO → gate                 ground_station: FastAPI + WebSocket
   → protocol.Link (seq, ACK, retry, buffer)       → protocol.Link (same module)
         │ USB serial (hex lines)                  → browser dashboard
@@ -37,8 +37,8 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 |---|---|---|
 | Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262 + OLED), 863–928 MHz variant run at 915 MHz, with antennas | 2 | ✅ demo radios (`heltec_v3` env) |
 | Adafruit ESP32 Feather V2 w.FL | 2 | ✅ backup (`feather_v2` env). No 2.4 GHz antennas, so range is ~2 cm |
-| Raspberry Pi 4 | 1 | ✅ have, not benchmarked yet |
-| MacBook (M4 Pro) | several | ✅ drone and ground side for now |
+| MacBook Pro (M4 Pro) | several | ✅ active sender (drone node) and receiver (ground station) for now |
+| Raspberry Pi 4 | 1 | ⏳ standby / optional edge compute target (might switch back for airframe flight) |
 
 **Always attach the LoRa antenna before powering a Heltec.** The firmware transmits LoRa as soon as it boots.
 

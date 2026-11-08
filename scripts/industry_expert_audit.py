@@ -138,9 +138,10 @@ def audit_solution() -> Dict[str, Any]:
 
     # 4. Analyze Weaknesses, Gaps & Tactical Risks ("What We Are Doing Wrong / Missing")
     report["doing_wrong_or_gaps"].append(
-        "Unmeasured Hardware Edge Inferencing (Pi 4 Gap): YOLOv8n inference latency has only been measured on an M4 Pro Mac "
-        "(64 ms/frame at imgsz 1280). The Raspberry Pi 4 is listed as 'not benchmarked yet'. In real flight, the Pi 4 CPU/NPU "
-        "will struggle with 1280x1280 tensors without TensorRT/NCNN/ONNX quantizations."
+        "Standby Edge Compute Architecture (Dual MacBook Pro M4 Stack): The team has currently deployed MacBook Pro (M4 Pro) "
+        "machines for both the sender (drone vision node) and receiver (ground station) to guarantee 64 ms/frame inference stability "
+        "at imgsz 1280. While the Raspberry Pi 4 is on standby for future airframe integration, it remains unbenchmarked on hardware; "
+        "if switching back to the Pi 4, edge quantization (ONNX/NCNN) will be mandatory to avoid framerate collapse."
     )
     report["doing_wrong_or_gaps"].append(
         "Replay Vulnerability Window: As noted in CLAUDE.md, AES-128-CCM authenticates each frame and dedups within a 64-seq "
