@@ -135,14 +135,8 @@ p { margin: 0; }
   <section class="metrics" aria-label="Mission status">
     <div class="metric"><span class="caption">Radio connection</span><strong id="link" role="status">Connecting</strong></div>
     <div class="metric"><span class="caption">Drone mode</span><strong id="mode">Waiting for data</strong></div>
-    <div class="metric"><span class="caption">Buffered alerts</span><strong id="buffered">—</strong></div>
+    <div class="metric"><span class="caption">Revived alerts</span><strong id="buffered">—</strong></div>
     <div class="metric"><span class="caption">Detections received</span><strong id="received">0</strong></div>
-  </section>
-  <section class="metrics" aria-label="Delivery verifier" style="margin-top:-4px">
-    <div class="metric"><span class="caption">Sent / ACKed</span><strong id="verifier-ack">—</strong></div>
-    <div class="metric"><span class="caption">Retries</span><strong id="verifier-retries">—</strong></div>
-    <div class="metric"><span class="caption">Duplicates / dropped</span><strong id="verifier-dup">—</strong></div>
-    <div class="metric"><span class="caption">RTT avg / p95</span><strong id="verifier-rtt">—</strong></div>
   </section>
   <section class="panel wire" aria-labelledby="wire-title">
     <div class="wire-bytes">
@@ -186,7 +180,7 @@ p { margin: 0; }
     </section>
     <aside class="rail" aria-label="Detections and controls">
       <section class="panel" aria-labelledby="alerts-title">
-        <div class="panel-title"><h2 id="alerts-title">Detection alerts</h2><span class="caption">Latest received first</span></div>
+        <div class="panel-title"><h2 id="alerts-title">Detection alerts</h2><span class="caption" id="retrieved-note" hidden>Retrieved 0</span></div>
         <div class="feed" id="alerts"><p>Waiting for a detection.</p></div>
       </section>
       <section class="panel" aria-labelledby="controls-title">
@@ -295,22 +289,6 @@ function renderWire(alert) {
   byId("wire-caption").textContent = alert.delayed ? "Delayed alert, buffered during link loss" : "Latest alert, exact bytes received";
 }
 
-function renderVerifier(stats) {
-  const sent = stats.sent ?? 0;
-  const delivered = stats.delivered ?? 0;
-  const retries = stats.retries ?? 0;
-  const dups = stats.duplicates ?? 0;
-  const dropped = stats.dropped ?? 0;
-  byId("verifier-ack").textContent = `${delivered} / ${sent}`;
-  byId("verifier-ack").style.color = (sent > 0 && delivered === sent) ? "var(--green)" : "var(--text)";
-  byId("verifier-retries").textContent = String(retries);
-  byId("verifier-dup").textContent = `${dups} / ${dropped}`;
-  const avg = stats.rtt_ms_avg;
-  const p95 = stats.rtt_ms_p95;
-  byId("verifier-rtt").textContent =
-    (avg == null && p95 == null) ? "—" : `${avg ?? "—"} / ${p95 ?? "—"} ms`;
-}
-
 function renderTraffic(stats) {
   if (stats.bytes_tx === undefined) return;
   const bytes = stats.bytes_tx + stats.bytes_rx;
@@ -337,6 +315,14 @@ function renderStatus() {
   byId("mode").textContent = mode;
   byId("buffered").textContent = buffered ?? "—";
   byId("received").textContent = alerts.length;
+  const retrieved = alerts.filter((a) => a.delayed).length;
+  const note = byId("retrieved-note");
+  if (retrieved > 0) {
+    note.hidden = false;
+    note.textContent = retrieved === 1 ? "Retrieved 1" : `Retrieved ${retrieved}`;
+  } else {
+    note.hidden = true;
+  }
   byId("toggle-link").textContent = linkUp === false ? "Restore link" : "Simulate link loss";
   byId("toggle-link").disabled = !connected || linkUp === null;
   for (const button of controls) {
@@ -446,7 +432,6 @@ function handleMessage(message) {
       // The real server's link stats describe the ground station's own queue.
       if (playground) buffered = message.buffered;
       renderTraffic(message);
-      renderVerifier(message);
       break;
     default:
       return;

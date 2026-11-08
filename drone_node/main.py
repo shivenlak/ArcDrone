@@ -36,7 +36,6 @@ def draw_hud(
     drone_lon: float,
     last_tx_str: str,
     scene_kbps: float = 0.0,
-    verifier_line: str = "",
 ) -> np.ndarray:
     canvas = frame.copy()
     h, w = canvas.shape[:2]
@@ -141,19 +140,6 @@ def draw_hud(
             0.45,
             (255, 255, 0),
             1,
-        )
-
-    # Delivery verifier line (sent / delivered / pending) just under the top bar.
-    if verifier_line:
-        cv2.putText(
-            canvas,
-            verifier_line,
-            (12, 58),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (120, 255, 170),
-            1,
-            cv2.LINE_AA,
         )
 
     return canvas
@@ -426,7 +412,6 @@ def main() -> None:
                     drone_lon=drone_lon,
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
-                    verifier_line=verifier.hud_line(),
                 )
                 if preview is not None:
                     preview.update(hud_frame)
