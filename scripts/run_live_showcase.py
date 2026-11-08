@@ -22,6 +22,8 @@ if _REPO_ROOT not in sys.path:
 from ground_station.server import make_app
 from protocol import packets as p
 from protocol.link import Link
+from drone_node.delivery_verifier import DeliveryVerifier
+from drone_node.sim_gps import SimGps
 from scripts.bandwidth_monitor import BandwidthMonitor
 from scripts.sim_link_bridge import SimLinkBridge
 from scripts.uaarg_adapter.event_logger import EventLogger
@@ -33,8 +35,21 @@ CLASSES = ["pedestrian", "car", "van", "truck", "bus", "motor"]
 def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threading.Event):
     event_logger = EventLogger(base_dir="tmp/log")
     mission_monitor = MissionMonitor()
+    verifier = DeliveryVerifier()
+    sim_gps = SimGps()
 
     drone_state = {"mode": p.MODE_PATROL, "lat": 53.5232, "lon": -113.5263, "heading": 45.0}
+
+    def on_drone_event(event_type: str, **kwargs):
+        if event_type == "delivered":
+            seq = kwargs.get("seq")
+            rtt = kwargs.get("rtt_ms")
+            if seq is not None:
+                verifier.on_delivered(int(seq), rtt)
+        elif event_type == "link_down":
+            verifier.on_link_down()
+        elif event_type == "link_up":
+            verifier.on_link_up()
 
     def on_drone_packet(pkt):
         if pkt.get("type") == p.COMMAND:
@@ -64,6 +79,7 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
     drone_link = Link(
         drone_port,
         on_packet=on_drone_packet,
+        on_event=on_drone_event,
         retry_timeout=0.25,
         boot_wait=0.0,
     ).start()
@@ -73,10 +89,9 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
         time.sleep(2.0)
         frame_idx += 1
 
-        # Move drone if in PATROL
+        # Move drone on figure-eight patrol if in PATROL
         if drone_state["mode"] == p.MODE_PATROL:
-            drone_state["lat"] += 0.0001 * math.cos(math.radians(drone_state["heading"]))
-            drone_state["lon"] += 0.0001 * math.sin(math.radians(drone_state["heading"]))
+            drone_state["lat"], drone_state["lon"] = sim_gps.position_at_frame(frame_idx, fps=0.5)
         elif drone_state["mode"] == p.MODE_RTB:
             # Fly back towards base
             drone_state["lat"] += (53.5232 - drone_state["lat"]) * 0.2
@@ -102,6 +117,12 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
         )
 
         cls_name = p.CLASS_NAMES[cls_idx]
+        verifier.on_send(
+            seq,
+            "DETECTION",
+            f"{cls_name} x{count}",
+            buffered=(not drone_link.up or drone_link.buffered > 1),
+        )
         print(f"[DRONE TX] Alert #{seq}: {cls_name} (conf={conf}) at ({alert_lat:.4f}, {alert_lon:.4f})")
 
         # Log event with UAARG event logger
@@ -112,6 +133,10 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
             mode=p.MODE_NAMES.get(drone_state["mode"], "UNKNOWN"),
         )
 
+    try:
+        print("\n" + verifier.report(drone_link.summary()))
+    except Exception:
+        pass
     drone_link.stop()
 
 

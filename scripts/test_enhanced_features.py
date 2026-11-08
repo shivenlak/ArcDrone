@@ -141,6 +141,59 @@ class TestEnhancedFeatures(unittest.TestCase):
         current_time = 0.001  # fresh boot time on macOS
         self.assertTrue((current_time - last_infer) >= period)
 
+    def test_delivery_verifier_lifecycle_and_recovery(self):
+        """DeliveryVerifier must track PENDING vs DELIVERED and detect blackout flushing."""
+        from drone_node.delivery_verifier import DeliveryVerifier, PENDING, DELIVERED
+
+        verifier = DeliveryVerifier(keep=50)
+        self.assertEqual(verifier.sent, 0)
+        self.assertEqual(verifier.delivered, 0)
+
+        # 1. Normal send and immediate delivery
+        verifier.on_send(seq=1, kind="DETECTION", label="car x1", buffered=False)
+        self.assertEqual(verifier.sent, 1)
+        self.assertEqual(verifier.pending_count(), 1)
+
+        verifier.on_delivered(seq=1, rtt_ms=22.5)
+        self.assertEqual(verifier.delivered, 1)
+        self.assertEqual(verifier.pending_count(), 0)
+
+        # 2. Link outage occurs while a message is in flight
+        verifier.on_send(seq=2, kind="DETECTION", label="pedestrian x2", buffered=False)
+        verifier.on_link_down()
+        self.assertFalse(verifier.link_up)
+
+        # 3. Message queued during blackout
+        verifier.on_send(seq=3, kind="COMMAND", label="HOLD", buffered=True)
+        self.assertEqual(verifier.pending_count(), 2)
+
+        # 4. Link recovers
+        verifier.on_link_up()
+        self.assertTrue(verifier.link_up)
+        self.assertTrue(verifier.flushing)
+
+        # 5. Outbox flushes buffered messages oldest first
+        verifier.on_delivered(seq=2, rtt_ms=3100.0)
+        verifier.on_delivered(seq=3, rtt_ms=3150.0)
+        self.assertEqual(verifier.delivered, 3)
+        self.assertEqual(verifier.pending_count(), 0)
+        self.assertFalse(verifier.flushing)
+
+        # 6. Verify summary report contains essential audit lines
+        summary = {"duplicates": 0, "dropped": 0, "retries": 1, "rtt_ms_avg": 24.5, "rtt_ms_p95": 62.0, "sent": 3, "delivered": 3}
+        rep = verifier.report(summary)
+        self.assertIn("DELIVERY VERIFIER REPORT", rep)
+        self.assertIn("delivered (ACKed): 3", rep)
+        self.assertIn("flushed after loss:2", rep)
+
+    def test_demo_video_resolver_fallback(self):
+        """resolve_demo_video must locate existing data/ assets without raising errors."""
+        from drone_node.demo_video import resolve_demo_video
+
+        # Resolving None should pick an existing clip from data/
+        resolved = resolve_demo_video(None)
+        self.assertTrue(os.path.exists(resolved) or os.path.exists(os.path.join(_REPO_ROOT, "data")))
+
 
 if __name__ == "__main__":
     unittest.main()

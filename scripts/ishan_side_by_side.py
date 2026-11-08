@@ -42,6 +42,16 @@ try:
 except ImportError:
     SimGps = None
 
+try:
+    from drone_node.demo_video import resolve_demo_video
+except ImportError:
+    resolve_demo_video = lambda hint: hint or os.path.join(_REPO_ROOT, "data", "visdrone_aerial_sample.mp4")
+
+try:
+    from drone_node.frame_source import open_frame_source
+except ImportError:
+    open_frame_source = lambda path_str: cv2.VideoCapture(path_str)
+
 # True 0-indexed VisDrone class colors (BGR) — fixes the off-by-one bug
 CLASS_COLORS_BGR: Dict[int, Tuple[int, int, int]] = {
     0: (255, 220, 0),    # pedestrian (cyan)
@@ -885,8 +895,9 @@ def run_pipeline(
     imgsz: int = 1280,
     use_grid_coast: bool = True,
 ) -> Dict[str, Any]:
+    video_path = resolve_demo_video(video_path)
     print(f"[RATIO-VEC SHOWCASE] Opening video: {video_path}")
-    cap = cv2.VideoCapture(video_path)
+    cap = open_frame_source(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open {video_path}")
 
@@ -898,8 +909,19 @@ def run_pipeline(
     print(f"[RATIO-VEC SHOWCASE] Source: {src_w}x{src_h} @ {video_fps:.2f} FPS ({total_src_frames} total frames)")
 
     print(f"[RATIO-VEC SHOWCASE] Loading VisDrone weights: {model_path} (imgsz={imgsz})")
-    detector = Detector(model_path=model_path, conf_thresh=0.30, cooldown_sec=1.0, imgsz=imgsz)
-    sim_gps = SimGps()
+    detector = (
+        Detector(
+            model_path=model_path,
+            conf_thresh=0.30,
+            cooldown_sec=1.0,
+            spatial_hold_sec=25.0,
+            match_gate_frac=0.33,
+            imgsz=imgsz,
+        )
+        if Detector is not None
+        else None
+    )
+    sim_gps = SimGps() if SimGps is not None else None
 
     tracker_cls = GridCoastTracker if use_grid_coast else DroneIndexedTracker
     drone_tracker = tracker_cls(max_unseen_frames=36)
