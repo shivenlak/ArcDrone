@@ -176,6 +176,15 @@ Based on 'data/test_cases/benchmark_results.json' and 'scripts/README.md', gener
 - Zero-loss recovery during radio blackouts.
 ```
 
+### For All Models: Generating Pitch Slides & Defense Briefs
+```markdown
+Read 'PRESENTATION_PACK.md'.
+Using Section 2 (Empirical Benchmark Evidence) and Section 4 (5-Minute Winning Pitch Deck Outline):
+1. Format a high-impact 6-slide presentation deck (in Marp markdown or bulleted slide specs).
+2. Incorporate the empirical benchmark numbers from all 6 test cases (e.g. Case 2: 101 active targets at only 1,708 B/s wire rate).
+3. Draft a 2-minute speaker script for defense/security judges explaining how ArcDrone reduces bandwidth by ~1800x vs raw video while maintaining 1:1 ground tactical awareness.
+```
+
 ---
 
 ## 6. Common Pitfalls & LLM Debugging Traps

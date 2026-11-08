@@ -52,6 +52,7 @@ python -m pytest -q          # protocol tests, ~15 s
 
 ## Quick Guides & LLM Context
 
+- **For Defense Judges & Pitch Presenters:** See [PRESENTATION_PACK.md](PRESENTATION_PACK.md) for the 5-minute pitch deck, judge demo runbook, empirical benchmark tables, and LLM slide generation instructions.
 - **For AI Assistants (Claude, Gemini, ChatGPT):** See [LLM_GUIDE.md](LLM_GUIDE.md) for immutable file boundaries, wire specs, data schemas, and prompt templates.
 - **For Evaluators & Benchmarks:** See [scripts/README.md](scripts/README.md) for how to reproduce and run the 6 video benchmark cases, side-by-side showcase generator, and test suite.
 - **For Browser Reconstructor Reviewers:** See [drone_node/static/RECONSTRUCTOR_SETUP.md](drone_node/static/RECONSTRUCTOR_SETUP.md).

@@ -15,3 +15,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - 2026-11-07 (Shiven): Phase 3 passed on hardware: SW38 mute (120/120 exactly once, LINK_DOWN 3.1 s) and USB unplug/replug auto-recovery (100/100).
 - 2026-11-08 (Shiven): Phase 2 + 4 passed on hardware with the new continuous VisDrone-MOT demo clip (`--imgsz 1280 --fps 10`). HOLD during link loss lands after restore; queued commands delivered in order.
 - 2026-11-08 (Shiven): Dashboard "On the wire" panel: each alert's exact 21 bytes split by field, plus measured radio bit/s vs LoRa SF7 capacity and 720p video. `Link.summary()` gains `bytes_tx`/`bytes_rx`; `alert` events gain `raw` (hex).
+- 2026-11-08 (Manan): Presentation & Evaluation: Added PRESENTATION_PACK.md containing defense brief, 5-minute pitch deck, multi-scenario benchmark metrics table, and LLM slide/script generation prompt templates.
