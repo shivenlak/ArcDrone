@@ -122,6 +122,14 @@ class Link:
     def _open(self):
         try:
             self._ser = serial.Serial(self.port, BAUD, timeout=0.05)
+            # Release DTR/RTS (the ESP32 "run" state). Opening asserts both, and on boards
+            # that wire DTR to GPIO0 (Heltec V3) that holds the PRG/mute button down.
+            # Releasing them resets the ESP32 once, which boot_wait covers.
+            try:
+                self._ser.dtr = False
+                self._ser.rts = False
+            except (serial.SerialException, OSError):
+                pass  # virtual ports (fake_bridge) have no modem lines
             time.sleep(self.boot_wait)
             self._ser.reset_input_buffer()
             self._rx = b""
