@@ -554,36 +554,55 @@ def draw_pill_label(
     cv2.putText(canvas, text, (x1 + 4, y2 - 4), font, scale, (255, 255, 255) if highlight else color, 1, cv2.LINE_AA)
 
 
+def get_canvas_fit(src_w: int, src_h: int, canvas_w: int, canvas_h: int) -> Tuple[int, int, int, int]:
+    """Computes aspect-ratio preserving letterbox dimensions (fit_w, fit_h, pad_x, pad_y)."""
+    scale = min(canvas_w / float(src_w), canvas_h / float(src_h))
+    fit_w = int(round(src_w * scale))
+    fit_h = int(round(src_h * scale))
+    pad_x = (canvas_w - fit_w) // 2
+    pad_y = (canvas_h - fit_h) // 2
+    return fit_w, fit_h, pad_x, pad_y
+
+
 def render_left_rgb_canvas(
     raw_frame: np.ndarray,
     active_tracks: List[Dict[str, Any]],
     canvas_w: int,
     canvas_h: int,
+    scenario_title: str = "",
 ) -> np.ndarray:
-    """Renders the Left RGB Camera Panel (960x540) with indexed bounding boxes."""
-    panel = cv2.resize(raw_frame, (canvas_w, canvas_h), interpolation=cv2.INTER_AREA)
+    """Renders the Left RGB Camera Panel (960x540) with aspect-ratio preserving fit & indexed boxes."""
+    panel = np.full((canvas_h, canvas_w, 3), (12, 16, 20), dtype=np.uint8)
+    src_h, src_w = raw_frame.shape[:2]
+    fit_w, fit_h, pad_x, pad_y = get_canvas_fit(src_w, src_h, canvas_w, canvas_h)
+
+    resized_img = cv2.resize(raw_frame, (fit_w, fit_h), interpolation=cv2.INTER_AREA)
+    panel[pad_y : pad_y + fit_h, pad_x : pad_x + fit_w] = resized_img
 
     for trk in active_tracks:
         tid = trk["id"]
         color = CLASS_COLORS_BGR.get(trk["cls"], (0, 255, 255))
-        cx = int(round(trk["cx_r"] * canvas_w))
-        cy = int(round(trk["cy_r"] * canvas_h))
-        bw = max(8, int(round(trk["w_r"] * canvas_w)))
-        bh = max(8, int(round(trk["h_r"] * canvas_h)))
+        cx = pad_x + int(round(trk["cx_r"] * fit_w))
+        cy = pad_y + int(round(trk["cy_r"] * fit_h))
+        bw = max(6, int(round(trk["w_r"] * fit_w)))
+        bh = max(6, int(round(trk["h_r"] * fit_h)))
         x1, y1 = cx - bw // 2, cy - bh // 2
         x2, y2 = cx + bw // 2, cy + bh // 2
 
         cv2.rectangle(panel, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
-        draw_pill_label(panel, f"#{tid}", x1, y1, color, scale=0.40)
+        draw_pill_label(panel, f"#{tid}", x1, y1, color, scale=0.38)
 
     # Top overlay bar on Left Canvas
     cv2.rectangle(panel, (0, 0), (canvas_w, 34), (16, 20, 26), -1)
+    label_text = f"DRONE SIDE: REAL RGB VIDEO + YOLOv8-VISDRONE ({len(active_tracks)} INDEXED OBJECTS)"
+    if scenario_title:
+        label_text = f"DRONE [{scenario_title}] | RGB + YOLOv8 ({len(active_tracks)} OBJECTS)"
     cv2.putText(
         panel,
-        f"DRONE SIDE: REAL RGB VIDEO + YOLOv8-VISDRONE ({len(active_tracks)} INDEXED OBJECTS)",
+        label_text,
         (12, 23),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.50,
+        0.46,
         (0, 230, 255),
         1,
         cv2.LINE_AA,
@@ -596,33 +615,37 @@ def render_right_blank_ratio_canvas(
     canvas_w: int,
     canvas_h: int,
     sim_t: float,
+    src_w: int = 1920,
+    src_h: int = 1080,
+    scenario_title: str = "",
 ) -> np.ndarray:
     """Renders the Right Ground Canvas (960x540) with RGB removed, preserving exact 1:1 box ratios."""
     panel = np.full((canvas_h, canvas_w, 3), (12, 16, 20), dtype=np.uint8)
+    fit_w, fit_h, pad_x, pad_y = get_canvas_fit(src_w, src_h, canvas_w, canvas_h)
 
-    # 10% proportional coordinate grid (0% to 100% X and Y ratio lines)
+    # 10% proportional coordinate grid inside active video ratio frame
     for i in range(1, 10):
-        gx = int(round((i / 10.0) * canvas_w))
-        gy = int(round((i / 10.0) * canvas_h))
+        gx = pad_x + int(round((i / 10.0) * fit_w))
+        gy = pad_y + int(round((i / 10.0) * fit_h))
         col = (26, 34, 42) if i != 5 else (40, 54, 66)
-        cv2.line(panel, (gx, 34), (gx, canvas_h), col, 1)
-        cv2.line(panel, (0, gy), (canvas_w, gy), col, 1)
+        cv2.line(panel, (gx, pad_y), (gx, pad_y + fit_h), col, 1)
+        cv2.line(panel, (pad_x, gy), (pad_x + fit_w, gy), col, 1)
         cv2.putText(
             panel,
             f"{i*10}%",
-            (gx + 3, canvas_h - 6),
+            (gx + 3, pad_y + fit_h - 6),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.33,
+            0.32,
             (70, 90, 105),
             1,
         )
-        if gy > 45:
+        if gy > pad_y + 40:
             cv2.putText(
                 panel,
                 f"{i*10}%",
-                (6, gy - 4),
+                (pad_x + 6, gy - 4),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.33,
+                0.32,
                 (70, 90, 105),
                 1,
             )
@@ -631,16 +654,16 @@ def render_right_blank_ratio_canvas(
 
     for tid, b in sorted(receiver.boxes.items()):
         color = CLASS_COLORS_BGR.get(b["cls"], (0, 255, 255))
-        cx = int(round(b["cx_r"] * canvas_w))
-        cy = int(round(b["cy_r"] * canvas_h))
-        bw = max(8, int(round(b["w_r"] * canvas_w)))
-        bh = max(8, int(round(b["h_r"] * canvas_h)))
+        cx = pad_x + int(round(b["cx_r"] * fit_w))
+        cy = pad_y + int(round(b["cy_r"] * fit_h))
+        bw = max(6, int(round(b["w_r"] * fit_w)))
+        bh = max(6, int(round(b["h_r"] * fit_h)))
         x1, y1 = cx - bw // 2, cy - bh // 2
         x2, y2 = cx + bw // 2, cy + bh // 2
 
-        # Draw smooth historical movement trail in ratio space
+        # Draw smooth historical movement trail (last 2 updates)
         trail_pts = [
-            (int(round(tx * canvas_w)), int(round(ty * canvas_h)))
+            (pad_x + int(round(tx * fit_w)), pad_y + int(round(ty * fit_h)))
             for tx, ty in b["trail"]
         ]
         for idx in range(1, len(trail_pts)):
@@ -664,11 +687,11 @@ def render_right_blank_ratio_canvas(
         cv2.circle(panel, (cx, cy), 3, (255, 255, 255), -1, cv2.LINE_AA)
 
         # Clean bounded velocity vector arrow
-        vx_px = max(-22.0, min(22.0, b["vx_r"] * canvas_w * 0.25))
-        vy_px = max(-22.0, min(22.0, b["vy_r"] * canvas_h * 0.25))
-        if math.hypot(vx_px, vy_px) >= 3.5:
-            end_x = int(max(4, min(canvas_w - 4, cx + vx_px)))
-            end_y = int(max(38, min(canvas_h - 4, cy + vy_px)))
+        vx_px = max(-22.0, min(22.0, b["vx_r"] * fit_w * 0.25))
+        vy_px = max(-22.0, min(22.0, b["vy_r"] * fit_h * 0.25))
+        if math.hypot(vx_px, vy_px) >= 3.0:
+            end_x = int(max(pad_x + 4, min(pad_x + fit_w - 4, cx + vx_px)))
+            end_y = int(max(pad_y + 36, min(pad_y + fit_h - 4, cy + vy_px)))
             cv2.arrowedLine(
                 panel,
                 (cx, cy),
@@ -679,17 +702,20 @@ def render_right_blank_ratio_canvas(
                 tipLength=0.35,
             )
 
-        draw_pill_label(panel, f"#{tid}", x1, y1, color, scale=0.40, highlight=is_fresh)
+        draw_pill_label(panel, f"#{tid}", x1, y1, color, scale=0.38, highlight=is_fresh)
 
     # Top overlay bar on Right Canvas
     cv2.rectangle(panel, (0, 0), (canvas_w, 34), (16, 20, 26), -1)
     upd_str = ", ".join(f"#{i}({op})" for i, op in receiver.last_updated_ids[:7]) or "none"
+    ground_title = f"GROUND RECEIVER: NO RGB (1:1 RATIO BOXES + VECTORS) | PKT #{receiver.last_seq} UPD: [{upd_str}]"
+    if scenario_title:
+        ground_title = f"GROUND [{scenario_title}] | NO RGB RATIO RECONSTRUCTOR | PKT #{receiver.last_seq} UPD: [{upd_str}]"
     cv2.putText(
         panel,
-        f"GROUND RECEIVER: NO RGB (1:1 RATIO BOXES + VECTORS) | PKT #{receiver.last_seq} UPD: [{upd_str}]",
+        ground_title,
         (12, 23),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.44,
+        0.42,
         (120, 255, 150),
         1,
         cv2.LINE_AA,
@@ -797,7 +823,8 @@ def run_pipeline(
     output_mp4: str = os.path.join(_REPO_ROOT, "data", "ishan_visdrone_side_by_side.mp4"),
     output_snapshot: str = os.path.join(_REPO_ROOT, "data", "ishan_visdrone_side_by_side.png"),
     num_frames: int = 150,
-) -> None:
+    scenario_title: str = "",
+) -> Dict[str, Any]:
     print(f"[RATIO-VEC SHOWCASE] Opening video: {video_path}")
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -806,7 +833,9 @@ def run_pipeline(
     video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print(f"[RATIO-VEC SHOWCASE] Source: {src_w}x{src_h} @ {video_fps:.2f} FPS")
+    total_src_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    num_frames = min(num_frames, total_src_frames) if total_src_frames > 0 else num_frames
+    print(f"[RATIO-VEC SHOWCASE] Source: {src_w}x{src_h} @ {video_fps:.2f} FPS ({total_src_frames} total frames)")
 
     print(f"[RATIO-VEC SHOWCASE] Loading VisDrone weights: {model_path}")
     detector = Detector(model_path=model_path, conf_thresh=0.30, cooldown_sec=1.0)
@@ -880,18 +909,25 @@ def run_pipeline(
         peak_bps = max(peak_bps, bps)
 
         # 4. Render Left (RGB + Indexed Boxes) & Right (Blank Canvas + 1:1 Ratio Boxes & Vectors)
-        left_canvas = render_left_rgb_canvas(raw_frame, active_tracks, canvas_w, canvas_h)
-        right_canvas = render_right_blank_ratio_canvas(receiver, canvas_w, canvas_h, sim_t)
+        left_canvas = render_left_rgb_canvas(
+            raw_frame, active_tracks, canvas_w, canvas_h, scenario_title=scenario_title
+        )
+        right_canvas = render_right_blank_ratio_canvas(
+            receiver, canvas_w, canvas_h, sim_t, src_w=src_w, src_h=src_h, scenario_title=scenario_title
+        )
         bottom_manifest = render_bottom_index_manifest(receiver, total_w, manifest_h, sim_t)
 
         # 5. Top Telemetry Header Bar
         header = np.full((header_h, total_w, 3), (10, 14, 18), dtype=np.uint8)
+        title_text = "ARCDRONE 1:1 RATIO SIDE-BY-SIDE: DRONE RGB CAMERA vs GROUND INDEXED VECTOR RECEIVER (NO RGB)"
+        if scenario_title:
+            title_text = f"ARCDRONE TEST BENCH: {scenario_title.upper()} (1:1 RATIO VECTOR LINK)"
         cv2.putText(
             header,
-            "ARCDRONE 1:1 RATIO SIDE-BY-SIDE: DRONE RGB CAMERA vs GROUND INDEXED VECTOR RECEIVER (NO RGB)",
+            title_text,
             (18, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.58,
+            0.56,
             (0, 225, 255),
             2,
             cv2.LINE_AA,
@@ -916,10 +952,11 @@ def run_pipeline(
 
         out.write(composite)
 
-        if frame_idx == 60 and not snapshot_saved:
+        snapshot_target = min(60, num_frames // 2)
+        if frame_idx == snapshot_target and not snapshot_saved:
             cv2.imwrite(output_snapshot, composite)
             snapshot_saved = True
-            print(f"[RATIO-VEC SHOWCASE] Saved high-res snapshot at frame 60: {output_snapshot}")
+            print(f"[RATIO-VEC SHOWCASE] Saved high-res snapshot at frame {frame_idx}: {output_snapshot}")
 
     cap.release()
     out.release()
@@ -927,10 +964,20 @@ def run_pipeline(
     if not snapshot_saved:
         cv2.imwrite(output_snapshot, composite)
 
+    file_size = os.path.getsize(output_mp4) if os.path.exists(output_mp4) else 0
     print(
-        f"[RATIO-VEC SHOWCASE] Complete! Video: {output_mp4} ({os.path.getsize(output_mp4)} bytes), "
+        f"[RATIO-VEC SHOWCASE] Complete! Video: {output_mp4} ({file_size} bytes), "
         f"Total Pkts: {receiver.total_pkts} (12.0 FPS spread-out), Peak Rate: {peak_bps:.0f} B/s (<= 3000 B/s)"
     )
+    return {
+        "output_mp4": output_mp4,
+        "output_snapshot": output_snapshot,
+        "frames_rendered": frame_idx,
+        "total_pkts": receiver.total_pkts,
+        "peak_bps": peak_bps,
+        "active_indices": len(receiver.boxes),
+        "file_size": file_size,
+    }
 
 
 if __name__ == "__main__":
