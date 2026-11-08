@@ -10,3 +10,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - 2026-11-07 (Manan): Cross-platform simulated radio bridge, bandwidth auditor (<=3 kB/s budget compliance), UAARG emu/shepard telemetry & event-logging adapters, 4-tier integration test suite, and natHacks showcase presentation orchestrator.
 - 2026-11-07 (Ishan): Browser reconstructor v2 UI — interactive per-object activity log and trace inspector grid.
 - 2026-11-07 (Ishan): Reconstructor live activity panel (direction/pace/heading per target), behavior-change event history, click-to-unlock; tester guide in `drone_node/static/RECONSTRUCTOR_SETUP.md`.
+- 2026-11-08 (Manan): Documentation & LLM Guide: Added scripts/README.md and LLM_GUIDE.md detailing 6-case benchmarks, 1:1 side-by-side showcase generator, live VisDrone UDP feeder, and model guidelines for Claude, Gemini, and ChatGPT.

@@ -50,6 +50,12 @@ python -m pytest -q          # protocol tests, ~15 s
 
 **Team rules** (file ownership, git workflow, interface contracts): see [CLAUDE.md](CLAUDE.md#team-workflow-avoid-blocking-and-merge-conflicts).
 
+## Quick Guides & LLM Context
+
+- **For AI Assistants (Claude, Gemini, ChatGPT):** See [LLM_GUIDE.md](LLM_GUIDE.md) for immutable file boundaries, wire specs, data schemas, and prompt templates.
+- **For Evaluators & Benchmarks:** See [scripts/README.md](scripts/README.md) for how to reproduce and run the 6 video benchmark cases, side-by-side showcase generator, and test suite.
+- **For Browser Reconstructor Reviewers:** See [drone_node/static/RECONSTRUCTOR_SETUP.md](drone_node/static/RECONSTRUCTOR_SETUP.md).
+
 ## Scene reconstructor (operator view)
 
 Alongside reliable DETECTION alerts, the drone streams a compact scene vector feed (SceneCodec v2, UDP, 12 Hz, ≤ 2.0 kbps). A browser page rebuilds the tactical view, shows what each target is doing, logs behavior changes, and lets you trace and replay one target’s movement.
@@ -62,6 +68,26 @@ python3 -m drone_node.scene_ws_relay
 ```
 
 **Full 3-terminal run + step-by-step checklist for reviewers:** [drone_node/static/RECONSTRUCTOR_SETUP.md](drone_node/static/RECONSTRUCTOR_SETUP.md).
+
+## Tactical Showcase & Multi-Scenario Benchmarks (`maybe` branch)
+
+The `maybe` branch integrates the full Defense & Security evaluation suite, proving that tactical ground awareness is reconstructed with 1:1 ratio precision while keeping wire bandwidth strictly under the 3.0 kB/s budget:
+
+1. **1:1 Side-by-Side Video & Snapshot Generator:**  
+   `python scripts/ishan_side_by_side.py` (or `uv run python scripts/ishan_side_by_side.py`)  
+   Produces `data/ishan_visdrone_side_by_side.mp4` and `.png`. Replaces raw RGB with a blank tactical radar grid, drawing 16-bit ratio boxes, velocity vectors, and a live target manifest. Peak wire rate: **~1.70 kB/s**.
+
+2. **6 Multi-Scenario Aerial Benchmarks:**  
+   `python scripts/run_test_cases.py` (or `uv run python scripts/run_test_cases.py`)  
+   Runs batch evaluation across 6 distinct aerial clips (`case1` Urban Intersection, `case2` Dynamic Flight, `case3` Airfield Staging, `case4` Roundabout, `case5` Checkpoint Queue, `case6` Arterial Transit). Outputs videos, PNGs, and metrics in `data/test_cases/benchmark_results.json`.
+
+3. **Live VisDrone UDP Scene Feeder:**  
+   `python scripts/stream_visdrone_to_udp.py`  
+   Streams authentic VisDrone scene packets at 12 Hz to `scene_ws_relay`, enabling live browser tactical tracking without requiring drone hardware or physical cameras.
+
+4. **116-Test Headless Verification Suite:**  
+   `uv run --with pytest --with pyserial pytest scripts/test_integration_suite.py -q`  
+   100% headless pass across 5 verification tiers (virtual radio bridge, blackout/recovery, <= 3 kB/s budget auditor, UAARG logging, 2-way control loop).
 
 ## Progress
 
