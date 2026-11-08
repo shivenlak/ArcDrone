@@ -155,6 +155,7 @@ def parse_args():
         help="Scene vector UDP rate (default 12/s); shares %.1f kbps link cap"
         % LINK_MAX_KBPS,
     )
+    parser.add_argument("--imgsz", type=int, default=640, help="YOLO input size; 1280 for small aerial objects")
     parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
     parser.add_argument("--scene-host", type=str, default="127.0.0.1", help="Ground reconstructor IP")
     parser.add_argument("--scene-port", type=int, default=9999, help="Ground reconstructor UDP port")
@@ -190,6 +191,7 @@ def main() -> None:
         model_path=args.model,
         conf_thresh=args.conf,
         cooldown_sec=args.cooldown,
+        imgsz=args.imgsz,
     )
     sim_gps = SimGps()
     scene_codec = SceneCodec(max_kbps=SCENE_MAX_KBPS, dst_size=(720, 540))
@@ -220,7 +222,7 @@ def main() -> None:
     infer_period = 1.0 / max(0.1, args.fps)
     scene_period = 1.0 / max(1.0, args.scene_hz)
     loop_period = 1.0 / max(args.fps, args.scene_hz, 1.0)
-    last_infer = 0.0
+    last_infer = float("-inf")  # read a frame on the first loop (macOS monotonic() starts near 0)
     last_scene_tx = 0.0
     current_boxes: List[Dict[str, Any]] = []
     drone_lat, drone_lon = sim_gps.base_lat, sim_gps.base_lon

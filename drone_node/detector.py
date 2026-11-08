@@ -36,9 +36,11 @@ class Detector:
         model_path: str = "yolov8n.pt",
         conf_thresh: float = 0.5,
         cooldown_sec: float = 3.0,
+        imgsz: int = 640,
     ):
         self.conf_thresh = conf_thresh
         self.cooldown_sec = cooldown_sec
+        self.imgsz = imgsz  # 1280 finds far more of VisDrone's tiny objects
         self.last_alert_time: Dict[int, float] = {}
         self.repo_classes = getattr(p, "CLASS_NAMES", VISDRONE_CLASSES)
 
@@ -63,7 +65,7 @@ class Detector:
     ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         now = time.time()
         results = self.model.predict(
-            source=frame_bgr, conf=self.conf_thresh, verbose=False
+            source=frame_bgr, conf=self.conf_thresh, imgsz=self.imgsz, verbose=False
         )
 
         all_boxes: List[Dict[str, Any]] = []
