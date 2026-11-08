@@ -57,6 +57,8 @@ python -m ground_station.server --port <groundPort> --http-port 8001      # dash
 python -m drone_node.main --port <dronePort> --video data/visdrone_demo.mp4 --imgsz 1280 --fps 10
 ```
 
+`--video` also takes a VisDrone image folder (e.g. `data/VisDrone2019-MOT-val/sequences/uav0000137_00458_v`) or a camera index (`--video 0 --imgsz 640` for a webcam). No radio? `python -m drone_node.run_demo` runs the whole stack on the fake bridge (dev only).
+
 **Encryption (optional):** generate one key and set it in both terminals before starting. With a key set, unencrypted or tampered frames are rejected.
 
 ```bash

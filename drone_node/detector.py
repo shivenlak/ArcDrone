@@ -1,4 +1,5 @@
 """Target detection and alert gating for drone edge node."""
+import math
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -36,12 +37,21 @@ class Detector:
         model_path: str = "yolov8n.pt",
         conf_thresh: float = 0.5,
         cooldown_sec: float = 3.0,
-        imgsz: int = 640,
+        spatial_hold_sec: float = 25.0,
+        match_gate_frac: float = 0.33,
+        imgsz: int = 1280,
     ):
         self.conf_thresh = conf_thresh
         self.cooldown_sec = cooldown_sec
-        self.imgsz = imgsz  # 1280 finds far more of VisDrone's tiny objects
+        self.imgsz = int(imgsz)  # 1280 finds far more tiny aerial objects than 640
+        # A target that leaves view for longer than this is treated as a new contact.
+        self.spatial_hold_sec = spatial_hold_sec
+        self.match_gate_frac = match_gate_frac
         self.last_alert_time: Dict[int, float] = {}
+        # Lightweight per-target tracks so one person = one alert while in view.
+        # Each: {"id","cls","cx","cy","last_seen","alerted","conf","bbox","label"}
+        self._tracks: List[Dict[str, Any]] = []
+        self._next_track_id = 1
         self.repo_classes = getattr(p, "CLASS_NAMES", VISDRONE_CLASSES)
 
         weights = model_path or "yolov8n.pt"
@@ -59,6 +69,48 @@ class Detector:
         if self.is_coco:
             return COCO_TO_VISDRONE.get(raw_cls, None)
         return raw_cls if raw_cls < len(self.repo_classes) else None
+
+    @staticmethod
+    def _bbox_center(bbox: Tuple[int, int, int, int]) -> Tuple[float, float]:
+        x1, y1, x2, y2 = bbox
+        return (x1 + x2) * 0.5, (y1 + y2) * 0.5
+
+    def _associate(self, detections: List[Dict[str, Any]], now: float, gate: float) -> None:
+        """Match detections to existing tracks (same class, nearest center within gate).
+
+        New, unmatched detections become fresh tracks with alerted=False, so a person
+        who stays in view keeps one track (one alert) while they move, and a person who
+        left and came back later is a new track (can alert again).
+        """
+        cutoff = now - self.spatial_hold_sec
+        self._tracks = [t for t in self._tracks if t["last_seen"] >= cutoff]
+        matched_tracks = set()
+        for det in detections:  # highest-confidence first
+            cx, cy = self._bbox_center(det["bbox"])
+            best = None
+            best_dist = gate
+            for trk in self._tracks:
+                if id(trk) in matched_tracks or trk["cls"] != det["cls"]:
+                    continue
+                dist = math.hypot(cx - trk["cx"], cy - trk["cy"])
+                if dist <= best_dist:
+                    best_dist = dist
+                    best = trk
+            if best is not None:
+                best.update(
+                    cx=cx, cy=cy, last_seen=now, conf=det["conf"],
+                    bbox=det["bbox"], label=det["label"],
+                )
+                matched_tracks.add(id(best))
+            else:
+                trk = {
+                    "id": self._next_track_id, "cls": det["cls"], "cx": cx, "cy": cy,
+                    "last_seen": now, "alerted": False, "conf": det["conf"],
+                    "bbox": det["bbox"], "label": det["label"],
+                }
+                self._next_track_id += 1
+                self._tracks.append(trk)
+                matched_tracks.add(id(trk))
 
     def process_frame(
         self, frame_bgr: np.ndarray
@@ -105,16 +157,31 @@ class Detector:
             return all_boxes, None
 
         qualifying.sort(key=lambda item: item["conf"], reverse=True)
-        top = qualifying[0]
+
+        h, w = frame_bgr.shape[:2]
+        gate = min(w, h) * self.match_gate_frac
+        self._associate(qualifying, now, gate)
+
+        # New contact = a track seen this frame that we have never alerted on.
+        fresh = [
+            t for t in self._tracks
+            if t["last_seen"] == now and not t["alerted"]
+        ]
+        if not fresh:
+            return all_boxes, None
+
+        fresh.sort(key=lambda t: t["conf"], reverse=True)
+        top = fresh[0]
         target_cls = top["cls"]
 
+        # Light pacing so a burst of new contacts does not all fire in one tick.
         last_t = self.last_alert_time.get(target_cls, 0.0)
         if (now - last_t) < self.cooldown_sec:
             return all_boxes, None
 
-        count = sum(1 for q in qualifying if q["cls"] == target_cls)
-
+        top["alerted"] = True
         self.last_alert_time[target_cls] = now
+        count = sum(1 for q in qualifying if q["cls"] == target_cls)
         alert = {
             "cls": target_cls,
             "conf": top["conf"],

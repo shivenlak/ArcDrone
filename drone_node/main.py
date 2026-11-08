@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
 
+from drone_node.delivery_verifier import DeliveryVerifier
 from drone_node.detector import Detector
+from drone_node.frame_source import open_frame_source
 from drone_node.scene_codec import (
     LINK_MAX_KBPS,
     SCENE_HZ_DEFAULT,
@@ -144,9 +146,25 @@ def draw_hud(
 def parse_args():
     parser = argparse.ArgumentParser(description="ArcDrone Edge CV & Telemetry Node")
     parser.add_argument("--port", required=True, help="Serial port or fake_bridge pty")
-    parser.add_argument("--video", required=True, help="Path to video clip or camera index (e.g. 0)")
+    parser.add_argument(
+        "--video",
+        required=True,
+        help="MP4 path, VisDrone-VID image folder (uav.../0000001.jpg), or camera index (0)",
+    )
     parser.add_argument("--conf", type=float, default=0.5, help="Detection confidence gate")
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=1280,
+        help="YOLO inference size; use 1280/1536 for high-res aerial footage",
+    )
     parser.add_argument("--cooldown", type=float, default=3.0, help="Per-class cooldown (sec)")
+    parser.add_argument(
+        "--spatial-hold",
+        type=float,
+        default=25.0,
+        help="Suppress repeat alerts for the same contact while it stays in view (sec)",
+    )
     parser.add_argument("--fps", type=float, default=2.0, help="Camera / YOLO inference rate")
     parser.add_argument(
         "--scene-hz",
@@ -155,7 +173,6 @@ def parse_args():
         help="Scene vector UDP rate (default 12/s); shares %.1f kbps link cap"
         % LINK_MAX_KBPS,
     )
-    parser.add_argument("--imgsz", type=int, default=640, help="YOLO input size; 1280 for small aerial objects")
     parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
     parser.add_argument("--scene-host", type=str, default="127.0.0.1", help="Ground reconstructor IP")
     parser.add_argument("--scene-port", type=int, default=9999, help="Ground reconstructor UDP port")
@@ -174,9 +191,19 @@ def main() -> None:
         "scene_kbps": 0.0,
     }
 
+    verifier = DeliveryVerifier()
+
     def on_event(event_type: str, **kwargs: Any) -> None:
         if event_type == "delivered":
-            state["last_rtt"] = kwargs.get("rtt_ms")
+            seq = kwargs.get("seq")
+            rtt = kwargs.get("rtt_ms")
+            state["last_rtt"] = rtt
+            if seq is not None:
+                verifier.on_delivered(int(seq), rtt)
+        elif event_type == "link_down":
+            verifier.on_link_down()
+        elif event_type == "link_up":
+            verifier.on_link_up()
         print(f"[EVENT] {event_type} | {kwargs}")
 
     def on_packet(pkt: Dict[str, Any]) -> None:
@@ -191,6 +218,7 @@ def main() -> None:
         model_path=args.model,
         conf_thresh=args.conf,
         cooldown_sec=args.cooldown,
+        spatial_hold_sec=args.spatial_hold,
         imgsz=args.imgsz,
     )
     sim_gps = SimGps()
@@ -201,20 +229,19 @@ def main() -> None:
         % (int(args.scene_hz), SCENE_MAX_KBPS)
     )
 
-    video_src = int(args.video) if str(args.video).isdigit() else args.video
-    use_camera = isinstance(video_src, int)
-    if use_camera and hasattr(cv2, "CAP_AVFOUNDATION"):
-        cap = cv2.VideoCapture(video_src, cv2.CAP_AVFOUNDATION)
-    else:
-        cap = cv2.VideoCapture(video_src)
-    if not cap.isOpened():
+    source = open_frame_source(args.video)
+    use_camera = source.is_live_camera()
+    if not source.isOpened():
         if use_camera:
             print(
-                f"[WARN] Could not open camera index {video_src}. "
-                "On macOS: grant Camera access to Terminal/Cursor and try --video 0 or --video 1."
+                f"[WARN] Could not open camera index {args.video}. "
+                "On macOS: grant Camera access and try --video 0 or --video 1."
             )
         else:
-            print(f"[WARN] Could not open video '{args.video}'. Running with fallback test frame.")
+            print(
+                f"[WARN] Could not open video or sequence '{args.video}'. "
+                "Using fallback test frame."
+            )
 
     last_frame: Optional[np.ndarray] = None
     frame_idx = 0
@@ -263,11 +290,11 @@ def main() -> None:
                 now_mono - last_infer >= infer_period
             ):
                 last_infer = now_mono
-                if cap.isOpened():
-                    ret, frame = cap.read()
+                if source.isOpened():
+                    ret, frame = source.read()
                     if not ret and not use_camera:
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        ret, frame = cap.read()
+                        source.rewind()
+                        ret, frame = source.read()
                     if ret and frame is not None:
                         last_frame = frame
                         frame_idx += 1
@@ -321,6 +348,12 @@ def main() -> None:
                     lat=t_lat,
                     lon=t_lon,
                 )
+                verifier.on_send(
+                    seq,
+                    "DETECTION",
+                    f"{alert['label']} x{alert['count']}",
+                    buffered=(not link.up or link.buffered > 1),
+                )
                 state["last_tx_str"] = (
                     f"TX #{seq}: {alert['label']} x{alert['count']} ({alert['conf']:.2f})"
                 )
@@ -330,8 +363,9 @@ def main() -> None:
                     f"lat={t_lat:.5f} lon={t_lon:.5f}"
                 )
 
-            # 5. Render HUD (or sleep if running headless on Pi / Blind Operator demo)
-            if not args.headless:
+            # 5. HUD for the local window. The drone's video never leaves the drone.
+            hud_frame = None
+            if last_frame is not None and not args.headless:
                 hud_frame = draw_hud(
                     last_frame,
                     mode=link.mode,
@@ -345,8 +379,9 @@ def main() -> None:
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
                 )
-                cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)
 
+            if not args.headless and hud_frame is not None:
+                cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)
                 elapsed = time.time() - t0
                 wait_ms = max(1, int((loop_period - elapsed) * 1000))
                 key = cv2.waitKey(wait_ms) & 0xFF
@@ -360,8 +395,11 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[MAIN] Shutting down...")
     finally:
-        if cap.isOpened():
-            cap.release()
+        try:
+            print(verifier.report(link.summary()))
+        except Exception:
+            pass
+        source.release()
         udp_sock.close()
         cv2.destroyAllWindows()
         link.stop()

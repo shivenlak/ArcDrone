@@ -21,12 +21,21 @@ class SimGps:
         self.meters_per_deg_lon = 111320.0 * math.cos(math.radians(base_lat))
 
     def position_at_frame(self, frame_idx: int, fps: float = 1.0) -> Tuple[float, float]:
-        """Calculates deterministic drone lat/lon as it flies over time."""
-        t_sec = frame_idx / max(0.1, fps)
-        dist_m = self.speed_mps * t_sec
+        """Deterministic bounded figure-eight patrol so pins stay on the operating grid.
 
-        d_north = dist_m * math.cos(self.heading_rad)
-        d_east = dist_m * math.sin(self.heading_rad)
+        A straight constant-heading flight marches the drone (and every detection
+        offset) off the map in under a minute. A closed Lissajous loop keeps the
+        track inside a fixed box while still looking like continuous flight.
+        """
+        t_sec = frame_idx / max(0.1, fps)
+        # ~90 s to traverse the full loop; radius ~120 m east / 80 m north.
+        period = 90.0
+        theta = (2.0 * math.pi * t_sec) / period
+        radius_east_m = 120.0
+        radius_north_m = 80.0
+
+        d_east = radius_east_m * math.sin(theta)
+        d_north = radius_north_m * math.sin(2.0 * theta)  # figure-eight
 
         lat = self.base_lat + (d_north / self.meters_per_deg_lat)
         lon = self.base_lon + (d_east / self.meters_per_deg_lon)
