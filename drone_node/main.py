@@ -11,6 +11,7 @@ import numpy as np
 from drone_node.delivery_verifier import DeliveryVerifier
 from drone_node.detector import Detector
 from drone_node.frame_source import open_frame_source
+from drone_node.preview_stream import PreviewStream
 from drone_node.scene_codec import (
     LINK_MAX_KBPS,
     SCENE_HZ_DEFAULT,
@@ -176,6 +177,13 @@ def parse_args():
     parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
     parser.add_argument("--scene-host", type=str, default="127.0.0.1", help="Ground reconstructor IP")
     parser.add_argument("--scene-port", type=int, default=9999, help="Ground reconstructor UDP port")
+    parser.add_argument(
+        "--preview-port",
+        type=int,
+        default=0,
+        help="Serve the HUD video over Wi-Fi (MJPEG) for the dashboard's Wi-Fi camera tab, "
+        "e.g. 8081. Off by default; never sent over the radio.",
+    )
     parser.add_argument("--headless", action="store_true", help="Run without local video window (Pi/Blind demo)")
     return parser.parse_args()
 
@@ -224,6 +232,9 @@ def main() -> None:
     sim_gps = SimGps()
     scene_codec = SceneCodec(max_kbps=SCENE_MAX_KBPS, dst_size=(720, 540))
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    preview = PreviewStream(port=args.preview_port).start() if args.preview_port > 0 else None
+    if preview is not None:
+        print("[MAIN] Wi-Fi camera preview on http://0.0.0.0:%d/video.mjpg (not over the radio)" % args.preview_port)
     print(
         "[MAIN] Scene %d Hz, budget capped at %.1f kbps"
         % (int(args.scene_hz), SCENE_MAX_KBPS)
@@ -363,9 +374,9 @@ def main() -> None:
                     f"lat={t_lat:.5f} lon={t_lon:.5f}"
                 )
 
-            # 5. HUD for the local window. The drone's video never leaves the drone.
+            # 5. HUD for the local window, and the optional Wi-Fi preview. Neither goes over the radio.
             hud_frame = None
-            if last_frame is not None and not args.headless:
+            if last_frame is not None and (not args.headless or preview is not None):
                 hud_frame = draw_hud(
                     last_frame,
                     mode=link.mode,
@@ -379,6 +390,8 @@ def main() -> None:
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
                 )
+                if preview is not None:
+                    preview.update(hud_frame)
 
             if not args.headless and hud_frame is not None:
                 cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)
@@ -399,6 +412,8 @@ def main() -> None:
             print(verifier.report(link.summary()))
         except Exception:
             pass
+        if preview is not None:
+            preview.stop()
         source.release()
         udp_sock.close()
         cv2.destroyAllWindows()
