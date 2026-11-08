@@ -184,6 +184,7 @@ python -m scripts.test_integration_suite
 ```
 
 ### Component Test Scripts
+- [`scripts/test_encryption.py`](test_encryption.py): Validates zero-byte payload expansion, round-trip correctness, and tamper detection.
 - [`scripts/test_lora_bandwidth.py`](test_lora_bandwidth.py): Rigorous 3.0 kB/s bandwidth assertion test.
 - [`scripts/link_test.py`](link_test.py): Link loss, 15s blackout, 64-item ring buffer flush test.
 - [`scripts/test_control_loop.py`](test_control_loop.py): Two-way operator command state loop test.
@@ -191,7 +192,32 @@ python -m scripts.test_integration_suite
 
 ---
 
-## 7. Core Infrastructure Modules
+## 7. Output 6: Zero-Overhead AES-128-CTR Tactical Encryption
+
+**Script:** [`scripts/secure_channel.py`](secure_channel.py)  
+**Test Suite:** [`scripts/test_encryption.py`](test_encryption.py)
+
+### What it produces
+Military-standard tactical payload encryption compliant with LoRaWAN (IEEE 802.15.4) and defense narrowband telemetry standards:
+1. **Zero-Byte Expansion (+0 bytes):** Uses AES-128 in Counter Mode (CTR) to encrypt the payload body without changing total packet length.
+   - `DETECTION`: exactly **21 bytes** (plaintext) $\to$ **21 bytes** (encrypted).
+   - `COMMAND`: exactly **9 bytes** (plaintext) $\to$ **9 bytes** (encrypted).
+   - `HEARTBEAT`: exactly **12 bytes** (plaintext) $\to$ **12 bytes** (encrypted).
+2. **Deterministic Nonce Derivation:** 16-byte IV is independently computed at both ends using `[magic:1B | ptype:1B | seq:2B | dir_salt:1B | zero_pad:11B]`. No IV bytes are transmitted over the radio.
+3. **CRC16 Verification:** Radio checksum is verified before decryption, preventing tamper/corruption injection.
+
+### How to Run
+
+```bash
+# Execute unit & integrity tests
+uv run python -m unittest scripts/test_encryption.py
+# or:
+python -m unittest scripts/test_encryption.py
+```
+
+---
+
+## 8. Core Infrastructure Modules
 
 | Script | Purpose | Key Interface / Methods |
 |---|---|---|

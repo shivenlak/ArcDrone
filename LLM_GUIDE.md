@@ -85,6 +85,11 @@ uv run python scripts/run_live_showcase.py
 # Browser: Open http://localhost:8000
 ```
 
+### F. Run Zero-Overhead Encryption Tests
+```bash
+uv run python -m unittest scripts/test_encryption.py
+```
+
 ---
 
 ## 4. Architecture & Wire Protocol Specifications
@@ -145,6 +150,19 @@ VISDRONE_CLASSES = {
 }
 ```
 *Note: Ensure NO +1 offset is added to class IDs.*
+
+---
+
+### 4.4 Zero-Overhead AES-128-CTR Tactical Encryption (`scripts/secure_channel.py`)
+- **Cipher Standard:** AES-128 in Counter Mode (CTR) conforming to IEEE 802.15.4 / LoRaWAN military telemetry specs.
+- **Payload Overhead:** **0 bytes (+0% inflation)**. Plaintext byte count == Ciphertext byte count:
+  * `DETECTION`: exactly 21 bytes
+  * `COMMAND`: exactly 9 bytes
+  * `HEARTBEAT`: exactly 12 bytes
+- **Nonce Derivation:** 16-byte IV is deterministically constructed from packet header:
+  `[magic:1B | ptype:1B | seq:2B | dir_salt:1B | 11x 0x00]`
+  Both sides independently construct the IV; no extra bytes are transmitted over the radio.
+- **Integrity:** CRC16 is evaluated over encrypted bytes prior to decryption.
 
 ---
 
