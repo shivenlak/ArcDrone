@@ -102,9 +102,9 @@ def _box_iou_ratio(
 
 
 class DroneIndexedTracker:
-    """Tracks YOLO detections on the drone with tight IoU + centroid matching and stable #Index."""
+    """ByteTrack-style two-stage hysteresis tracker with velocity coasting so objects stay rock-stable."""
 
-    def __init__(self, max_unseen_frames: int = 10) -> None:
+    def __init__(self, max_unseen_frames: int = 36) -> None:
         self.next_id = 1
         self.tracks: Dict[int, Dict[str, Any]] = {}
         self.max_unseen = max_unseen_frames
@@ -113,17 +113,21 @@ class DroneIndexedTracker:
     def update(
         self, detections: List[Dict[str, Any]], frame_w: int, frame_h: int, sim_t: float
     ) -> List[Dict[str, Any]]:
+        dt_step = 1.0 / 24.0
         for trk in self.tracks.values():
             trk["unseen"] += 1
+            # Gently coast unseen tracks along their velocity vector (damped) so brief YOLO dips stay smooth
+            if 1 <= trk["unseen"] <= 8:
+                trk["cx_r"] = max(0.0, min(1.0, trk["cx_r"] + trk["vx_r"] * dt_step * 0.8))
+                trk["cy_r"] = max(0.0, min(1.0, trk["cy_r"] + trk["vy_r"] * dt_step * 0.8))
 
-        # Filter out noisy low-confidence flicker and sort highest confidence first
-        dets_sorted = [d for d in detections if d["conf"] >= 0.34]
+        # ByteTrack hysteresis: accept conf >= 0.22 to keep existing tracks alive, require conf >= 0.42 for new tracks
+        dets_sorted = [d for d in detections if d["conf"] >= 0.22]
         dets_sorted.sort(key=lambda d: d["conf"], reverse=True)
 
         matched_tids = set()
         used_dets = set()
 
-        # Pass 1: Strict IoU + Tight Centroid matching for existing tracks
         det_ratios = []
         for det in dets_sorted:
             x1, y1, x2, y2 = det["bbox"]
@@ -142,16 +146,18 @@ class DroneIndexedTracker:
                 )
             )
 
-        # Build candidate pairs (score, tid, det_idx)
+        # Pass 1: Match existing tracks using IoU + velocity-predicted centroid distance
         candidates: List[Tuple[float, int, int]] = []
         for d_idx, (cx_r, cy_r, w_r, h_r, cls_id, conf) in enumerate(det_ratios):
             for tid, trk in self.tracks.items():
                 dist = math.hypot(cx_r - trk["cx_r"], cy_r - trk["cy_r"])
-                if dist > 0.024:  # Strict 2.4% max jump (~90px in 4K) so lanes never cross-match
+                max_r = 0.028 if trk["unseen"] <= 2 else 0.036
+                if dist > max_r:
                     continue
                 iou = _box_iou_ratio(cx_r, cy_r, w_r, h_r, trk["cx_r"], trk["cy_r"], trk["w_r"], trk["h_r"])
                 cls_bonus = 0.25 if trk["cls"] == cls_id else 0.0
-                score = iou + (0.024 - dist) * 15.0 + cls_bonus
+                conf_bonus = 0.15 if conf >= 0.35 else 0.0
+                score = iou + (max_r - dist) * 18.0 + cls_bonus + conf_bonus
                 candidates.append((score, tid, d_idx))
 
         candidates.sort(key=lambda x: x[0], reverse=True)
@@ -161,16 +167,21 @@ class DroneIndexedTracker:
             cx_r, cy_r, w_r, h_r, cls_id, conf = det_ratios[d_idx]
             trk = self.tracks[tid]
             dt = max(0.02, sim_t - trk["last_seen_t"])
-            inst_vx = (cx_r - trk["cx_r"]) / dt
-            inst_vy = (cy_r - trk["cy_r"]) / dt
-            trk["vx_r"] = 0.55 * inst_vx + 0.45 * trk["vx_r"]
-            trk["vy_r"] = 0.55 * inst_vy + 0.45 * trk["vy_r"]
-            trk["cx_r"] = cx_r
-            trk["cy_r"] = cy_r
-            trk["w_r"] = 0.7 * w_r + 0.3 * trk["w_r"]
-            trk["h_r"] = 0.7 * h_r + 0.3 * trk["h_r"]
-            trk["conf"] = conf
-            if conf > 0.45:
+            inst_vx = (cx_r - trk["last_seen_cx_r"]) / dt
+            inst_vy = (cy_r - trk["last_seen_cy_r"]) / dt
+            # Clamp extreme jitter spikes
+            inst_vx = max(-0.18, min(0.18, inst_vx))
+            inst_vy = max(-0.18, min(0.18, inst_vy))
+            trk["vx_r"] = 0.45 * inst_vx + 0.55 * trk["vx_r"]
+            trk["vy_r"] = 0.45 * inst_vy + 0.55 * trk["vy_r"]
+            trk["cx_r"] = 0.75 * cx_r + 0.25 * trk["cx_r"]
+            trk["cy_r"] = 0.75 * cy_r + 0.25 * trk["cy_r"]
+            trk["last_seen_cx_r"] = trk["cx_r"]
+            trk["last_seen_cy_r"] = trk["cy_r"]
+            trk["w_r"] = 0.65 * w_r + 0.35 * trk["w_r"]
+            trk["h_r"] = 0.65 * h_r + 0.35 * trk["h_r"]
+            trk["conf"] = 0.7 * conf + 0.3 * trk["conf"]
+            if conf > 0.48:
                 trk["cls"] = cls_id
                 trk["label"] = VISDRONE_CLASSES[cls_id]
             trk["unseen"] = 0
@@ -179,12 +190,23 @@ class DroneIndexedTracker:
             matched_tids.add(tid)
             used_dets.add(d_idx)
 
-        # Pass 2: Register genuinely new detections
+        # Pass 2: Register genuinely new detections (strictly conf >= 0.42 and not overlapping any existing track)
         for d_idx, (cx_r, cy_r, w_r, h_r, cls_id, conf) in enumerate(det_ratios):
             if d_idx in used_dets:
                 continue
-            if conf < 0.38:  # Require solid confidence to spawn a new index
+            if conf < 0.42:
                 continue
+            # Do not spawn a duplicate track if it overlaps an existing track
+            too_close = False
+            for trk in self.tracks.values():
+                if math.hypot(cx_r - trk["cx_r"], cy_r - trk["cy_r"]) < 0.025 or (
+                    _box_iou_ratio(cx_r, cy_r, w_r, h_r, trk["cx_r"], trk["cy_r"], trk["w_r"], trk["h_r"]) > 0.25
+                ):
+                    too_close = True
+                    break
+            if too_close:
+                continue
+
             is_confirmed = sim_t <= 0.05
             pub_id = self.next_id if is_confirmed else 0
             if is_confirmed:
@@ -197,6 +219,8 @@ class DroneIndexedTracker:
                 "conf": conf,
                 "cx_r": cx_r,
                 "cy_r": cy_r,
+                "last_seen_cx_r": cx_r,
+                "last_seen_cy_r": cy_r,
                 "w_r": w_r,
                 "h_r": h_r,
                 "vx_r": 0.0,
@@ -213,30 +237,31 @@ class DroneIndexedTracker:
                 "last_tx_t": -10.0,
             }
 
-        # Promote tentative tracks that reached hits >= 2 to sequential public #Index
+        # Promote tentative tracks that reached hits >= 3 to sequential public #Index
         for raw_key in list(self.tracks.keys()):
             trk = self.tracks[raw_key]
-            if trk["id"] == 0 and trk["hits"] >= 2:
+            if trk["id"] == 0 and trk["hits"] >= 3:
                 pub_id = self.next_id
                 self.next_id += 1
                 trk["id"] = pub_id
                 del self.tracks[raw_key]
                 self.tracks[pub_id] = trk
 
-        # Prune stale tracks
+        # Only prune tracks that have genuinely left the scene for > max_unseen frames (1.5 seconds)
         for tid in list(self.tracks.keys()):
-            if self.tracks[tid]["unseen"] > self.max_unseen or (self.tracks[tid]["id"] == 0 and self.tracks[tid]["unseen"] > 1):
+            if self.tracks[tid]["unseen"] > self.max_unseen or (self.tracks[tid]["id"] == 0 and self.tracks[tid]["unseen"] > 2):
                 if self.tracks[tid]["synced"] and self.tracks[tid]["id"] > 0:
                     self.dropped_ids.append(self.tracks[tid]["id"])
                 del self.tracks[tid]
 
-        return [t for t in self.tracks.values() if t["id"] > 0 and t["unseen"] <= 2]
+        # Return all confirmed tracks (keep visible during brief coasting up to 12 frames = 0.5s so zero flicker!)
+        return [t for t in self.tracks.values() if t["id"] > 0 and t["unseen"] <= 12]
 
 
 class SpreadOutVectorTransmitter:
     """Paces and spreads object updates across 12 FPS packets (max N updates per packet)."""
 
-    def __init__(self, target_fps: float = 12.0, max_updates_per_pkt: int = 11) -> None:
+    def __init__(self, target_fps: float = 12.0, max_updates_per_pkt: int = 12) -> None:
         self.target_fps = target_fps
         self.pkt_interval = 1.0 / target_fps
         self.max_updates_per_pkt = max_updates_per_pkt
@@ -247,6 +272,53 @@ class SpreadOutVectorTransmitter:
     def should_send_packet(self, sim_t: float) -> bool:
         return (sim_t - self.last_pkt_sim_t) >= (self.pkt_interval - 1e-4)
 
+    def build_initial_baseline_packets(
+        self,
+        active_tracks: List[Dict[str, Any]],
+        drone_lat: float,
+        drone_lon: float,
+        sim_t: float,
+    ) -> List[bytes]:
+        """Synchronizes initial scene baseline at t=0 so objects don't pop in over 3 seconds."""
+        pkts: List[bytes] = []
+        unsynced = [t for t in active_tracks if not t["synced"]]
+        unsynced.sort(key=lambda t: t["id"])
+        batch_size = 14
+        for i in range(0, len(unsynced), batch_size):
+            batch = unsynced[i : i + batch_size]
+            self.seq = (self.seq + 1) & 0xFFFF
+            payload_chunks: List[bytes] = []
+            for trk in batch:
+                chunk = struct.pack(
+                    ">BHBBHHHH",
+                    OP_INIT_BOX,
+                    trk["id"] & 0xFFFF,
+                    trk["cls"] & 0xFF,
+                    int(round(trk["conf"] * 100.0)) & 0xFF,
+                    quantize_u16(trk["cx_r"]),
+                    quantize_u16(trk["cy_r"]),
+                    quantize_u16(trk["w_r"]),
+                    quantize_u16(trk["h_r"]),
+                )
+                payload_chunks.append(chunk)
+                trk["synced"] = True
+                trk["sent_cx_r"] = trk["cx_r"]
+                trk["sent_cy_r"] = trk["cy_r"]
+                trk["sent_w_r"] = trk["w_r"]
+                trk["sent_h_r"] = trk["h_r"]
+                trk["last_tx_t"] = sim_t
+            header = struct.pack(
+                ">BBHff",
+                MAGIC_VEC,
+                len(payload_chunks) & 0xFF,
+                self.seq,
+                float(drone_lat),
+                float(drone_lon),
+            )
+            pkts.append(header + b"".join(payload_chunks))
+        self.last_pkt_sim_t = sim_t
+        return pkts
+
     def build_spread_packet(
         self,
         tracker: DroneIndexedTracker,
@@ -255,30 +327,29 @@ class SpreadOutVectorTransmitter:
         drone_lon: float,
         sim_t: float,
     ) -> Tuple[bytes, List[Tuple[int, str]]]:
-        """Builds a single compact packet containing a spread-out slice of updates."""
+        """Builds a single compact 12 FPS packet containing spread-out vector deltas."""
         self.seq = (self.seq + 1) & 0xFFFF
         self.last_pkt_sim_t = sim_t
 
         payload_chunks: List[bytes] = []
         updated_records: List[Tuple[int, str]] = []
 
-        # 1. Include up to 2 dropped IDs
+        # 1. Include up to 2 dropped IDs (only when an object genuinely leaves the scene)
         while tracker.dropped_ids and len(payload_chunks) < 2:
             drop_id = tracker.dropped_ids.pop(0)
-            payload_chunks.append(struct.pack(">BB", OP_DROP_BOX, drop_id & 0xFF))
+            payload_chunks.append(struct.pack(">BH", OP_DROP_BOX, drop_id & 0xFFFF))
             updated_records.append((drop_id, "DROP"))
 
-        # 2. Unsynced new objects (spread out: up to 8 INIT_BOX per packet during bootstrap, leaving room for VEC_DELTA)
+        # 2. Unsynced newly entered objects (up to 3 per packet)
         unsynced = [t for t in active_tracks if not t["synced"]]
-        unsynced.sort(key=lambda t: (t["id"], -t["conf"]))
-        max_init = 8 if len(unsynced) > 6 else 4
-        for trk in unsynced[:max_init]:
+        unsynced.sort(key=lambda t: t["id"])
+        for trk in unsynced[:3]:
             if len(payload_chunks) >= self.max_updates_per_pkt:
                 break
             chunk = struct.pack(
-                ">BBBBHHHH",
+                ">BHBBHHHH",
                 OP_INIT_BOX,
-                trk["id"] & 0xFF,
+                trk["id"] & 0xFFFF,
                 trk["cls"] & 0xFF,
                 int(round(trk["conf"] * 100.0)) & 0xFF,
                 quantize_u16(trk["cx_r"]),
@@ -295,18 +366,20 @@ class SpreadOutVectorTransmitter:
             trk["last_tx_t"] = sim_t
             updated_records.append((trk["id"], "INIT"))
 
-        # 3. Synced objects needing vector updates (prioritized by vector displacement + age)
-        synced = [t for t in active_tracks if t["synced"] and t["last_tx_t"] < sim_t]
-
-        def update_priority(t: Dict[str, Any]) -> float:
+        # 3. Synced objects needing vector updates — prioritize objects that ACTUALLY MOVED
+        synced = []
+        for t in active_tracks:
+            if not t["synced"] or t["last_tx_t"] >= sim_t:
+                continue
             disp = math.hypot(t["cx_r"] - t["sent_cx_r"], t["cy_r"] - t["sent_cy_r"])
             size_diff = abs(t["w_r"] - t["sent_w_r"]) + abs(t["h_r"] - t["sent_h_r"])
-            age = sim_t - t["last_tx_t"]
-            return (disp * 30.0) + (size_diff * 10.0) + (age * 2.0)
+            # Only send vector update if object moved >= 0.12% (~4.5px in 4K) or hasn't been touched in >1.8s
+            if disp >= 0.0012 or size_diff >= 0.002 or (sim_t - t["last_tx_t"]) >= 1.8:
+                synced.append((disp * 45.0 + size_diff * 12.0 + (sim_t - t["last_tx_t"]) * 0.8, t))
 
-        synced.sort(key=update_priority, reverse=True)
+        synced.sort(key=lambda x: x[0], reverse=True)
 
-        for trk in synced:
+        for _, trk in synced:
             if len(payload_chunks) >= self.max_updates_per_pkt:
                 break
             dcx_r = trk["cx_r"] - trk["sent_cx_r"]
@@ -320,9 +393,9 @@ class SpreadOutVectorTransmitter:
             dh_i8 = quantize_i8_size(dh_r)
 
             chunk = struct.pack(
-                ">BBhhbb",
+                ">BHhhbb",
                 OP_VEC_DELTA,
-                trk["id"] & 0xFF,
+                trk["id"] & 0xFFFF,
                 dcx_i16,
                 dcy_i16,
                 dw_i8,
@@ -370,28 +443,29 @@ class GroundVectorReceiver:
         self.last_pkt_bytes = 0
         self.last_updated_ids: List[Tuple[int, str]] = []
 
-    def receive_packet(self, pkt: bytes, sim_t: float) -> None:
+    def receive_packet(self, pkt: bytes, sim_t: float, count_stats: bool = True) -> None:
         if len(pkt) < 12 or pkt[0] != MAGIC_VEC:
             return
         _, count, seq, lat, lon = struct.unpack(">BBHff", pkt[:12])
         self.last_seq = seq
         self.drone_lat = lat
         self.drone_lon = lon
-        self.total_pkts += 1
-        self.total_bytes += len(pkt)
-        self.last_pkt_bytes = len(pkt)
-        self.last_updated_ids = []
+        if count_stats:
+            self.total_pkts += 1
+            self.total_bytes += len(pkt)
+            self.last_pkt_bytes = len(pkt)
+            self.last_updated_ids = []
 
         offset = 12
         for _ in range(count):
             if offset >= len(pkt):
                 break
             op = pkt[offset]
-            if op == OP_INIT_BOX and offset + 12 <= len(pkt):
+            if op == OP_INIT_BOX and offset + 13 <= len(pkt):
                 _, tid, cls_id, conf_u8, cx_u16, cy_u16, w_u16, h_u16 = struct.unpack(
-                    ">BBBBHHHH", pkt[offset : offset + 12]
+                    ">BHBBHHHH", pkt[offset : offset + 13]
                 )
-                offset += 12
+                offset += 13
                 cx_r = dequantize_u16(cx_u16)
                 cy_r = dequantize_u16(cy_u16)
                 w_r = dequantize_u16(w_u16)
@@ -411,15 +485,16 @@ class GroundVectorReceiver:
                     "vy_r": 0.0,
                     "last_rx_t": sim_t,
                     "last_op": "INIT_BOX",
-                    "trail": deque([(cx_r, cy_r)], maxlen=18),
+                    "trail": deque([(cx_r, cy_r)], maxlen=20),
                 }
-                self.last_updated_ids.append((tid, "INIT"))
+                if count_stats:
+                    self.last_updated_ids.append((tid, "INIT"))
 
-            elif op == OP_VEC_DELTA and offset + 8 <= len(pkt):
+            elif op == OP_VEC_DELTA and offset + 9 <= len(pkt):
                 _, tid, dcx_i16, dcy_i16, dw_i8, dh_i8 = struct.unpack(
-                    ">BBhhbb", pkt[offset : offset + 8]
+                    ">BHhhbb", pkt[offset : offset + 9]
                 )
-                offset += 8
+                offset += 9
                 dcx_r = dequantize_i16(dcx_i16)
                 dcy_r = dequantize_i16(dcy_i16)
                 dw_r = dequantize_i8_size(dw_i8)
@@ -434,8 +509,8 @@ class GroundVectorReceiver:
                     b["h_r"] = max(0.004, min(1.0, b["h_r"] + dh_r))
                     b["dx_r"] = dcx_r
                     b["dy_r"] = dcy_r
-                    b["vx_r"] = 0.6 * (dcx_r / dt) + 0.4 * b["vx_r"]
-                    b["vy_r"] = 0.6 * (dcy_r / dt) + 0.4 * b["vy_r"]
+                    b["vx_r"] = 0.55 * (dcx_r / dt) + 0.45 * b["vx_r"]
+                    b["vy_r"] = 0.55 * (dcy_r / dt) + 0.45 * b["vy_r"]
                     b["last_rx_t"] = sim_t
                     b["last_op"] = "VEC_DELTA"
                     if not b["trail"] or math.hypot(b["cx_r"] - b["trail"][-1][0], b["cy_r"] - b["trail"][-1][1]) < 0.03:
@@ -443,20 +518,19 @@ class GroundVectorReceiver:
                     else:
                         b["trail"].clear()
                         b["trail"].append((b["cx_r"], b["cy_r"]))
-                    self.last_updated_ids.append((tid, "VEC"))
+                    if count_stats:
+                        self.last_updated_ids.append((tid, "VEC"))
 
-            elif op == OP_DROP_BOX and offset + 2 <= len(pkt):
-                _, tid = struct.unpack(">BB", pkt[offset : offset + 2])
-                offset += 2
+            elif op == OP_DROP_BOX and offset + 3 <= len(pkt):
+                _, tid = struct.unpack(">BH", pkt[offset : offset + 3])
+                offset += 3
                 self.boxes.pop(tid, None)
-                self.last_updated_ids.append((tid, "DROP"))
+                if count_stats:
+                    self.last_updated_ids.append((tid, "DROP"))
             else:
                 break
-
-        # Expire any stale ground boxes not refreshed in >2.0s
-        for tid in list(self.boxes.keys()):
-            if (sim_t - self.boxes[tid]["last_rx_t"]) > 2.0:
-                del self.boxes[tid]
+        # NOTE: Ground boxes are persistent state and NEVER auto-expire on a 2.0s timer!
+        # They remain stable at their last received ratio until updated by OP_VEC_DELTA or removed by OP_DROP_BOX.
 
 
 def draw_pill_label(
@@ -738,8 +812,8 @@ def run_pipeline(
     detector = Detector(model_path=model_path, conf_thresh=0.30, cooldown_sec=1.0)
     sim_gps = SimGps()
 
-    drone_tracker = DroneIndexedTracker(max_unseen_frames=10)
-    transmitter = SpreadOutVectorTransmitter(target_fps=12.0, max_updates_per_pkt=9)
+    drone_tracker = DroneIndexedTracker(max_unseen_frames=36)
+    transmitter = SpreadOutVectorTransmitter(target_fps=12.0, max_updates_per_pkt=12)
     receiver = GroundVectorReceiver()
 
     # Exact 1:1 16:9 Canvas dimensions: 960x540 Left + 960x540 Right = 1920x540
@@ -765,9 +839,9 @@ def run_pipeline(
         frame_idx += 1
         sim_t = frame_idx / 24.0  # Deterministic simulation clock (24 FPS video timeline)
 
-        # 1. Run YOLOv8-VisDrone at imgsz=1280 so small highway cars in 4K are cleanly detected
+        # 1. Run YOLOv8-VisDrone at imgsz=1280 (conf=0.22 for ByteTrack hysteresis track continuation)
         results = detector.model.predict(
-            source=raw_frame, imgsz=1280, conf=0.30, iou=0.45, verbose=False
+            source=raw_frame, imgsz=1280, conf=0.22, iou=0.45, verbose=False
         )
         raw_boxes: List[Dict[str, Any]] = []
         if results and results[0].boxes is not None:
@@ -789,8 +863,14 @@ def run_pipeline(
         active_tracks = drone_tracker.update(raw_boxes, src_w, src_h, sim_t)
         drone_lat, drone_lon = sim_gps.position_at_frame(frame_idx, fps=24.0)
 
-        # 3. Spread-out 12 FPS packet transmission (1 packet every 83.3 ms = every 2 frames at 24 FPS)
-        if transmitter.should_send_packet(sim_t):
+        # 3. Initial baseline sync on Frame 1, then strict 12 FPS spread-out vector delta packets
+        if frame_idx == 1:
+            init_pkts = transmitter.build_initial_baseline_packets(
+                active_tracks, drone_lat, drone_lon, sim_t
+            )
+            for idx_p, ipkt in enumerate(init_pkts):
+                receiver.receive_packet(ipkt, sim_t, count_stats=(idx_p == len(init_pkts) - 1))
+        elif transmitter.should_send_packet(sim_t):
             pkt, _ = transmitter.build_spread_packet(
                 drone_tracker, active_tracks, drone_lat, drone_lon, sim_t
             )
