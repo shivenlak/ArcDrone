@@ -225,6 +225,7 @@ python -m unittest scripts/test_encryption.py
 
 | Script | Purpose | Key Interface / Methods |
 |---|---|---|
+| [`industry_expert_audit.py`](industry_expert_audit.py) | Automated recurring 30-minute defense & systems audit | `audit_solution()`, tests encryption, bandwidth, constraints |
 | [`sim_link_bridge.py`](sim_link_bridge.py) | In-memory virtual serial radio bridge for Windows & Linux | `create_linked_pair()`, `cut()`, `restore()`, `dual_path`, `set_radio_mode()`, `get_role()`, `packet_loss_rate` |
 | [`bandwidth_monitor.py`](bandwidth_monitor.py) | Sliding window byte-rate auditor | `record_tx()`, `sample()`, `peak_wire_bps`, `within_budget` |
 | [`uaarg_adapter/event_logger.py`](uaarg_adapter/event_logger.py) | Shepard-style session logging | `log_event()`, writes `images/`, `bb/`, and structured `<seq>.json` |
