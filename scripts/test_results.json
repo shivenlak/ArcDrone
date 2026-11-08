@@ -1,10 +1,10 @@
 {
-  "timestamp": 1794091375.1229684,
+  "timestamp": 1794170695.8529685,
   "total": 9,
   "passed": 9,
   "failed": 0,
   "all_passed": true,
-  "duration_sec": 6.33,
+  "duration_sec": 6.42,
   "tests": [
     {
       "test": "Virtual Serial Pair Basic I/O",
@@ -24,7 +24,7 @@
     {
       "test": "UAARG Event Logger Structure & Schema",
       "status": "PASSED",
-      "duration_sec": 0.172
+      "duration_sec": 0.036
     },
     {
       "test": "UAARG Mission Monitor Liveness & Severities",
@@ -39,17 +39,17 @@
     {
       "test": "Integrated Two-Way Command State Loop",
       "status": "PASSED",
-      "duration_sec": 0.452
+      "duration_sec": 0.458
     },
     {
       "test": "Integrated Link Loss, Outage & Recovery Flush",
       "status": "PASSED",
-      "duration_sec": 4.102
+      "duration_sec": 4.309
     },
     {
       "test": "Integrated Bandwidth Compliance (<= 3 kB/s)",
       "status": "PASSED",
-      "duration_sec": 1.603
+      "duration_sec": 1.612
     }
   ]
 }
