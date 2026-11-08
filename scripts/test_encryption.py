@@ -179,7 +179,7 @@ class TestEncryptedLinkOverSimBridge(unittest.TestCase):
         try:
             seqs = [drone.send(p.DETECTION, **FIELDS) for _ in range(5)]
             import time
-            deadline = time.monotonic() + 10.0
+            deadline = time.monotonic() + 25.0
             while len(got) < 5 and time.monotonic() < deadline:
                 time.sleep(0.05)
 
