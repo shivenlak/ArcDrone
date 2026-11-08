@@ -37,6 +37,12 @@ def unwrap_ts(ts_ms):
     return int(time.time() * 1000) - age, age
 
 
+def raw_hex(packet):
+    """The packet's bytes as they crossed the radio. Re-encoding a decoded packet is exact."""
+    fields = {k: v for k, v in packet.items() if k not in ("type", "seq")}
+    return p.encode(packet["type"], packet["seq"], **fields).hex().upper()
+
+
 class Station:
     def __init__(self, port):
         self.port = port
@@ -89,6 +95,7 @@ class Station:
                 "conf": round(packet["conf"], 2), "count": packet["count"],
                 "lat": packet["lat"], "lon": packet["lon"],
                 "ts_ms": ts_ms, "delayed": age > DELAYED_AFTER_MS,
+                "raw": raw_hex(packet),
             })
         elif packet["type"] == p.HEARTBEAT:
             self.mode = p.MODE_NAMES.get(packet["mode"], "PATROL")

@@ -1,3 +1,6 @@
+import random
+
+from protocol import packets as p
 from protocol.packets import (
     ACK, COMMAND, CMD_HOLD, DETECTION, HEARTBEAT, MODE_PATROL,
     decode, encode, from_line, to_line,
@@ -20,6 +23,18 @@ def test_detection_round_trip():
     assert abs(p["conf"] - 0.91) < 1 / 255
     assert abs(p["lat"] - 53.5461245) < 1e-7
     assert abs(p["lon"] + 113.4937266) < 1e-7
+
+
+def test_reencode_is_byte_exact():
+    # The dashboard shows a received packet's bytes by re-encoding the decoded dict.
+    rng = random.Random(1)
+    for _ in range(500):
+        data = p.encode(p.DETECTION, rng.randrange(0x10000), ts_ms=rng.randrange(2**32),
+                        cls=rng.randrange(10), conf=rng.random(), count=rng.randrange(256),
+                        lat=rng.uniform(-90, 90), lon=rng.uniform(-180, 180))
+        pkt = p.decode(data)
+        fields = {k: v for k, v in pkt.items() if k not in ("type", "seq")}
+        assert p.encode(pkt["type"], pkt["seq"], **fields) == data
 
 
 def test_command_round_trip():

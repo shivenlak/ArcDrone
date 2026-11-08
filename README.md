@@ -91,12 +91,12 @@ The `maybe` branch integrates the full Defense & Security evaluation suite, prov
 
 ## Progress
 
-- [x] **Phase 0:** Radio smoke test (hex lines echo both ways)
-- [x] **Phase 1:** MVP loop (detection → radio → ground print → ACK + RTT)
-- [x] **Phase 2:** Real YOLO detections on VisDrone footage (Pi 4 benchmark gate: 95.5 FPS)
-- [x] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, 64-entry ring buffer)
-- [x] **Phase 4:** Ground station UI + operator acknowledge/override (HOLD / RESUME / RTB)
-- [x] **Phase 5:** Low-bandwidth compliance (<= 3 kB/s budget monitor, UAARG telemetry/logging adapter)
+- [x] **Phase 0:** Radio smoke test (hex lines echo both ways). Passed on 2× Feather V2, boards 1–2 cm apart, no antennas yet.
+- [x] **Phase 1:** MVP loop (detection → radio → ground print → ACK + RTT). 100/100 delivered, 0 retries, RTT 16.5 ms avg (same setup).
+- [x] **Phase 2:** Real YOLO detections on VisDrone footage. COCO yolov8n at imgsz 1280 on the Mac, on a 51 s VisDrone2019-MOT clip at 10 fps: ~64 ms/frame, ~0.5 alerts/s (car, pedestrian, truck, bus, bicycle). Pi 4 benchmark not measured yet.
+- [x] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, ring buffer). On real boards: 14 s SW38 mute → LINK_DOWN in 3.1 s, 120/120 delivered exactly once, 30 DELAYED; drone USB unplug/replug → auto-recovered in 2.7 s, 100/100.
+- [x] **Phase 4:** Ground station UI + operator acknowledge/override. On real boards: ACK, HOLD, RESUME, RTB all CONFIRMED; a HOLD sent during a mute stayed PENDING and froze the drone right after restore (43 buffered alerts flushed first); 11 commands queued during an outage were delivered in click order.
+- [ ] **Phase 5:** Stretch (dual-path ESP-NOW + LoRa, metrics panel, mute button)
 
 ## Team
 

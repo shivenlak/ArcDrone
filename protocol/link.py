@@ -100,6 +100,8 @@ class Link:
             "dropped": self.stats["dropped"],
             "rtt_ms_avg": round(sum(rtts) / len(rtts), 1) if rtts else None,
             "rtt_ms_p95": round(rtts[int(0.95 * (len(rtts) - 1))], 1) if rtts else None,
+            "bytes_tx": self.stats["bytes_tx"],  # packet bytes sent / valid bytes received over the radio
+            "bytes_rx": self.stats["bytes_rx"],  # (binary size; the serial hop is hex, so twice that)
         }
 
     # --- link thread ---
@@ -136,6 +138,7 @@ class Link:
         self._ser = None
 
     def _write(self, data):
+        self.stats["bytes_tx"] += len(data)
         self._ser.write(p.to_line(data).encode())
 
     def _read(self):
@@ -153,6 +156,7 @@ class Link:
         if packet is None:
             self.stats["bad_packets"] += 1
             return
+        self.stats["bytes_rx"] += len(data)
 
         now = time.monotonic()
         self._last_heard = now
