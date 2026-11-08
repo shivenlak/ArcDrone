@@ -14,10 +14,11 @@
 //     without LoRa: BOTH -> MUTED -> BOTH
 //   MUTED drops all TX and RX, so link loss can be shown on demand. The LED stays solid
 //   while muted and flickers on every packet otherwise.
-//   HAS_OLED: the screen shows the mode, per-radio packet counts and signal strength.
+//   HAS_OLED: the screen shows DRONE/GROUND, the mode, per-radio signal bars, RSSI and
+//   packet counts, and the last packet.
 //
 // The bridge knows nothing about the protocol. Seq, ACK, retry and buffering all
-// live in protocol/ (Python). The OLED peeks at byte 1 (packet type) only to label it.
+// live in protocol/ (Python). The OLED peeks at the type and seq bytes only to label things.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -70,7 +71,23 @@ volatile int rssi[2] = {0, 0};
 unsigned long lastRxAt[2] = {0, 0};
 float loraSnr = 0;
 uint8_t lastType = 0;
+unsigned int lastSeq = 0;
 bool lastWasTx = false;
+
+// Which side this board is on, for the OLED label only. Learned from traffic: the drone
+// sends DETECTIONs and receives COMMANDs; the ground does the opposite.
+enum Role { ROLE_UNKNOWN, ROLE_DRONE, ROLE_GROUND };
+Role role = ROLE_UNKNOWN;
+const uint8_t MAGIC = 0xD2, TYPE_DETECTION = 0x01, TYPE_COMMAND = 0x04;
+
+void notePacket(const uint8_t *data, int len, bool tx) {
+  if (len < 4 || data[0] != MAGIC) return;
+  lastType = data[1];
+  lastSeq = data[2] | (data[3] << 8);
+  lastWasTx = tx;
+  if (data[1] == TYPE_DETECTION) role = tx ? ROLE_DRONE : ROLE_GROUND;
+  if (data[1] == TYPE_COMMAND) role = tx ? ROLE_GROUND : ROLE_DRONE;
+}
 
 bool espNowOn() { return mode == MODE_BOTH; }
 bool loraOn() { return mode != MODE_MUTED; }
@@ -170,43 +187,98 @@ void oledSetup() {
   digitalWrite(36, LOW);
   delay(50);
   oled.begin();
-  oled.setFont(u8g2_font_6x10_tf);
+  oled.clearBuffer();
+  oled.setFont(u8g2_font_helvB12_tr);
+  oled.drawStr(24, 30, "ArcDrone");
+  oled.setFont(u8g2_font_5x7_tr);
+  oled.drawStr(22, 46, "ESP-NOW + LoRa 915");
+  oled.sendBuffer();
 }
 
-void pathLine(int y, const char *name, int path, bool on) {
-  char buf[32];
-  oled.drawStr(0, y, name);
-  if (!on) {
-    oled.drawStr(48, y, "OFF");
-    return;
+// Phone-style signal bars from RSSI. Empty outlines = no recent packets.
+void drawBars(int x, int y, int bars) {  // y = bottom
+  for (int i = 0; i < 4; i++) {
+    int h = 3 + 3 * i;
+    if (i < bars) oled.drawBox(x + 4 * i, y - h, 3, h);
+    else oled.drawFrame(x + 4 * i, y - h, 3, h);
   }
-  bool live = lastRxAt[path] && millis() - lastRxAt[path] < 3000;
-  if (live) snprintf(buf, sizeof buf, "%4d dBm", rssi[path]);
+}
+
+int barsFor(int path, int dbm) {
+  const int *t;
+  static const int espnow[] = {-55, -67, -78, -90};
+  static const int lora[] = {-70, -90, -105, -115};
+  t = path == PATH_ESPNOW ? espnow : lora;
+  int bars = 0;
+  for (int i = 3; i >= 0; i--) if (dbm > t[i]) bars = 4 - i;
+  return bars;
+}
+
+void radioRow(int y, const char *name, int path, bool on) {  // 20 px tall, starting at y
+  char buf[24];
+  unsigned long age = lastRxAt[path] ? millis() - lastRxAt[path] : ULONG_MAX;
+  bool live = on && age < 3000;
+  if (!on) {
+    drawBars(0, y + 13, 0);
+    oled.drawLine(0, y + 1, 14, y + 13);  // crossed out
+  } else {
+    drawBars(0, y + 13, live ? barsFor(path, rssi[path]) : 0);
+  }
+  oled.setFont(u8g2_font_6x10_tr);
+  oled.drawStr(19, y + 9, name);
+  if (on && age < 250) oled.drawDisc(19 + oled.getStrWidth(name) + 5, y + 5, 2);  // activity blip
+  oled.setFont(u8g2_font_5x7_tr);
+  if (!on) snprintf(buf, sizeof buf, "OFF");
+  else if (live) snprintf(buf, sizeof buf, "%d dBm", rssi[path]);
   else snprintf(buf, sizeof buf, "no signal");
-  oled.drawStr(48, y, buf);
-  snprintf(buf, sizeof buf, "tx %lu  rx %lu", txCount[path], (unsigned long)rxCount[path]);
-  oled.drawStr(6, y + 10, buf);
+  oled.drawStr(127 - oled.getStrWidth(buf), y + 9, buf);
+  snprintf(buf, sizeof buf, "tx %lu   rx %lu", txCount[path], (unsigned long)rxCount[path]);
+  oled.drawStr(19, y + 18, buf);
 }
 
 void oledDraw() {
-  if (millis() - oledAt < 250) return;  // ~4 Hz; a full redraw takes ~25 ms of I2C
+  if (millis() - oledAt < 200) return;  // 5 Hz: a full redraw blocks the loop for ~25 ms of I2C
   oledAt = millis();
   char buf[32];
+  const char *who = role == ROLE_DRONE ? "DRONE" : role == ROLE_GROUND ? "GROUND" : "BRIDGE";
   oled.clearBuffer();
-  // Title bar, inverted: the mode is the thing the audience should read.
-  oled.drawBox(0, 0, 128, 12);
+
+  // Header: which side this board is, and the radio mode as a pill.
+  oled.setFont(u8g2_font_helvB10_tr);
+  oled.drawStr(0, 11, who);
+  const char *m = mode == MODE_MUTED ? "MUTED" : mode == MODE_LORA_ONLY ? "LORA" : "DUAL";
+  oled.setFont(u8g2_font_5x7_tr);
+  int w = oled.getStrWidth(m) + 8;
+  oled.drawRBox(127 - w, 1, w, 11, 3);
   oled.setDrawColor(0);
-  const char *m = mode == MODE_MUTED ? "MUTED" : mode == MODE_LORA_ONLY ? "LORA ONLY" : "ESP-NOW+LORA";
-  snprintf(buf, sizeof buf, "ARCDRONE %s", m);
-  oled.drawStr(2, 10, buf);
+  oled.drawStr(127 - w + 4, 9, m);
   oled.setDrawColor(1);
-  pathLine(24, "ESP-NOW", PATH_ESPNOW, espNowOn());
+  oled.drawHLine(0, 14, 128);
+
+  if (mode == MODE_MUTED) {
+    oled.drawRBox(4, 20, 120, 30, 4);
+    oled.setDrawColor(0);
+    oled.setFont(u8g2_font_helvB10_tr);
+    oled.drawStr(64 - oled.getStrWidth("RADIO MUTED") / 2, 40, "RADIO MUTED");
+    oled.setDrawColor(1);
+    oled.setFont(u8g2_font_5x7_tr);
+    oled.drawStr(64 - oled.getStrWidth("press PRG to restore") / 2, 61, "press PRG to restore");
+    oled.sendBuffer();
+    return;
+  }
+
+  radioRow(17, "ESP-NOW", PATH_ESPNOW, espNowOn());
 #ifdef HAS_LORA
-  pathLine(46, "LoRa", PATH_LORA, loraOn() && loraReady);
+  radioRow(38, "LoRa 915", PATH_LORA, loraOn() && loraReady);
 #endif
+
+  // Footer: the last packet, with an arrow for its direction.
   if (lastType) {
-    snprintf(buf, sizeof buf, "%s %s", lastWasTx ? "TX" : "RX", typeName(lastType));
-    oled.drawStr(0, 63, buf);
+    oled.setFont(u8g2_font_5x7_tr);
+    if (lastWasTx) oled.drawTriangle(0, 58, 0, 64, 4, 61);   // > out
+    else oled.drawTriangle(4, 58, 4, 64, 0, 61);             // < in
+    snprintf(buf, sizeof buf, "%s %s #%u", lastWasTx ? "TX" : "RX", typeName(lastType), lastSeq);
+    oled.drawStr(8, 64, buf);
   }
   oled.sendBuffer();
 }
@@ -297,8 +369,7 @@ void sendLine(const char *hex, int hexLen) {
     txCount[PATH_LORA]++;
   }
 #endif
-  if (len > 1) lastType = out[1];
-  lastWasTx = true;
+  notePacket(out, len, true);
   flashLed();
 }
 
@@ -380,8 +451,7 @@ void loop() {
     printPacket(p);
     rxCount[p.path]++;
     lastRxAt[p.path] = millis();
-    if (p.len > 1) lastType = p.data[1];
-    lastWasTx = false;
+    notePacket(p.data, p.len, false);
     flashLed();
   }
 
