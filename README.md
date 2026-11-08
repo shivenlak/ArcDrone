@@ -38,23 +38,28 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 | MacBook (M4 Pro) | several | ✅ have |
 | Heltec WiFi LoRa 32 V3, **915 MHz** + antennas | 2 | ⏳ to order |
 
-## Setup
+## Quickstart & System Setup
+
+> **Looking for a step-by-step setup guide?** See **[GETTING_STARTED.md](GETTING_STARTED.md)** for our unified guide broken down by operational approach:
+> - **[Approach 1: Virtual Trials](GETTING_STARTED.md#approach-1-virtual-trials-zero-hardware-100-simulated)** (Zero hardware, 100% simulated, runs on any laptop)
+> - **[Approach 2: Real Hardware Trials](GETTING_STARTED.md#approach-2-real-hardware-trials)** (Dual ESP32s with ESP-NOW, or Heltec LoRa 915 MHz, or Hybrid Dual-Radio)
+> - **[Approach 3: Test Cases & Benchmarks](GETTING_STARTED.md#approach-3-test-cases-benchmarks--analytics)** (116 automated tests, 6 aerial video benchmarks, zero-overhead encryption)
+
+### Interactive Launcher (Single Command)
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m pytest -q          # protocol tests, ~15 s
+# Diagnoses OS & serial ports, then launches any approach from an interactive CLI menu:
+python scripts/quickstart.py
+# Or using uv:
+uv run python scripts/quickstart.py
 ```
-
-**Without hardware:** `python -m protocol.fake_bridge` prints two virtual serial ports. Pass one to each side as `--port`. It's for development only; the demo uses the real radios.
-
-**Team rules** (file ownership, git workflow, interface contracts): see [CLAUDE.md](CLAUDE.md#team-workflow-avoid-blocking-and-merge-conflicts).
 
 ## Quick Guides & LLM Context
 
-- **For Defense Judges & Pitch Presenters:** See [PRESENTATION_PACK.md](PRESENTATION_PACK.md) for the 5-minute pitch deck, judge demo runbook, empirical benchmark tables, and LLM slide generation instructions.
+- **Master Setup Guide:** See [GETTING_STARTED.md](GETTING_STARTED.md) for full instructions across virtual, hardware, and benchmark modes.
+- **For Defense Judges & Pitch Presenters:** See [PRESENTATION_PACK.md](PRESENTATION_PACK.md) for the 5-minute pitch deck, investor "Wow-ness" hierarchy, judge demo runbook, and empirical benchmark tables.
 - **For AI Assistants (Claude, Gemini, ChatGPT):** See [LLM_GUIDE.md](LLM_GUIDE.md) for immutable file boundaries, wire specs, data schemas, and prompt templates.
-- **For Evaluators & Benchmarks:** See [scripts/README.md](scripts/README.md) for how to reproduce and run the 6 video benchmark cases, side-by-side showcase generator, and test suite.
+- **For Evaluators & Benchmarks:** See [scripts/README.md](scripts/README.md) for technical deep dives on all evaluation scripts.
 - **For Browser Reconstructor Reviewers:** See [drone_node/static/RECONSTRUCTOR_SETUP.md](drone_node/static/RECONSTRUCTOR_SETUP.md).
 
 ## Scene reconstructor (operator view)

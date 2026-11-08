@@ -1,6 +1,7 @@
 # CLAUDE.md — Drone Zone (natHacks 2026, ArcDrone challenge)
 
 ## Working conventions (read first)
+- **Master Setup Guide:** See [GETTING_STARTED.md](GETTING_STARTED.md) for running virtual trials (no hardware), real hardware (ESP32 / LoRa), or benchmarks via `python scripts/quickstart.py`.
 - **AI / LLM Guide:** For Claude, Gemini, and ChatGPT pair programming, see [LLM_GUIDE.md](LLM_GUIDE.md) for wire specs, test reproduction commands, and strict teammate file boundaries.
 - **Showcase & Benchmarks:** See [scripts/README.md](scripts/README.md) for how to run the 6-scenario benchmark suite, 1:1 side-by-side video generator, and test runners.
 - **MVP-first:** get the simplest end-to-end thing working, then layer improvements. Never skip ahead of the current phase.
