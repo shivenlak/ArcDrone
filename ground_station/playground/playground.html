@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ground Station Playground</title>
+<style>
+  :root { --bg:#10151c; --card:#1a222d; --text:#e6edf3; --dim:#8b98a8; --green:#2ea043; --red:#da3633; --yellow:#d29922; --blue:#388bfd; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .note { color:var(--dim); margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width:800px) { .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--card); border-radius:8px; padding:12px; }
+  .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin:0 0 8px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .light { width:14px; height:14px; border-radius:50%; background:var(--dim); }
+  .light.up { background:var(--green); } .light.down { background:var(--red); }
+  button { background:#2b3645; color:var(--text); border:0; border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  button:hover { background:#38465a; }
+  button.danger { background:var(--red); } button.ok { background:var(--green); }
+  .alert { border-left:4px solid var(--blue); background:#202a37; border-radius:6px; padding:8px; margin-bottom:8px; }
+  .alert.delayed { border-left-color:var(--yellow); }
+  .badge { font-size:11px; padding:1px 6px; border-radius:10px; background:var(--yellow); color:#000; }
+  .dim { color:var(--dim); }
+  .status { font-weight:600; }
+  .PENDING { color:var(--yellow); } .CONFIRMED { color:var(--green); }
+  table { width:100%; border-collapse:collapse; } td { padding:2px 0; }
+  .scroll { max-height:520px; overflow:auto; }
+</style>
+</head>
+<body>
+<h1>Ground Station Playground</h1>
+<div class="note">Fake drone inside the server. No radio. Click around to see what the real dashboard must handle.</div>
+
+<div class="grid">
+  <div>
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Link and drone</h2>
+      <div class="row">
+        <div id="light" class="light"></div>
+        <strong id="linkText">connecting...</strong>
+        <span class="dim">Drone mode:</span> <strong id="mode">-</strong>
+        <span class="dim">Buffered:</span> <strong id="buffered">0</strong>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="cutBtn" class="danger">Cut link (fake tin can)</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Override commands</h2>
+      <div class="row">
+        <button data-cmd="HOLD">HOLD</button>
+        <button data-cmd="RESUME">RESUME</button>
+        <button data-cmd="RTB">RTB</button>
+      </div>
+      <div class="dim" style="margin-top:8px">Try: cut the link, press HOLD (stays PENDING), restore the link (turns CONFIRMED).</div>
+      <table id="cmds" style="margin-top:8px"></table>
+    </div>
+
+    <div class="panel">
+      <h2>Stats</h2>
+      <table id="stats"></table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Alerts</h2>
+    <div id="alerts" class="scroll"></div>
+  </div>
+</div>
+
+<script>
+  let linkUp = true;
+  let ws;
+  const $ = (id) => document.getElementById(id);
+
+  function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+
+  function setLink(up) {
+    linkUp = up;
+    $("light").className = "light " + (up ? "up" : "down");
+    $("linkText").textContent = up ? "LINK UP" : "LINK LOST";
+    $("cutBtn").textContent = up ? "Cut link (fake tin can)" : "Restore link";
+    $("cutBtn").className = up ? "danger" : "ok";
+  }
+
+  function addAlert(a) {
+    const div = document.createElement("div");
+    div.className = "alert" + (a.delayed ? " delayed" : "");
+    const time = new Date(a.ts_ms).toLocaleTimeString();
+    div.innerHTML = `<strong>#${a.seq} ${a.cls.toUpperCase()}</strong> x${a.count} ` +
+      `<span class="dim">conf ${Math.round(a.conf * 100)}% at ${a.lat}, ${a.lon} (${time})</span> ` +
+      (a.delayed ? '<span class="badge">DELAYED</span> ' : "") +
+      `<div class="row" style="margin-top:6px"></div>`;
+    const row = div.querySelector(".row");
+    for (const cmd of ["OPERATOR_ACK", "HOLD"]) {
+      const b = document.createElement("button");
+      b.textContent = cmd === "OPERATOR_ACK" ? "Acknowledge" : "HOLD";
+      b.onclick = () => send({ action: "command", cmd, ref_seq: a.seq });
+      row.appendChild(b);
+    }
+    $("alerts").prepend(div);
+  }
+
+  function updateCmd(c) {
+    let tr = document.getElementById("cmd" + c.cmd_id);
+    if (!tr) {
+      tr = document.createElement("tr");
+      tr.id = "cmd" + c.cmd_id;
+      $("cmds").prepend(tr);
+    }
+    tr.innerHTML = `<td>#${c.cmd_id} ${c.cmd}</td><td class="dim">alert ${c.ref_seq || "-"}</td>` +
+      `<td class="status ${c.status}">${c.status}</td>`;
+  }
+
+  function showStats(s) {
+    const rows = ["sent", "delivered", "retries", "duplicates", "bad_packets", "dropped", "rtt_ms_avg", "rtt_ms_p95"];
+    $("stats").innerHTML = rows.map((k) => `<tr><td class="dim">${k}</td><td>${s[k]}</td></tr>`).join("");
+  }
+
+  function handle(m) {
+    if (m.event === "alert") addAlert(m);
+    else if (m.event === "link") setLink(m.up);
+    else if (m.event === "drone") { $("mode").textContent = m.mode; $("buffered").textContent = m.buffered; }
+    else if (m.event === "cmd_status") updateCmd(m);
+    else if (m.event === "stats") { showStats(m); $("buffered").textContent = m.buffered; }
+  }
+
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onmessage = (e) => handle(JSON.parse(e.data));
+    ws.onclose = () => { $("linkText").textContent = "server gone, retrying..."; setTimeout(connect, 1000); };
+  }
+
+  $("cutBtn").onclick = () => send({ action: "fake_link", up: !linkUp });
+  document.querySelectorAll("[data-cmd]").forEach((b) => {
+    b.onclick = () => send({ action: "command", cmd: b.dataset.cmd, ref_seq: 0 });
+  });
+  setLink(true);
+  connect();
+</script>
+</body>
+</html>
