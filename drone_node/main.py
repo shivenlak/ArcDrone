@@ -9,6 +9,9 @@ import cv2
 import numpy as np
 
 from drone_node.detector import Detector
+from drone_node.frame_source import open_frame_source
+from drone_node.manan_ground_panel import MananGroundPanel
+from drone_node.preview_stream import PreviewStream
 from drone_node.scene_codec import (
     LINK_MAX_KBPS,
     SCENE_HZ_DEFAULT,
@@ -144,9 +147,25 @@ def draw_hud(
 def parse_args():
     parser = argparse.ArgumentParser(description="ArcDrone Edge CV & Telemetry Node")
     parser.add_argument("--port", required=True, help="Serial port or fake_bridge pty")
-    parser.add_argument("--video", required=True, help="Path to video clip or camera index (e.g. 0)")
-    parser.add_argument("--conf", type=float, default=0.5, help="Detection confidence gate")
+    parser.add_argument(
+        "--video",
+        required=True,
+        help="MP4 path, VisDrone-VID image folder (uav.../0000001.jpg), or camera index (0)",
+    )
+    parser.add_argument("--conf", type=float, default=0.25, help="Detection confidence gate")
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=1280,
+        help="YOLO inference size; use 1280/1536 for high-res aerial footage",
+    )
     parser.add_argument("--cooldown", type=float, default=3.0, help="Per-class cooldown (sec)")
+    parser.add_argument(
+        "--spatial-hold",
+        type=float,
+        default=25.0,
+        help="Suppress repeat alerts for the same contact while it stays in view (sec)",
+    )
     parser.add_argument("--fps", type=float, default=2.0, help="Camera / YOLO inference rate")
     parser.add_argument(
         "--scene-hz",
@@ -155,10 +174,21 @@ def parse_args():
         help="Scene vector UDP rate (default 12/s); shares %.1f kbps link cap"
         % LINK_MAX_KBPS,
     )
-    parser.add_argument("--imgsz", type=int, default=640, help="YOLO input size; 1280 for small aerial objects")
     parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
     parser.add_argument("--scene-host", type=str, default="127.0.0.1", help="Ground reconstructor IP")
     parser.add_argument("--scene-port", type=int, default=9999, help="Ground reconstructor UDP port")
+    parser.add_argument(
+        "--preview-port",
+        type=int,
+        default=8081,
+        help="MJPEG camera/HUD preview for dashboard Live camera (0 disables)",
+    )
+    parser.add_argument(
+        "--manan-panel-port",
+        type=int,
+        default=8082,
+        help="MJPEG Manan ground reconstructor for dashboard Scene twin (0 disables)",
+    )
     parser.add_argument("--headless", action="store_true", help="Run without local video window (Pi/Blind demo)")
     return parser.parse_args()
 
@@ -191,30 +221,40 @@ def main() -> None:
         model_path=args.model,
         conf_thresh=args.conf,
         cooldown_sec=args.cooldown,
+        spatial_hold_sec=args.spatial_hold,
         imgsz=args.imgsz,
     )
     sim_gps = SimGps()
     scene_codec = SceneCodec(max_kbps=SCENE_MAX_KBPS, dst_size=(720, 540))
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    preview = None
+    if args.preview_port > 0:
+        preview = PreviewStream(port=args.preview_port).start()
+    manan_panel = MananGroundPanel(vector_hz=args.scene_hz)
+    manan_preview = None
+    if args.manan_panel_port > 0:
+        # Full 1920x960 composite; higher JPEG quality keeps manifest text readable.
+        manan_preview = PreviewStream(
+            port=args.manan_panel_port, jpeg_quality=78
+        ).start()
     print(
         "[MAIN] Scene %d Hz, budget capped at %.1f kbps"
         % (int(args.scene_hz), SCENE_MAX_KBPS)
     )
 
-    video_src = int(args.video) if str(args.video).isdigit() else args.video
-    use_camera = isinstance(video_src, int)
-    if use_camera and hasattr(cv2, "CAP_AVFOUNDATION"):
-        cap = cv2.VideoCapture(video_src, cv2.CAP_AVFOUNDATION)
-    else:
-        cap = cv2.VideoCapture(video_src)
-    if not cap.isOpened():
+    source = open_frame_source(args.video)
+    use_camera = source.is_live_camera()
+    if not source.isOpened():
         if use_camera:
             print(
-                f"[WARN] Could not open camera index {video_src}. "
-                "On macOS: grant Camera access to Terminal/Cursor and try --video 0 or --video 1."
+                f"[WARN] Could not open camera index {args.video}. "
+                "On macOS: grant Camera access and try --video 0 or --video 1."
             )
         else:
-            print(f"[WARN] Could not open video '{args.video}'. Running with fallback test frame.")
+            print(
+                f"[WARN] Could not open video or sequence '{args.video}'. "
+                "Using fallback test frame."
+            )
 
     last_frame: Optional[np.ndarray] = None
     frame_idx = 0
@@ -263,11 +303,11 @@ def main() -> None:
                 now_mono - last_infer >= infer_period
             ):
                 last_infer = now_mono
-                if cap.isOpened():
-                    ret, frame = cap.read()
+                if source.isOpened():
+                    ret, frame = source.read()
                     if not ret and not use_camera:
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        ret, frame = cap.read()
+                        source.rewind()
+                        ret, frame = source.read()
                     if ret and frame is not None:
                         last_frame = frame
                         frame_idx += 1
@@ -286,6 +326,16 @@ def main() -> None:
                     frame_idx += 1
 
                 current_boxes, alert = detector.process_frame(last_frame)
+                if manan_preview is not None and link.mode != p.MODE_HOLD:
+                    panel = manan_panel.on_video_frame(
+                        last_frame,
+                        current_boxes,
+                        frame_idx,
+                        args.fps,
+                        drone_lat,
+                        drone_lon,
+                    )
+                    manan_preview.update(panel)
 
             # 3. Scene vectors at --scene-hz (default 12/s); uses latest boxes, not full link cap
             if (
@@ -330,8 +380,9 @@ def main() -> None:
                     f"lat={t_lat:.5f} lon={t_lon:.5f}"
                 )
 
-            # 5. Render HUD (or sleep if running headless on Pi / Blind Operator demo)
-            if not args.headless:
+            # 5. HUD for local window + optional MJPEG preview for the dashboard modal
+            hud_frame = None
+            if last_frame is not None:
                 hud_frame = draw_hud(
                     last_frame,
                     mode=link.mode,
@@ -345,8 +396,11 @@ def main() -> None:
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
                 )
-                cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)
+                if preview is not None:
+                    preview.update(hud_frame)
 
+            if not args.headless and hud_frame is not None:
+                cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)
                 elapsed = time.time() - t0
                 wait_ms = max(1, int((loop_period - elapsed) * 1000))
                 key = cv2.waitKey(wait_ms) & 0xFF
@@ -360,8 +414,11 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[MAIN] Shutting down...")
     finally:
-        if cap.isOpened():
-            cap.release()
+        if preview is not None:
+            preview.stop()
+        if manan_preview is not None:
+            manan_preview.stop()
+        source.release()
         udp_sock.close()
         cv2.destroyAllWindows()
         link.stop()

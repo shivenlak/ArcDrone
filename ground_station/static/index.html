@@ -97,6 +97,16 @@ p { margin: 0; }
 .bar i { display: block; height: 100%; border-radius: 4px; background: var(--f); transition: width .6s; }
 @media (max-width: 780px) { .wire { grid-template-columns: 1fr; } .wire-rate { border-left: 0; border-top: 1px solid var(--line); } }
 [hidden] { display: none !important; }
+.header-actions { display: flex; gap: 8px; }
+.header-actions .action { background: var(--raised); border: 1px solid #3a526a; border-radius: 7px; padding: 7px 11px; font-weight: 650; font-size: 13px; color: var(--cyan); }
+.header-actions .action:hover { background: #253c51; }
+.viewer-overlay { position: fixed; inset: 0; background: rgba(5,9,14,.82); display: grid; place-items: center; z-index: 50; padding: 24px; }
+.viewer { width: min(1100px, 96vw); height: min(80vh, 760px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; }
+.viewer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.viewer-head h2 { font-size: 17px; }
+.viewer-body { flex: 1; background: #05090e; display: grid; place-items: center; overflow: hidden; }
+.viewer-body img, .viewer-body iframe { width: 100%; height: 100%; object-fit: contain; border: 0; }
+.viewer-close { background: var(--raised); border: 1px solid #3a526a; border-radius: 7px; padding: 6px 12px; color: var(--text); }
 </style>
 </head>
 <body>
@@ -105,11 +115,18 @@ p { margin: 0; }
     <span class="logo" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg></span>
     <div><strong>ArcDrone</strong> <small> / Drone Zone</small></div>
   </div>
-  <div class="header-status"><small>Ground control</small><span id="source-badge" class="badge">Connecting</span></div>
+  <div class="header-status">
+    <small>Ground control</small>
+    <span id="source-badge" class="badge">Connecting</span>
+    <div class="header-actions">
+      <button class="action" id="open-scene" type="button" title="Open ground scene reconstructor (not on main screen)">Scene twin</button>
+      <button class="action" id="open-footage" type="button" title="Open live drone camera (Wi-Fi/localhost, not over radio)">Live camera</button>
+    </div>
+  </div>
 </header>
 <main>
   <section class="intro" aria-labelledby="title">
-    <div><p class="eyebrow">Ground station / Operator console</p><h1 id="title">Mission overview</h1><p>Monitor detections and review operator commands.</p></div>
+    <div><p class="eyebrow">Ground station / Operator console</p><h1 id="title">Mission overview</h1><p>Monitor detections and operator commands. Open <strong>Scene twin</strong> or <strong>Live camera</strong> only when you need them — they stay off this screen.</p></div>
     <div class="simulation" aria-label="Simulation controls" hidden>
       <button class="action" id="new-alert" type="button">Simulate detection</button>
       <button class="action" id="toggle-link" type="button">Simulate link loss</button>
@@ -182,6 +199,19 @@ p { margin: 0; }
     </aside>
   </div>
 </main>
+<div class="viewer-overlay" id="viewer-overlay" hidden>
+  <div class="viewer">
+    <div class="viewer-head">
+      <div>
+        <p class="eyebrow" id="viewer-eyebrow">Viewer</p>
+        <h2 id="viewer-title">Viewer</h2>
+        <small id="viewer-hint"></small>
+      </div>
+      <button class="viewer-close" id="close-viewer" type="button">Close ✕</button>
+    </div>
+    <div class="viewer-body" id="viewer-body"></div>
+  </div>
+</div>
 <script>
 const byId = (id) => document.getElementById(id);
 const alerts = [];
@@ -487,6 +517,75 @@ byId("toggle-link").addEventListener("click", () => {
 for (const button of controls) {
   button.addEventListener("click", () => sendCommand(button.dataset.command));
 }
+
+// Scene twin + live camera stay off the main screen until opened.
+// Default Scene twin = Manan ground reconstructor MJPEG (drone --manan-panel-port 8082).
+// Browser 0xAE twin: ?scene=http://127.0.0.1:8080/reconstructor.html
+const SCENE_URL = params.get("scene") || "http://127.0.0.1:8082/video.mjpg";
+const CAMERA_URL = params.get("camera") || "http://127.0.0.1:8081/video.mjpg";
+const SCENE_IS_MJPEG =
+  params.get("scene_mode") === "mjpeg" || /\/video\.mjpg|\.mjpg\b/i.test(SCENE_URL);
+const viewerOverlay = byId("viewer-overlay");
+const viewerBody = byId("viewer-body");
+
+function closeViewer() {
+  viewerOverlay.hidden = true;
+  viewerBody.replaceChildren();
+}
+
+function openViewer(mode) {
+  viewerBody.replaceChildren();
+  if (mode === "scene") {
+    byId("viewer-eyebrow").textContent = "Low-bandwidth scene twin · spread 0xB4 vectors";
+    byId("viewer-title").textContent = "Manan 1:1 side-by-side (RGB + ground receiver)";
+    if (SCENE_IS_MJPEG) {
+      byId("viewer-hint").textContent =
+        "Same layout as scripts/ishan_side_by_side.py — left RGB+indexes, right ratio canvas, manifest. :8082";
+      const img = document.createElement("img");
+      img.alt = "Ground scene reconstructor";
+      img.src = SCENE_URL + (SCENE_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+      img.addEventListener("error", () => {
+        byId("viewer-hint").textContent =
+          "Scene stream not reachable at " + SCENE_URL +
+          " — start the drone with --manan-panel-port 8082 (or use ?scene=…8080/reconstructor.html).";
+      });
+      viewerBody.append(img);
+    } else {
+      byId("viewer-hint").textContent =
+        "Browser twin — needs scene_ws_relay on :8080 and drone scene UDP on :9999.";
+      const frame = document.createElement("iframe");
+      frame.title = "Scene reconstructor";
+      frame.src = SCENE_URL + (SCENE_URL.includes("?") ? "&" : "?") + "embed=1";
+      frame.allow = "autoplay";
+      viewerBody.append(frame);
+    }
+  } else {
+    byId("viewer-eyebrow").textContent = "Live camera · Wi‑Fi / localhost only";
+    byId("viewer-title").textContent = "Real footage from the drone";
+    byId("viewer-hint").textContent =
+      "Needs drone_node.main --preview-port 8081 (VisDrone clip or --video 0 webcam). Not over the radio.";
+    const img = document.createElement("img");
+    img.alt = "Live drone camera";
+    img.src = CAMERA_URL + (CAMERA_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+    img.addEventListener("error", () => {
+      byId("viewer-hint").textContent =
+        "Camera stream not reachable at " + CAMERA_URL +
+        " — start the drone with a video source and --preview-port 8081.";
+    });
+    viewerBody.append(img);
+  }
+  viewerOverlay.hidden = false;
+}
+
+byId("open-scene").addEventListener("click", () => openViewer("scene"));
+byId("open-footage").addEventListener("click", () => openViewer("camera"));
+byId("close-viewer").addEventListener("click", closeViewer);
+viewerOverlay.addEventListener("click", (event) => {
+  if (event.target === viewerOverlay) closeViewer();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !viewerOverlay.hidden) closeViewer();
+});
 
 renderStatus();
 if (demo) {
