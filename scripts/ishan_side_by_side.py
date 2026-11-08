@@ -485,7 +485,7 @@ class GroundVectorReceiver:
                     "vy_r": 0.0,
                     "last_rx_t": sim_t,
                     "last_op": "INIT_BOX",
-                    "trail": deque([(cx_r, cy_r)], maxlen=20),
+                    "trail": deque([(cx_r, cy_r)], maxlen=3),
                 }
                 if count_stats:
                     self.last_updated_ids.append((tid, "INIT"))
@@ -664,8 +664,8 @@ def render_right_blank_ratio_canvas(
         cv2.circle(panel, (cx, cy), 3, (255, 255, 255), -1, cv2.LINE_AA)
 
         # Clean bounded velocity vector arrow
-        vx_px = max(-36.0, min(36.0, b["vx_r"] * canvas_w * 0.40))
-        vy_px = max(-36.0, min(36.0, b["vy_r"] * canvas_h * 0.40))
+        vx_px = max(-22.0, min(22.0, b["vx_r"] * canvas_w * 0.25))
+        vy_px = max(-22.0, min(22.0, b["vy_r"] * canvas_h * 0.25))
         if math.hypot(vx_px, vy_px) >= 3.5:
             end_x = int(max(4, min(canvas_w - 4, cx + vx_px)))
             end_y = int(max(38, min(canvas_h - 4, cy + vy_px)))
