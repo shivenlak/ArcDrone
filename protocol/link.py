@@ -10,7 +10,9 @@ Usage (same on drone and ground):
     seq = link.send(packets.DETECTION, ts_ms=..., cls=3, conf=0.9, count=1, lat=..., lon=...)
 
 Callbacks run on the link thread, so keep them fast (append to a queue, set a flag).
-    on_packet(packet)      new DETECTION/COMMAND (deduped), and every HEARTBEAT
+    on_packet(packet)      new DETECTION/COMMAND (deduped), and every HEARTBEAT.
+                           packet["wire"] is the frame's exact bytes as hex.
+Set ARCDRONE_KEY on both sides to encrypt and authenticate every frame (protocol/crypto.py).
     on_event(name, **info) "link_up", "link_down", "delivered" (seq=, rtt_ms=)
 """
 
@@ -21,6 +23,7 @@ import time
 
 import serial
 
+from protocol import crypto
 from protocol import packets as p
 
 BAUD = 115200
@@ -36,8 +39,11 @@ def _ignore(*args, **kwargs):
 
 
 class Link:
-    def __init__(self, port, on_packet=_ignore, on_event=_ignore, retry_timeout=0.3, boot_wait=2.0):
+    def __init__(self, port, on_packet=_ignore, on_event=_ignore, retry_timeout=0.3, boot_wait=2.0,
+                 sealer="env"):
         self.port = port
+        # Encryption: on when ARCDRONE_KEY is set (protocol/crypto.py), or pass a crypto.Sealer.
+        self.sealer = crypto.from_env() if sealer == "env" else sealer
         self.on_packet = on_packet
         self.on_event = on_event
         self.retry_timeout = retry_timeout  # use ~1.0 on LoRa
@@ -146,6 +152,8 @@ class Link:
         self._ser = None
 
     def _write(self, data):
+        if self.sealer is not None:
+            data = self.sealer.seal(data)  # fresh nonce on every transmission, retries included
         self.stats["bytes_tx"] += len(data)
         self._ser.write(p.to_line(data).encode())
 
@@ -160,11 +168,15 @@ class Link:
         data = p.from_line(line)
         if data is None:
             return  # blank line or bridge diagnostic
-        packet = p.decode(data)
+        wire = data
+        if self.sealer is not None:
+            data = self.sealer.open(data)  # None for plain, forged, tampered or wrong-key frames
+        packet = p.decode(data) if data is not None else None
         if packet is None:
             self.stats["bad_packets"] += 1
             return
-        self.stats["bytes_rx"] += len(data)
+        self.stats["bytes_rx"] += len(wire)
+        packet["wire"] = wire.hex().upper()  # exact bytes as received, for the dashboard
 
         now = time.monotonic()
         self._last_heard = now

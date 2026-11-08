@@ -26,7 +26,7 @@ def test_detection_round_trip():
 
 
 def test_reencode_is_byte_exact():
-    # The dashboard shows a received packet's bytes by re-encoding the decoded dict.
+    # Decoding then re-encoding a packet gives back the exact bytes.
     rng = random.Random(1)
     for _ in range(500):
         data = p.encode(p.DETECTION, rng.randrange(0x10000), ts_ms=rng.randrange(2**32),

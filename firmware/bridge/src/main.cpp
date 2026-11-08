@@ -78,10 +78,10 @@ bool lastWasTx = false;
 // sends DETECTIONs and receives COMMANDs; the ground does the opposite.
 enum Role { ROLE_UNKNOWN, ROLE_DRONE, ROLE_GROUND };
 Role role = ROLE_UNKNOWN;
-const uint8_t MAGIC = 0xD2, TYPE_DETECTION = 0x01, TYPE_COMMAND = 0x04;
+const uint8_t MAGIC = 0xD2, MAGIC_SECURE = 0xD3, TYPE_DETECTION = 0x01, TYPE_COMMAND = 0x04;
 
 void notePacket(const uint8_t *data, int len, bool tx) {
-  if (len < 4 || data[0] != MAGIC) return;
+  if (len < 4 || (data[0] != MAGIC && data[0] != MAGIC_SECURE)) return;  // type+seq stay readable when encrypted
   lastType = data[1];
   lastSeq = data[2] | (data[3] << 8);
   lastWasTx = tx;

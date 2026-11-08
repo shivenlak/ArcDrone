@@ -125,7 +125,7 @@ p { margin: 0; }
     <div class="wire-bytes">
       <div class="panel-title" style="padding:0;border:0"><h2 id="wire-title">On the wire</h2><span class="caption" id="wire-caption">Latest alert, exact bytes received</span></div>
       <div class="bytes" id="bytes"><p class="caption">Waiting for a packet from the radio.</p></div>
-      <div class="wire-sub"><span id="wire-size">21-byte DETECTION packet</span><span>little-endian · CRC16 checked</span></div>
+      <div class="wire-sub"><span id="wire-size">21-byte DETECTION packet</span><span id="wire-check">little-endian · CRC16 checked</span></div>
     </div>
     <div class="wire-rate">
       <span class="caption">Radio traffic, both directions (last 10 s)</span>
@@ -222,6 +222,16 @@ const WIRE_FIELDS = [
   ["lon", 4, "#b9a4ff", (a) => `${a.lon.toFixed(5)}°`],
   ["crc16", 2, "var(--red)", () => "valid"],
 ];
+// Encrypted frames (ARCDRONE_KEY set): the body is ciphertext; the decoded values come from
+// the ground station, which decrypted and authenticated it.
+const SECURE_FIELDS = [
+  ["magic", 1, "var(--muted)", () => "0xD3 secure"],
+  ["type", 1, "var(--muted)", () => "DETECTION"],
+  ["seq", 2, "var(--cyan)", (a) => `#${a.seq}`],
+  ["nonce", 6, "var(--amber)", () => "random per send"],
+  ["ciphertext", 15, "#b9a4ff", (a) => `decrypts to ${a.cls} ×${a.count}, ${Math.round(a.conf * 100)}%`],
+  ["tag", 4, "var(--red)", () => "authentic"],
+];
 const LORA_BPS = 5470, VIDEO_BPS = 2e6;
 const traffic = [];
 const logWidth = (bps) => `${Math.max(0, Math.min(100, (Math.log10(Math.max(bps, 1)) - 1) / 6 * 100))}%`;
@@ -231,8 +241,9 @@ function renderWire(alert) {
   const hex = alert.raw.match(/../g);
   const box = byId("bytes");
   box.replaceChildren();
+  const secure = alert.raw.startsWith("D3");
   let i = 0;
-  for (const [name, size, color, value] of WIRE_FIELDS) {
+  for (const [name, size, color, value] of secure ? SECURE_FIELDS : WIRE_FIELDS) {
     const field = document.createElement("div");
     field.className = "field";
     field.style.setProperty("--f", color);
@@ -256,6 +267,7 @@ function renderWire(alert) {
   void box.offsetWidth;  // restart the animation
   box.classList.add("flash");
   byId("wire-size").textContent = `${hex.length}-byte DETECTION packet · alert #${alert.seq}`;
+  byId("wire-check").textContent = secure ? "AES-128-CCM encrypted · tag verified" : "little-endian · CRC16 checked";
   byId("wire-caption").textContent = alert.delayed ? "Delayed alert, buffered during link loss" : "Latest alert, exact bytes received";
 }
 
