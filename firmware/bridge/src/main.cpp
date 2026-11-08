@@ -98,7 +98,12 @@ bool loraOn() { return mode != MODE_MUTED; }
 SX1262 radio = new Module(8, 14, 12, 13);
 const float LORA_MHZ = 915.0;  // Canada/US ISM band. The board is the 863-928 MHz variant.
 const float LORA_BW = 125.0;   // kHz
-const int LORA_SF = 7;         // lowest airtime: ~57 ms for a 21-byte DETECTION
+// Spreading factor: 7 = fastest (~57 ms for a 21-byte DETECTION), 9 = ~2x range, ~4x airtime.
+// Set per env in platformio.ini (-DLORA_SF=9). Both boards must match. Above 9 the 1 Hz
+// heartbeats from both sides start to fill the channel.
+#ifndef LORA_SF
+#define LORA_SF 7
+#endif
 const int LORA_CR = 5;         // 4/5
 const int LORA_DBM = 10;       // plenty indoors; max is 22
 bool loraReady = false;
@@ -111,6 +116,7 @@ Packet loraTxQueue[LORA_TXQ];
 int loraTxHead = 0, loraTxCount = 0;
 
 void IRAM_ATTR onLoraIrq() { loraIrq = true; }
+void loraListen();
 
 void loraSetup() {
   SPI.begin(9, 11, 10, 8);
@@ -125,7 +131,7 @@ void loraSetup() {
   radio.setDio2AsRfSwitch(true);
   radio.setCRC(true);
   radio.setDio1Action(onLoraIrq);
-  radio.startReceive();
+  loraListen();
   loraReady = true;
 }
 
@@ -135,6 +141,37 @@ void loraQueue(const uint8_t *data, int len) {
   slot.len = len;
   memcpy(slot.data, data, len);
   loraTxCount++;
+}
+
+// Listen in RX mode with the "preamble detected" and "header valid" flags enabled (DIO1 still
+// fires only on RX done), so we can see that a packet is arriving without disturbing it.
+void loraListen() {
+  radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF,
+                     RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
+                         RADIOLIB_SX126X_IRQ_HEADER_VALID,
+                     RADIOLIB_SX126X_IRQ_RX_DONE);
+}
+
+// LoRa is half duplex: transmitting while the other board's packet is arriving destroys
+// it. Both boards would do that every time in DUAL mode, because the fast ESP-NOW copy
+// triggers the reply while the LoRa copy is still on air. So: listen before talk.
+const unsigned long LORA_MAX_RX_MS = 400;  // a stuck "preamble seen" flag is reset after this
+unsigned long rxSeenAt = 0;
+unsigned long txStartedAt = 0;
+
+bool loraReceiving() {
+  uint16_t irq = radio.getIrqStatus();
+  if (!(irq & (RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID))) {
+    rxSeenAt = 0;
+    return false;
+  }
+  if (!rxSeenAt) rxSeenAt = millis();
+  if (millis() - rxSeenAt > LORA_MAX_RX_MS) {  // false preamble: clear it and carry on
+    rxSeenAt = 0;
+    loraListen();
+    return false;
+  }
+  return true;
 }
 
 void loraPoll() {
@@ -155,11 +192,19 @@ void loraPoll() {
         xQueueSend(rxQueue, &p, 0);
       }
     }
-    radio.startReceive();
+    rxSeenAt = 0;
+    loraListen();
   }
-  if (!loraTxBusy && loraTxCount > 0) {
+  if (loraTxBusy && millis() - txStartedAt > 1000) {  // TX-done interrupt missed: recover
+    loraTxBusy = false;
+    loraListen();
+  }
+  if (!loraTxBusy && loraTxCount > 0 && !loraReceiving()) {
     Packet &next = loraTxQueue[loraTxHead];
-    if (radio.startTransmit(next.data, next.len) == RADIOLIB_ERR_NONE) loraTxBusy = true;
+    if (radio.startTransmit(next.data, next.len) == RADIOLIB_ERR_NONE) {
+      loraTxBusy = true;
+      txStartedAt = millis();
+    }
     loraTxHead = (loraTxHead + 1) % LORA_TXQ;
     loraTxCount--;
   }
@@ -382,6 +427,31 @@ void printPacket(const Packet &p) {
   Serial.write('\n');
 }
 
+// Once a second: what this bridge hears on each radio, for the dashboard. Diagnostics
+// only (a '#' line); protocol/link.py parses it into summary()["radio"].
+unsigned long statusAt = 0;
+
+void printRadioPath(const char *name, int path) {
+  long age = lastRxAt[path] ? (long)(millis() - lastRxAt[path]) : -1;
+  Serial.printf(" %s_rx=%lu %s_rssi=%d %s_age=%ld", name, (unsigned long)rxCount[path], name,
+                rssi[path], name, age);
+}
+
+void printStatus() {
+  if (millis() - statusAt < 1000) return;
+  statusAt = millis();
+  Serial.print("# radio mode=");
+  Serial.print(mode == MODE_MUTED ? "MUTED" : mode == MODE_LORA_ONLY ? "LORA_ONLY" : "DUAL");
+  printRadioPath("espnow", PATH_ESPNOW);
+#ifdef HAS_LORA
+  if (loraReady) {
+    printRadioPath("lora", PATH_LORA);
+    Serial.printf(" lora_snr=%.1f lora_sf=%d", loraSnr, LORA_SF);
+  }
+#endif
+  Serial.println();
+}
+
 void setup() {
   Serial.begin(BAUD);
   // GPIO34-39 are input-only with no internal pull-up (the Feather V2 has one on the board).
@@ -419,7 +489,12 @@ void setup() {
   Serial.print(" channel=");
   Serial.print(WIFI_CHANNEL);
 #ifdef HAS_LORA
-  Serial.print(loraReady ? " lora=915MHz/SF7" : " lora=FAILED");
+  if (loraReady) {
+    Serial.print(" lora=915MHz/SF");
+    Serial.print(LORA_SF);
+  } else {
+    Serial.print(" lora=FAILED");
+  }
 #endif
   Serial.println();
 }
@@ -454,6 +529,8 @@ void loop() {
     notePacket(p.data, p.len, false);
     flashLed();
   }
+
+  printStatus();
 
 #ifdef HAS_OLED
   oledDraw();

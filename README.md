@@ -83,6 +83,8 @@ export ARCDRONE_KEY=$(python -m protocol.crypto)    # use the SAME value on both
 
 **Demo button (PRG on Heltec, SW38 on Feather):** Heltec cycles DUAL → LORA ONLY → MUTED; Feather toggles MUTED.
 
+**Radio paths on the dashboard:** the three tiles under the status row show what the ground board hears on each radio (live with dBm, or "No signal") and which path is carrying traffic. Walk the drone board away and ESP-NOW goes red while LoRa stays green. For more LoRa range, flash **both** boards with `pio run -e heltec_v3_sf9 -t upload` (about 2× range, about 4× airtime).
+
 **Without hardware:** `python -m protocol.fake_bridge` prints two virtual serial ports. Pass one to each side as `--port`. It's for development only; the demo uses the real radios.
 
 ## Quick Guides & LLM Context
@@ -140,6 +142,7 @@ All on our own boards and a MacBook M4 Pro (November 7–8, 2026). Boards were o
 | Encrypted, both radios, 60 alerts | 60/60 | 0 | 34.1 / 62.0 ms |
 | Encrypted, LoRa only, 60 alerts | 60/60 | 8 | 156.7 / 213.0 ms |
 | Receiver with no key | 0 frames accepted, link never comes up | — | — |
+| Live failover: 30 alerts on both radios, then drone ESP-NOW killed mid-run, 50 more (3 runs) | 80/80 each run, each shown once | 0–10 after the switch | before 22–25 ms; after 126–145 ms avg |
 
 **Reliability (Feather V2, ESP-NOW, boards 1–2 cm apart, no antennas)**
 

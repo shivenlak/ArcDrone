@@ -32,6 +32,7 @@ LINK_TIMEOUT = 3.0  # s of silence before the link is declared lost
 BUFFER_SIZE = 64  # unacknowledged messages kept; oldest dropped when full
 DEDUP_WINDOW = 64  # recent seqs remembered to drop duplicates
 RECONNECT_PERIOD = 1.0  # s between attempts to reopen a lost serial port
+MAX_RETRY_TIMEOUT = 1.5  # s; cap for the adaptive retry timeout and its backoff (SF9 RTT is ~0.4 s)
 
 
 def _ignore(*args, **kwargs):
@@ -46,7 +47,7 @@ class Link:
         self.sealer = crypto.from_env() if sealer == "env" else sealer
         self.on_packet = on_packet
         self.on_event = on_event
-        self.retry_timeout = retry_timeout  # use ~1.0 on LoRa
+        self.retry_timeout = retry_timeout  # minimum; adapts upward to the measured RTT
         self.boot_wait = boot_wait  # opening the port resets the ESP32
         self.mode = p.MODE_PATROL  # reported in our heartbeats; drone_node sets this
 
@@ -69,6 +70,14 @@ class Link:
         self._tx_seq = None  # seq of the head message when we last transmitted it
         self._last_tx = 0.0
         self._timeout = retry_timeout
+        # Adaptive retry timeout, like TCP: track a smoothed RTT from first-try ACKs only
+        # (a retried packet's ACK is ambiguous) and double the timeout on every retry.
+        # So the link adjusts by itself when traffic moves from ESP-NOW (~25 ms) to LoRa (~130 ms+).
+        self._srtt = None
+        self._retried = False
+        self._heartbeat_period = HEARTBEAT_PERIOD
+        self.radio = {}  # last "# radio ..." status line from the bridge, parsed
+        self._radio_at = 0.0
 
     def start(self):
         self._running = True
@@ -108,6 +117,9 @@ class Link:
             "rtt_ms_p95": round(rtts[int(0.95 * (len(rtts) - 1))], 1) if rtts else None,
             "bytes_tx": self.stats["bytes_tx"],  # packet bytes sent / valid bytes received over the radio
             "bytes_rx": self.stats["bytes_rx"],  # (binary size; the serial hop is hex, so twice that)
+            "retry_timeout_ms": round(self._timeout * 1000),
+            # Our bridge's view of each radio, or None if it hasn't reported in 3 s.
+            "radio": dict(self.radio) if self.radio and time.monotonic() - self._radio_at < 3.0 else None,
         }
 
     # --- link thread ---
@@ -165,6 +177,9 @@ class Link:
             self._handle_line(line.decode(errors="replace"))
 
     def _handle_line(self, line):
+        if line.startswith("# radio "):
+            self._handle_radio(line)
+            return
         data = p.from_line(line)
         if data is None:
             return  # blank line or bridge diagnostic
@@ -198,21 +213,45 @@ class Link:
             self._seen.append(seq)
             self.on_packet(packet)
 
+    def _handle_radio(self, line):
+        """Bridge status, e.g. '# radio mode=DUAL espnow_rx=12 espnow_rssi=-40 espnow_age=210 ...'."""
+        radio = {}
+        for item in line[len("# radio "):].split():
+            key, _, value = item.partition("=")
+            try:
+                radio[key] = float(value) if "." in value else int(value)
+            except ValueError:
+                radio[key] = value
+        self.radio = radio
+        self._radio_at = time.monotonic()
+
+    def _retry_timeout(self):
+        timeout = self.retry_timeout
+        if self._srtt is not None:
+            timeout = max(timeout, 2.5 * self._srtt)
+        return min(timeout, MAX_RETRY_TIMEOUT)
+
     def _handle_ack(self, seq, now):
         with self._lock:
             if not self._outbox or self._outbox[0][0] != seq:
                 return  # stale or duplicate ACK
             self._outbox.popleft()
         self._tx_seq = None
-        rtt_ms = (now - self._last_tx) * 1000
+        rtt = now - self._last_tx
+        if not self._retried:
+            self._srtt = rtt if self._srtt is None else 0.8 * self._srtt + 0.2 * rtt
+        rtt_ms = rtt * 1000
         self.rtts_ms.append(rtt_ms)
         self.stats["delivered"] += 1
         self.on_event("delivered", seq=seq, rtt_ms=rtt_ms)
 
     def _send_due(self):
         now = time.monotonic()
-        if now - self._last_heartbeat >= HEARTBEAT_PERIOD:
+        if now - self._last_heartbeat >= self._heartbeat_period:
             self._last_heartbeat = now
+            # Jitter keeps the two sides from locking in step: on LoRa (half duplex) two
+            # boards that always transmit at the same instant never hear each other.
+            self._heartbeat_period = HEARTBEAT_PERIOD * random.uniform(0.8, 1.2)
             heartbeat = p.encode(p.HEARTBEAT, 0, ts_ms=p.now_ms(), mode=self.mode, buffered=min(self.buffered, 255))
             self._write(heartbeat)
 
@@ -226,12 +265,15 @@ class Link:
             if now - self._last_tx < self._timeout:
                 return
             self.stats["retries"] += 1
+            self._retried = True
+            self._timeout = min(self._timeout * 2, MAX_RETRY_TIMEOUT)  # back off
         else:
             self.stats["sent"] += 1
+            self._retried = False
+            self._timeout = self._retry_timeout() + random.uniform(0, 0.1)  # jitter avoids lock-step collisions
         self._write(data)
         self._tx_seq = seq
         self._last_tx = now
-        self._timeout = self.retry_timeout + random.uniform(0, 0.1)  # jitter avoids lock-step collisions
 
     def _check_link(self):
         if self.up and time.monotonic() - self._last_heard > LINK_TIMEOUT:
