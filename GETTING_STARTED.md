@@ -201,17 +201,22 @@ python -m scripts.test_integration_suite
 
 ---
 
-### 2. Zero-Overhead AES-128-CTR Encryption Tests (7 Tests)
-Verifies military-grade payload encryption with 0% size inflation (+0 bytes):
+### 2. Authenticated AES-128-CCM Encryption Suite (9 Tests)
+Verifies authenticated AEAD encryption matching `protocol/crypto.py` and hardware runs on the Heltec WiFi LoRa 32 V3:
 
 ```bash
 uv run python -m unittest scripts/test_encryption.py
 ```
 *Asserts:*
-- `DETECTION`: exactly **21 bytes** (plaintext) $\to$ **21 bytes** (encrypted).
-- `COMMAND`: exactly **9 bytes** (plaintext) $\to$ **9 bytes** (encrypted).
-- `HEARTBEAT`: exactly **12 bytes** (plaintext) $\to$ **12 bytes** (encrypted).
-- Deterministic header IV derivation, tamper detection, and direction isolation.
+- Authenticated Wire Sizes (+8 B overhead):
+  - `DETECTION`: 21 B plain $\to$ **29 B** encrypted.
+  - `COMMAND`: 9 B plain $\to$ **17 B** encrypted.
+  - `HEARTBEAT`: 12 B plain $\to$ **20 B** encrypted.
+  - `ACK`: 6 B plain $\to$ **14 B** encrypted.
+- Fresh random 48-bit nonces on every transmission.
+- 4-byte auth tag rejects bit-level tampering, forged frames, wrong-key frames, and plain unencrypted injection.
+- Reliable end-to-end delivery under 30% radio link loss over `SimLinkBridge`.
+- Optional zero-expansion CTR mode fallback.
 
 ---
 

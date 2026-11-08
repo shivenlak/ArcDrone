@@ -185,7 +185,7 @@ python -m scripts.test_integration_suite
 
 ### Component Test Scripts
 - [`scripts/test_enhanced_features.py`](test_enhanced_features.py): Validates dynamic role learning, dual-path radio emulation (ESP-NOW + LoRa diversity), grid-aware coasting tracker, and monotonic clock safety.
-- [`scripts/test_encryption.py`](test_encryption.py): Validates zero-byte payload expansion, round-trip correctness, and tamper detection.
+- [`scripts/test_encryption.py`](test_encryption.py): Validates authenticated AES-128-CCM wire sizes (+8B), random nonces, bit-flip tamper rejection, wrong-key drops, and Link delivery under packet loss.
 - [`scripts/test_lora_bandwidth.py`](test_lora_bandwidth.py): Rigorous 3.0 kB/s bandwidth assertion test.
 - [`scripts/link_test.py`](link_test.py): Link loss, 15s blackout, 64-item ring buffer flush test.
 - [`scripts/test_control_loop.py`](test_control_loop.py): Two-way operator command state loop test.
@@ -193,19 +193,22 @@ python -m scripts.test_integration_suite
 
 ---
 
-## 7. Output 6: Zero-Overhead AES-128-CTR Tactical Encryption
+## 7. Output 6: Authenticated AES-128-CCM Tactical Encryption
 
 **Script:** [`scripts/secure_channel.py`](secure_channel.py)  
 **Test Suite:** [`scripts/test_encryption.py`](test_encryption.py)
 
 ### What it produces
-Military-standard tactical payload encryption compliant with LoRaWAN (IEEE 802.15.4) and defense narrowband telemetry standards:
-1. **Zero-Byte Expansion (+0 bytes):** Uses AES-128 in Counter Mode (CTR) to encrypt the payload body without changing total packet length.
-   - `DETECTION`: exactly **21 bytes** (plaintext) $\to$ **21 bytes** (encrypted).
-   - `COMMAND`: exactly **9 bytes** (plaintext) $\to$ **9 bytes** (encrypted).
-   - `HEARTBEAT`: exactly **12 bytes** (plaintext) $\to$ **12 bytes** (encrypted).
-2. **Deterministic Nonce Derivation:** 16-byte IV is independently computed at both ends using `[magic:1B | ptype:1B | seq:2B | dir_salt:1B | zero_pad:11B]`. No IV bytes are transmitted over the radio.
-3. **CRC16 Verification:** Radio checksum is verified before decryption, preventing tamper/corruption injection.
+Authenticated AEAD link encryption matching [`protocol/crypto.py`](../protocol/crypto.py) and hardware runs on the Heltec WiFi LoRa 32 V3:
+1. **Authenticated Wire Frames (+8 bytes):** Replaces CRC16 with an AES-128-CCM 4-byte authentication tag:
+   - `DETECTION`: 21 B plain $\to$ **29 B** encrypted.
+   - `COMMAND`: 9 B plain $\to$ **17 B** encrypted.
+   - `HEARTBEAT`: 12 B plain $\to$ **20 B** encrypted.
+   - `ACK`: 6 B plain $\to$ **14 B** encrypted.
+2. **Fresh 48-bit Nonces:** A 6-byte random nonce is generated fresh for every transmission (retries included).
+3. **Forgery & Tamper Rejection:** Any flipped bit in header, nonce, ciphertext, or auth tag triggers tag failure; plain frames and wrong-key frames are dropped.
+4. **Hardware Measurements (Heltec V3):** 34.1 ms avg RTT on dual radio, 156.7 ms on LoRa-only.
+5. **Optional Zero-Overhead CTR Mode:** Backward-compatible fallback for zero-expansion (+0 B) requirements.
 
 ### How to Run
 

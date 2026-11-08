@@ -85,10 +85,11 @@ uv run python scripts/run_live_showcase.py
 # Browser: Open http://localhost:8000
 ```
 
-### F. Run Zero-Overhead Encryption Tests
+### F. Run Authenticated AES-128-CCM Encryption Suite (9 Tests)
 ```bash
 uv run python -m unittest scripts/test_encryption.py
 ```
+*Validates: Authenticated AEAD wire sizes (+8B overhead), random nonces, bit-flip tamper rejection, unencrypted frame rejection, and reliable Link communication under packet loss over `SimLinkBridge`.*
 
 ### G. Run Enhanced Architectural Features Verification
 ```bash

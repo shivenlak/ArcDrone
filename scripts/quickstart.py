@@ -96,7 +96,7 @@ def main_menu():
         print("   6. Launch Ground Station Server")
         print("\n APPROACH 3: TEST CASES, BENCHMARKS & ANALYTICS")
         print("   7. Run Automated Headless Verification Suite (116 tests)")
-        print("   8. Run Zero-Overhead AES-128-CTR Encryption Suite (7 tests)")
+        print("   8. Run Authenticated AES-128-CCM & Tactical Encryption Suite (9 tests)")
         print("   9. Run 6 Multi-Scenario Aerial Benchmarks (Batch MP4/PNG/JSON)")
         print("  10. Run Primary Link Bandwidth Compliance Auditor (<= 3 kB/s)")
         print("\n  11. Re-run Environment & Hardware Diagnostics")

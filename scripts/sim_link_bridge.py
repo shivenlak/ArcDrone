@@ -215,12 +215,12 @@ class SimLinkBridge:
             return self.roles.get(port_name, "UNKNOWN")
 
     def _learn_role(self, sender_name: str, receiver_name: str, line: bytes) -> None:
-        """Infer DRONE vs GROUND dynamically from packet magic and opcode."""
+        """Infer DRONE vs GROUND dynamically from packet magic and opcode (plain 0xD2 or secure 0xD3)."""
         try:
             line_str = line.strip().decode("ascii", errors="ignore")
             if len(line_str) >= 4:
                 raw = bytes.fromhex(line_str[:8])
-                if len(raw) >= 2 and raw[0] == 0xD2:  # p.MAGIC
+                if len(raw) >= 2 and raw[0] in (0xD2, 0xD3):  # 0xD2 = plain, 0xD3 = AES-128-CCM secure
                     ptype = raw[1]
                     if ptype in (0x01, 0x03):  # DETECTION or HEARTBEAT
                         self.roles[sender_name] = "DRONE"

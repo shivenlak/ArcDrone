@@ -29,7 +29,7 @@ ArcDrone solves this through an **Edge-Inferenced Tactical Scene Twin**:
 1. **On-Board Intelligence:** The drone runs edge YOLOv8 computer vision locally on raw aerial video at high frame rates.
 2. **Compact Delta Vectors over Narrowband Link:** Rather than transmitting pixels, the drone transmits compact structured alerts (21 bytes) and spread-out 12 FPS vector updates ($\Delta x, \Delta y, \Delta w, \Delta h$, $\le 2.0\text{ kbps}$) using normalized 16-bit ratio quantization.
 3. **1:1 Ground Reconstructor:** The ground station rebuilds the tactical picture on a **blank radar canvas** with exact spatial 1:1 positioning, persistent tracking IDs, velocity vectors, and multi-target manifests.
-4. **Zero-Overhead Tactical Encryption:** AES-128-CTR military telemetry cipher mode preserving 100% byte-exact payload sizes (+0 bytes inflation).
+4. **Authenticated Tactical Encryption:** AES-128-CCM AEAD link encryption (`ARCDRONE_KEY`) adding only +8 bytes per packet, with 48-bit fresh nonces, 4-byte authentication tags, and instant rejection of forged or plain injection.
 5. **Two-Way Control Loop:** Ground commanders can override flight modes (`HOLD`, `RESUME`, `RTB`) or acknowledge priority alerts with guaranteed stop-and-wait ACK delivery and 64-entry store-and-forward buffering across complete radio blackouts.
 
 ---
@@ -40,13 +40,13 @@ Use this ranked hierarchy to structure your slide deck, investor pitch, and judg
 
 | Rank | Feature | Why It Blows Judges & Investors Away | Quantitative Proof | Slide / Pitch Hook |
 |:---:|---|---|---|---|
-| **#1** | **1:1 Blank-Canvas Tactical Scene Twin** | **Eliminates the entire video feed.** Strips raw RGB completely in contested airspace and reconstructs the tactical picture on a blank radar grid with 16-bit ratio accuracy, velocity vectors, and tracking IDs over a micro $\le 2\text{ kbps}$ stream. | **$1,800\times$ bandwidth reduction** vs 720p; $0$ pixels broadcasted over radio. | *"We don't broadcast pixels in contested airspace; we stream tactical truth."* |
-| **#2** | **Zero-Overhead Standard Military Encryption** | **Zero packet size inflation (+0 bytes).** AES-128-CTR stream cipher (LoRaWAN / IEEE 802.15.4 defense standard). Reconstructs 16-byte IVs deterministically from packet sequence headers without spending a single extra byte of bandwidth. | **21B stays 21B, 9B stays 9B, 12B stays 12B.** 100% byte-for-byte size preservation. | *"Military-grade encryption with zero payload penalty."* |
+| **#1** | **1:1 Blank-Canvas Tactical Scene Twin** | **Eliminates the entire video feed.** Strips raw RGB completely in contested airspace and reconstructs the tactical picture on a blank radar grid with 16-bit ratio accuracy, velocity vectors, and tracking IDs over a micro $\le 2\text{ kbps}$ stream. | **$10,000\times$ bandwidth reduction** vs 720p video (200 bit/s measured vs 2 Mbit/s); $0$ pixels broadcasted over radio. | *"We don't broadcast pixels in contested airspace; we stream tactical truth."* |
+| **#2** | **Authenticated Link Encryption (AES-128-CCM)** | **Hardware-verified cryptographic integrity.** Replaces CRC16 with an AES-128-CCM 4-byte auth tag (+8 B/packet). Every transmission uses a fresh random 48-bit nonce. Plain frames and flipped bits are rejected. Tested on Heltec V3 over ESP-NOW and LoRa 915 MHz. | **DETECTION 29B, COMMAND 17B.** Hardware RTT: **34.1 ms avg** (dual radio), **156.7 ms** (LoRa only). Replay limitation documented. | *"Cryptographically authenticated telemetry over 915 MHz LoRa with 34 ms round-trip response."* |
 | **#3** | **Empirical 6-Scenario Benchmark Proof** | **Stress-tested across 6 diverse operational scenarios.** Proves system stability across dynamic camera drift, high yaw, dense cross-traffic, and airfield perimeters handling over 100 simultaneous targets. | **Case 2 handled 101 targets at 1,708 B/s** (43% margin below the 3.0 kB/s ceiling). | *"Proven on 100+ simultaneous targets under active combat flight maneuvers."* |
-| **#4** | **Electronic Warfare Blackout Survival** | **Store-and-forward ring buffer.** When RF jamming strikes, the drone automatically buffers up to 64 alerts in a circular queue and flushes them oldest-first with zero duplicates the microsecond the link recovers. | **Tested across 15-second radio blackout**; 100% alert delivery upon RF recovery. | *"Zero telemetry loss across electronic warfare blackouts."* |
-| **#5** | **Two-Way Closed-Loop Tactical Overrides** | **Active command & control over narrowband radio.** Ground operators can issue `HOLD`, `RESUME`, `RTB`, and `OPERATOR_ACK` with guaranteed stop-and-wait delivery and confirmed drone state transitions. | **5/5 command scenarios verified**; confirmed ACK lifecycle (`PENDING` $\to$ `CONFIRMED`). | *"Not just an aerial sensor; a closed-loop tactical command node."* |
+| **#4** | **Electronic Warfare Blackout Survival** | **Store-and-forward ring buffer.** When RF jamming strikes, the drone automatically buffers up to 64 alerts in a circular queue and flushes them oldest-first with zero duplicates the microsecond the link recovers. | **Tested on hardware: 14 s mute during 120 alerts**; 120/120 delivered in order, link recovered in 3.1 s. | *"Zero telemetry loss across electronic warfare blackouts."* |
+| **#5** | **Two-Way Closed-Loop Tactical Overrides** | **Active command & control over narrowband radio.** Ground operators can issue `HOLD`, `RESUME`, `RTB`, and `OPERATOR_ACK` with guaranteed stop-and-wait delivery and confirmed drone state transitions. | **38/38 hardware commands delivered**; 11 commands queued during blackout executed in exact order upon restore. | *"Not just an aerial sensor; a closed-loop tactical command node."* |
 | **#6** | **Real-Time Browser Radar & Playback Scrubber** | **Interactive operator dashboard with instant replay.** Operators can click any contact to lock its trajectory, view compass directions (N/S/E/W), inspect behavior tags (STATIONARY/MOVING/LOITERING), and drag the replay slider to scrub past motion. | **12 Hz real-time telemetry**; zero installation required (standard browser). | *"Full flight-recorder playback and target tracking in any web browser."* |
-| **#7** | **Hardware-Verified Dual ESP32 & Pi 4 Stack** | **Zero vaporware.** The firmware compiles and runs on dual physical ESP32 boards (ESP-NOW + Heltec LoRa 915 MHz targets) with hardware button mute and USB auto-recovery, backed by 116 automated verification tests. | **116/116 automated tests pass**; physical hardware buttons and LEDs verified. | *"Production-grade silicon and 100% automated test verification."* |
+| **#7** | **Physical Silicon Verified (Heltec V3 Dual-Path)** | **Zero vaporware.** Runs on dual Heltec WiFi LoRa 32 V3 boards (ESP-NOW + SX1262 LoRa 915 MHz diversity) with PRG hardware button mute, live OLED telemetry, and USB auto-recovery, backed by automated tests. | **200/200 alerts delivered (0 retries, 19.9 ms RTT)**; auto-recovery in 2.7 s after USB replug. | *"Hardware-proven on physical silicon with dual-frequency radio diversity."* |
 
 ---
 
@@ -70,16 +70,21 @@ The ArcDrone pipeline was evaluated across 6 diverse aerial scenarios using VisD
 ## 3. Bandwidth & Spectral Footprint Comparison
 
 ```
-Standard 720p Video Stream (H.264 @ 30 FPS):  ██████████████████████████████  2,500,000 bit/s
-LoRa SF7 Channel Capacity (915 MHz, 500 kHz):  ██                               43,000 bit/s
+Standard 720p Video Stream (H.264 @ 30 FPS):  ██████████████████████████████  2,000,000 bit/s
+LoRa SF7 Channel Capacity (915 MHz, 125 kHz):  ██                                5,470 bit/s
 ArcDrone Primary Budget Ceiling (3 kB/s):      █                                24,000 bit/s
 ArcDrone Peak Wire Rate (Case 2 - 101 targets): ▌                                13,664 bit/s (1.70 kB/s)
-ArcDrone Typical Wire Rate (Active Patrol):    ▎                                 6,800 bit/s (0.85 kB/s)
+ArcDrone Live Demo Traffic (both directions):   ▎                                   200 bit/s (0.025 kB/s)
 ```
 
-- **Bandwidth Reduction:** ArcDrone achieves a **$\approx 1,800\times$ to $2,500\times$ reduction in bandwidth** compared to streaming raw 720p/1080p video.
-- **RF Stealth:** The drone can operate on duty-cycled bursts of $< 1.7\text{ kB/s}$, making signal detection and triangulation by adversarial EW units exponentially more difficult.
-- **Range & Penetration:** LoRa 915 MHz with link budget $+140\text{ dBm}$ achieves non-line-of-sight range up to 5–15 km, penetrating tree canopy and urban structures where high-frequency video links fail.
+- **Bandwidth Reduction:** ArcDrone achieves a **$\approx 10,000\times$ reduction in bandwidth** compared to streaming raw 720p video (~200 bit/s measured vs 2,000,000 bit/s).
+- **RF Stealth:** The drone emits compact burst telemetry (200 bit/s during typical patrols), remaining well below LoRa SF7/BW125 capacity (5,470 bit/s) and making RF triangulation by electronic surveillance units exceptionally difficult.
+- **Hardware-Measured Performance (Heltec V3 @ 915 MHz):**
+  - **Dual Radio (ESP-NOW + LoRa):** 200/200 alerts delivered, 0 retries, **19.9 ms avg RTT** (27.0 ms p95).
+  - **LoRa Only (ESP-NOW muted via PRG):** 60/60 alerts delivered, **128.5 ms avg RTT** (150.5 ms p95).
+  - **Authenticated AES-128-CCM:** 60/60 alerts delivered, 0 retries, **34.1 ms avg RTT** (62.0 ms p95).
+  - **Outage Survival:** 14 s hardware radio mute during 120 alerts $\to$ 120/120 delivered in order, recovered in 3.1 s.
+  - **USB Auto-Recovery:** Drone unplugged and replugged $\to$ auto-recovered in 2.7 s, 100/100 alerts delivered.
 
 ---
 
