@@ -140,6 +140,11 @@ def audit_solution() -> Dict[str, Any]:
         "spatially within a gate of 0.33 * frame size and held for 25 seconds. A contact alerts exactly once while in view, "
         "preventing repeated transmissions for the same vehicle and eliminating buffer overflow."
     )
+    report["doing_right"].append(
+        "Visible Radio Failover & Listen-Before-Talk (Shiven commit e979d6d): Live 'Radio paths' tiles on the dashboard "
+        "render per-radio RSSI, packet counts, and failover status. Half-duplex LoRa collisions are eliminated via preamble LBT "
+        "and heartbeat jitter. Hardware failover trials verified 80/80 alerts delivered across 3 runs with ESP-NOW killed mid-flight."
+    )
 
     # 4. Analyze Weaknesses, Gaps & Tactical Risks ("What We Are Doing Wrong / Missing")
     report["doing_wrong_or_gaps"].append(

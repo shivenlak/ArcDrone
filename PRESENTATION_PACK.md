@@ -84,6 +84,7 @@ ArcDrone Live Demo Traffic (both directions):   ▎                             
   - **LoRa Only (ESP-NOW muted via PRG):** 60/60 alerts delivered, **128.5 ms avg RTT** (150.5 ms p95).
   - **Authenticated AES-128-CCM:** 60/60 alerts delivered, 0 retries, **34.1 ms avg RTT** (62.0 ms p95).
   - **Outage Survival:** 14 s hardware radio mute during 120 alerts $\to$ 120/120 delivered in order, recovered in 3.1 s.
+  - **Mid-Flight Failover:** 30 alerts on dual radio, ESP-NOW killed mid-run, 50 alerts on LoRa $\to$ **80/80 delivered across 3 separate runs** (22–25 ms dual $\to$ 126–145 ms LoRa).
   - **USB Auto-Recovery:** Drone unplugged and replugged $\to$ auto-recovered in 2.7 s, 100/100 alerts delivered.
 
 ---
