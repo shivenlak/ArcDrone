@@ -151,6 +151,12 @@ def main():
     bw_monitor = BandwidthMonitor(budget_limit=3000.0)
     bw_monitor.attach_to_bridge(bridge)
 
+    enc_key = os.environ.get("ARCDRONE_KEY", "").strip()
+    if enc_key:
+        print(f"[+] AES-128-CCM Authenticated Encryption: ACTIVE (ARCDRONE_KEY set)")
+    else:
+        print("[*] Link Encryption: Plaintext (set ARCDRONE_KEY to activate AES-128-CCM)")
+
     # 2. Start Simulated Drone in background
     stop_event = threading.Event()
     drone_thread = threading.Thread(

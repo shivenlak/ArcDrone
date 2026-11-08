@@ -93,19 +93,21 @@ def main_menu():
         print("   4. Stream VisDrone Scenes to UDP Relay (:9999)")
         print("   5. Launch One-Command Footage->Radio->Dashboard Demo (drone_node.run_demo)")
         print("\n APPROACH 2: REAL HARDWARE TRIALS (ESP32 or LoRa)")
-        print("   6. Launch Drone Node (Edge YOLO Inference)")
-        print("   7. Launch Ground Station Server")
+        print("   6. Launch Drone Node (Edge YOLO Inference at imgsz 1280)")
+        print("   7. Launch Ground Station Server (http://localhost:8001)")
+        print("   8. Generate & Display AES-128-CCM Key (python -m protocol.crypto)")
         print("\n APPROACH 3: TEST CASES, BENCHMARKS & ANALYTICS")
-        print("   8. Run Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)")
-        print("   9. Run Authenticated AES-128-CCM & Tactical Encryption Suite (9 tests)")
-        print("  10. Run 6 Multi-Scenario Aerial Benchmarks (Batch MP4/PNG/JSON)")
-        print("  11. Run Primary Link Bandwidth Compliance Auditor (<= 3 kB/s)")
-        print("  12. Run Industry Expert Defense & Architecture Audit")
-        print("\n  13. Re-run Environment & Hardware Diagnostics")
+        print("   9. Run Full Pytest Suite (pytest -q)")
+        print("  10. Run Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)")
+        print("  11. Run Authenticated AES-128-CCM & Tactical Encryption Suite (9 tests)")
+        print("  12. Run 6 Multi-Scenario Aerial Benchmarks (Batch MP4/PNG/JSON)")
+        print("  13. Run Primary Link Bandwidth Compliance Auditor (<= 3 kB/s)")
+        print("  14. Run Industry Expert Defense & Architecture Audit")
+        print("\n  15. Re-run Environment & Hardware Diagnostics")
         print("   0. Exit")
         print("=" * 70)
 
-        choice = input("Enter choice [0-13]: ").strip()
+        choice = input("Enter choice [0-15]: ").strip()
         if choice == "0":
             print("\nExiting. Good luck with natHacks!")
             sys.exit(0)
@@ -126,24 +128,37 @@ def main_menu():
             video = input("Enter video path (default: data/visdrone_aerial_sample.mp4): ").strip()
             if not video:
                 video = "data/visdrone_aerial_sample.mp4"
-            run_command([sys.executable, "-m", "drone_node.main", "--port", port, "--video", video, "--fps", "10"])
+            run_command([sys.executable, "-m", "drone_node.main", "--port", port, "--video", video, "--imgsz", "1280", "--fps", "10"])
         elif choice == "7":
             port = input("Enter ground ESP32 serial port (e.g. COM4 or /dev/cu.usbserial-2): ").strip()
-            run_command([sys.executable, "-m", "ground_station.server", "--port", port])
+            run_command([sys.executable, "-m", "ground_station.server", "--port", port, "--http-port", "8001"])
         elif choice == "8":
-            run_command([sys.executable, "-m", "scripts.test_integration_suite"])
+            from protocol import crypto
+            key = crypto.generate_key() if hasattr(crypto, "generate_key") else os.urandom(16).hex().upper()
+            os.environ["ARCDRONE_KEY"] = key
+            print("\n" + "=" * 70)
+            print(" GENERATED AES-128-CCM PRE-SHARED KEY:")
+            print(f" {key}")
+            print("=" * 70)
+            print(f"To use on both machines, run in your terminal before launching:")
+            print(f"export ARCDRONE_KEY={key}    # On macOS/Linux")
+            print(f"$env:ARCDRONE_KEY=\"{key}\"   # On Windows PowerShell\n")
         elif choice == "9":
-            run_command([sys.executable, "-m", "unittest", "scripts/test_encryption.py"])
+            run_command([sys.executable, "-m", "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "scripts/test_encryption.py", "scripts/test_enhanced_features.py", "-q"])
         elif choice == "10":
-            run_command([sys.executable, "scripts/run_test_cases.py"])
+            run_command([sys.executable, "-m", "scripts.test_integration_suite"])
         elif choice == "11":
-            run_command([sys.executable, "-m", "scripts.test_lora_bandwidth"])
+            run_command([sys.executable, "-m", "unittest", "scripts/test_encryption.py"])
         elif choice == "12":
-            run_command([sys.executable, "scripts/industry_expert_audit.py"])
+            run_command([sys.executable, "scripts/run_test_cases.py"])
         elif choice == "13":
+            run_command([sys.executable, "-m", "scripts.test_lora_bandwidth"])
+        elif choice == "14":
+            run_command([sys.executable, "scripts/industry_expert_audit.py"])
+        elif choice == "15":
             check_environment()
         else:
-            print("\nInvalid selection. Please choose 0 to 13.")
+            print("\nInvalid selection. Please choose 0 to 15.")
 
 
 if __name__ == "__main__":
