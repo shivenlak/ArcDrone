@@ -47,7 +47,7 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 > **Looking for a step-by-step setup guide?** See **[GETTING_STARTED.md](GETTING_STARTED.md)** for our unified guide broken down by operational approach:
 > - **[Approach 1: Virtual Trials](GETTING_STARTED.md#approach-1-virtual-trials-zero-hardware-100-simulated)** (Zero hardware, 100% simulated, runs on any laptop)
 > - **[Approach 2: Real Hardware Trials](GETTING_STARTED.md#approach-2-real-hardware-trials)** (Dual ESP32s with ESP-NOW, or Heltec LoRa 915 MHz, or Hybrid Dual-Radio)
-> - **[Approach 3: Test Cases & Benchmarks](GETTING_STARTED.md#approach-3-test-cases-benchmarks--analytics)** (116 automated tests, 6 aerial video benchmarks, zero-overhead encryption)
+> - **[Approach 3: Test Cases & Benchmarks](GETTING_STARTED.md#approach-3-test-cases-benchmarks--analytics)** (45 automated tests, 6 aerial video benchmarks, authenticated encryption)
 
 ### Interactive Launcher (Single Command)
 
@@ -124,7 +124,7 @@ The `maybe` branch integrates the full Defense & Security evaluation suite, prov
    `python scripts/stream_visdrone_to_udp.py`  
    Streams authentic VisDrone scene packets at 12 Hz to `scene_ws_relay`, enabling live browser tactical tracking without requiring drone hardware or physical cameras.
 
-4. **116-Test Headless Verification Suite:**  
+4. **Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total):**  
    `uv run --with pytest --with pyserial pytest scripts/test_integration_suite.py -q`  
    100% headless pass across 5 verification tiers (virtual radio bridge, blackout/recovery, <= 3 kB/s budget auditor, UAARG logging, 2-way control loop).
 

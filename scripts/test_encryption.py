@@ -30,8 +30,6 @@ except ImportError:
     Link = None
 
 from scripts.secure_channel import (
-    DIR_DOWNLINK,
-    DIR_UPLINK,
     MAGIC_SECURE,
     OVERHEAD,
     SecurePacketCodec,
@@ -227,19 +225,24 @@ class TestEncryptedLinkOverSimBridge(unittest.TestCase):
             ground.stop()
 
 
-class TestFallbackCTRMode(unittest.TestCase):
-    """Validates the optional zero-expansion (+0 bytes) CTR codec."""
+class TestSecurePacketCodecWrapper(unittest.TestCase):
+    """Validates the SecurePacketCodec helper wrapping canonical AES-128-CCM."""
 
-    def test_ctr_zero_byte_expansion(self):
-        codec = SecurePacketCodec(key=KEY, mode="CTR")
+    def test_codec_wrapper_matches_canonical(self):
+        codec = SecurePacketCodec(key=KEY)
         plain = p.encode(p.DETECTION, seq=99, **FIELDS)
         self.assertEqual(len(plain), 21)
 
-        enc = codec.encrypt_packet_data(plain, direction=DIR_DOWNLINK)
-        self.assertEqual(len(enc), 21, "CTR ciphertext must be exactly 21 bytes")
+        enc = codec.encrypt_packet_data(plain)
+        self.assertEqual(len(enc), 29, "Encrypted wire frame must be 29 bytes (+8B overhead)")
+        self.assertEqual(enc[0], MAGIC_SECURE)
 
-        dec = codec.decrypt_packet_data(enc, direction=DIR_DOWNLINK)
+        dec = codec.decrypt_packet_data(enc)
         self.assertEqual(plain, dec)
+
+        decoded = codec.decode_secure(enc)
+        self.assertIsNotNone(decoded)
+        self.assertEqual(decoded["seq"], 99)
 
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@ When assisting team member **Manan** (branch: `manan/test-lora-demo` / `maybe`),
 
 All commands can be run with **`uv`** (fastest, hermetic) or standard `python` with active virtual environment:
 
-### A. Run Automated Verification Suite (116 Tests)
+### A. Run Automated Verification Suite (9 Integration Tests, 45 Repo Total)
 ```bash
 # Using uv (recommended on all OS):
 uv run --with pytest --with pyserial pytest scripts/test_integration_suite.py -q
@@ -49,7 +49,7 @@ pytest scripts/test_integration_suite.py -q
 # Direct CLI runner:
 python -m scripts.test_integration_suite
 ```
-*Expected: 116 tests pass, exit code 0.*
+*Expected: 9 integration test suites pass, exit code 0.*
 
 ### B. Generate 1:1 Side-by-Side Video & High-Res Snapshot
 ```bash
@@ -160,16 +160,16 @@ VISDRONE_CLASSES = {
 
 ---
 
-### 4.4 Zero-Overhead AES-128-CTR Tactical Encryption (`scripts/secure_channel.py`)
-- **Cipher Standard:** AES-128 in Counter Mode (CTR) conforming to IEEE 802.15.4 / LoRaWAN military telemetry specs.
-- **Payload Overhead:** **0 bytes (+0% inflation)**. Plaintext byte count == Ciphertext byte count:
-  * `DETECTION`: exactly 21 bytes
-  * `COMMAND`: exactly 9 bytes
-  * `HEARTBEAT`: exactly 12 bytes
-- **Nonce Derivation:** 16-byte IV is deterministically constructed from packet header:
-  `[magic:1B | ptype:1B | seq:2B | dir_salt:1B | 11x 0x00]`
-  Both sides independently construct the IV; no extra bytes are transmitted over the radio.
-- **Integrity:** CRC16 is evaluated over encrypted bytes prior to decryption.
+### 4.4 Authenticated Tactical Link Encryption (`scripts/secure_channel.py` & `protocol/crypto.py`)
+- **Cipher Standard:** AES-128-CCM (Counter with CBC-MAC) AEAD encryption and authentication.
+- **Wire Overhead:** **+8 bytes per packet**. Replaces CRC16 with a 4-byte auth tag:
+  * `DETECTION`: 21 B -> 29 bytes
+  * `COMMAND`: 9 B -> 17 bytes
+  * `HEARTBEAT`: 12 B -> 20 bytes
+  * `ACK`: 6 B -> 14 bytes
+- **Fresh Nonces:** 6-byte (48-bit) random nonce generated fresh for every transmission (retries included).
+- **Authentication & Integrity:** Magic 0xD3 frames; any flipped bit in header, nonce, ciphertext, or auth tag causes tag verification to fail; plain frames (0xD2) and forged packets are rejected.
+- **Replay Limitation:** Replay is mitigated across the 64-seq circular window. Old packets outside this window could theoretically be accepted if sequence numbers wrap or across reboots.
 
 ---
 

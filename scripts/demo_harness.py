@@ -172,7 +172,7 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
 
         # Step 6: Simulated Radio Blackout & Store-and-Forward Buffer Flush
         print_step(6, "Simulated Radio Blackout & Link-Loss Resilience")
-        print("  Simulating 3.5s radio link blackout (hostile jamming / terrain obstruction)...")
+        print("  Simulating 3.5s radio link blackout (terrain obstruction / signal loss)...")
         bridge.cut()
         time.sleep(3.2)  # Wait for 3.0s timeout
         assert not ground_link.up, "Ground station should detect link down at 3.0s"

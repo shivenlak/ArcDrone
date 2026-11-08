@@ -22,7 +22,7 @@
 In contested, remote, or electronic-warfare (EW) environments, airborne surveillance drones cannot stream raw continuous video:
 - **Bandwidth Starvation:** Narrowband links (LoRa 915 MHz, tactical radios) cannot carry megabit-per-second video streams.
 - **RF Signature & Geolocation Risk:** High-throughput transmitters emit continuous RF radiation, exposing the drone’s position to electronic direction-finding (DF) and anti-radiation countermeasures.
-- **Narrowband Jamming:** Traditional video links collapse completely under intermittent interference or channel dropouts.
+- **Narrowband Interference & Signal Outages:** Traditional video links collapse completely under intermittent interference or channel dropouts.
 
 ### The ArcDrone Innovation
 ArcDrone solves this through an **Edge-Inferenced Tactical Scene Twin**:
@@ -43,7 +43,7 @@ Use this ranked hierarchy to structure your slide deck, investor pitch, and judg
 | **#1** | **1:1 Blank-Canvas Tactical Scene Twin** | **Eliminates the entire video feed.** Strips raw RGB completely in contested airspace and reconstructs the tactical picture on a blank radar grid with 16-bit ratio accuracy, velocity vectors, and tracking IDs over a micro $\le 2\text{ kbps}$ stream. | **$10,000\times$ bandwidth reduction** vs 720p video (200 bit/s measured vs 2 Mbit/s); $0$ pixels broadcasted over radio. | *"We don't broadcast pixels in contested airspace; we stream tactical truth."* |
 | **#2** | **Authenticated Link Encryption (AES-128-CCM)** | **Hardware-verified cryptographic integrity.** Replaces CRC16 with an AES-128-CCM 4-byte auth tag (+8 B/packet). Every transmission uses a fresh random 48-bit nonce. Plain frames and flipped bits are rejected. Tested on Heltec V3 over ESP-NOW and LoRa 915 MHz. | **DETECTION 29B, COMMAND 17B.** Hardware RTT: **34.1 ms avg** (dual radio), **156.7 ms** (LoRa only). Replay limitation documented. | *"Cryptographically authenticated telemetry over 915 MHz LoRa with 34 ms round-trip response."* |
 | **#3** | **Empirical 6-Scenario Benchmark Proof** | **Stress-tested across 6 diverse operational scenarios.** Proves system stability across dynamic camera drift, high yaw, dense cross-traffic, and airfield perimeters handling over 100 simultaneous targets. | **Case 2 handled 101 targets at 1,708 B/s** (43% margin below the 3.0 kB/s ceiling). | *"Proven on 100+ simultaneous targets under active combat flight maneuvers."* |
-| **#4** | **Electronic Warfare Blackout Survival** | **Store-and-forward ring buffer.** When RF jamming strikes, the drone automatically buffers up to 64 alerts in a circular queue and flushes them oldest-first with zero duplicates the microsecond the link recovers. | **Tested on hardware: 14 s mute during 120 alerts**; 120/120 delivered in order, link recovered in 3.1 s. | *"Zero telemetry loss across electronic warfare blackouts."* |
+| **#4** | **Radio Outage Survival & Store-and-Forward Recovery** | **Store-and-forward ring buffer.** When a radio link outage occurs (signal shadowing, packet loss, or board mute), the drone automatically buffers up to 64 alerts in a circular queue and flushes them oldest-first with zero duplicates the microsecond the link recovers. | **Tested on hardware: 14 s mute during 120 alerts**; 120/120 delivered in order, link recovered in 3.1 s. | *"Zero telemetry loss across radio link outages."* |
 | **#5** | **Two-Way Closed-Loop Tactical Overrides** | **Active command & control over narrowband radio.** Ground operators can issue `HOLD`, `RESUME`, `RTB`, and `OPERATOR_ACK` with guaranteed stop-and-wait delivery and confirmed drone state transitions. | **38/38 hardware commands delivered**; 11 commands queued during blackout executed in exact order upon restore. | *"Not just an aerial sensor; a closed-loop tactical command node."* |
 | **#6** | **Real-Time Browser Radar & Playback Scrubber** | **Interactive operator dashboard with instant replay.** Operators can click any contact to lock its trajectory, view compass directions (N/S/E/W), inspect behavior tags (STATIONARY/MOVING/LOITERING), and drag the replay slider to scrub past motion. | **12 Hz real-time telemetry**; zero installation required (standard browser). | *"Full flight-recorder playback and target tracking in any web browser."* |
 | **#7** | **Physical Silicon Verified (Dual Heltec V3 & MacBook Pro M4 Stack)** | **Zero vaporware.** Runs on dual Heltec WiFi LoRa 32 V3 boards (ESP-NOW + SX1262 LoRa 915 MHz diversity) with MacBook Pro (M4 Pro) powering both the sender (drone node) and receiver (ground station) for 64 ms inferencing, with Raspberry Pi 4 maintained on standby for future flight integration. | **200/200 alerts delivered (0 retries, 19.9 ms RTT)**; auto-recovery in 2.7 s after USB replug. | *"Hardware-proven on physical silicon with dual-frequency radio diversity."* |
@@ -112,13 +112,13 @@ ArcDrone Live Demo Traffic (both directions):   ▎                             
 - **Visual:** Bar chart showing peak wire rates across all 6 test cases vs 3 kB/s threshold.
 
 ### Slide 5: Store-and-Forward Outage Recovery & Two-Way Control
-- **Headline:** Zero Telemetry Loss Across Electronic Warfare Blackouts.
-- **Talking Points:** When the radio link is jammed or cut for 15 seconds, the drone enters silent ring-buffering (up to 64 alerts). The moment the link recovers, the buffer flushes oldest-first with zero duplicates. Ground commands (`HOLD`, `RESUME`, `RTB`) are reliably delivered and confirmed.
+- **Headline:** Zero Telemetry Loss Across Radio Link Outages.
+- **Talking Points:** When the radio link drops or is muted for 14 seconds, the drone enters silent ring-buffering (up to 64 alerts). The moment the link recovers, the buffer flushes oldest-first with zero duplicates. Ground commands (`HOLD`, `RESUME`, `RTB`) are reliably delivered and confirmed.
 - **Visual:** Timeline graph of blackout cut, buffer fill, recovery, and ACK delivery.
 
 ### Slide 6: Team, Tech Stack & natHacks Readiness
-- **Headline:** Production-Grade Engineering, 100% Hardware-Verified.
-- **Talking Points:** 116 headless automated tests passing; dual MacBook Pro (M4 Pro) sender & receiver nodes interfacing with physical Heltec V3 dual-path radios; Raspberry Pi 4 edge compute target on standby for airframe integration; UAARG telemetry adapter integrated.
+- **Headline:** Rigorous Systems Engineering, Hardware-Verified.
+- **Talking Points:** 45 automated tests passing (9 in Manan's integration suite); dual MacBook Pro (M4 Pro) sender & receiver nodes interfacing with physical Heltec V3 dual-path radios; Raspberry Pi 4 edge compute target on standby for airframe integration; UAARG telemetry adapter integrated.
 - **Visual:** Team role matrix and live demo callout.
 
 ---
@@ -188,4 +188,4 @@ AI assistants (**Claude**, **Gemini**, **ChatGPT**) can ingest this document to 
 **Response:** During complete radio blackout (tested up to 15 seconds), the drone's reliable link layer automatically switches to a 64-entry store-and-forward ring buffer. Once RF contact is restored, the buffer flushes oldest-first with sequence-based deduplication, ensuring ground operators receive every historical alert with exact original timestamps (`delayed: true`).
 
 ### Q4: "Has this been tested on actual physical hardware?"
-**Response:** Yes. The bridge firmware compiles and runs on dual ESP32 boards using ESP-NOW and Heltec WiFi LoRa 32 V3/V4 targets. Phase 0, 1, 2, 3, and 4 have all passed on physical boards with hardware button-mute and USB auto-recovery tests. For rapid development, headless automated suites test all 116 edge cases programmatically.
+**Response:** Yes. The bridge firmware compiles and runs on dual ESP32 boards using ESP-NOW and Heltec WiFi LoRa 32 V3/V4 targets. Phase 0, 1, 2, 3, and 4 have all passed on physical boards with hardware button-mute and USB auto-recovery tests. For rapid development, headless automated suites test all edge cases programmatically (45 automated tests across the repo).

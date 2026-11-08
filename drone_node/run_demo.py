@@ -129,10 +129,6 @@ def main() -> None:
                     "--model",
                     args.model,
                     "--headless",
-                    "--preview-port",
-                    "8081",
-                    "--manan-panel-port",
-                    "8082",
                 ],
                 "drone",
             )
@@ -145,7 +141,6 @@ def main() -> None:
 
         print("\n[demo] Running. Dashboard: %s" % DASHBOARD_URL, flush=True)
         print("[demo]   Main screen updates automatically when detections fire over the radio.", flush=True)
-        print("[demo]   Buttons: Scene twin (Manan reconstructor :8082) | Live camera (:8081)", flush=True)
         print("[demo] Press Ctrl+C to stop.\n", flush=True)
 
         while True:

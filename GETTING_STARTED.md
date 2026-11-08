@@ -35,7 +35,7 @@ python scripts/quickstart.py
 ├──────────────────────────┬──────────────────────────────────────────────────┤
 │ 1. VIRTUAL TRIALS        │ 0 hardware required; runs on any laptop.        │
 │ 2. REAL HARDWARE         │ Dual ESP32s (ESP-NOW) or Heltec LoRa 915 MHz.    │
-│ 3. BENCHMARKS & TESTS    │ 116 automated tests, 6 aerial video evaluations. │
+│ 3. BENCHMARKS & TESTS    │ 45 automated tests, 6 aerial video evaluations. │
 └──────────────────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -149,7 +149,7 @@ drone_node: video → YOLO → gate                   ground_station: FastAPI + 
    *(Or pass `--video 0` to use your computer's live webcam instead of sample video).*
 
 5. **Hardware Controls:**
-   - **Mute Test:** Press the `BOOT` / `GPIO0` button on either board to simulate hardware radio silence/jamming. The link detects disconnection after 3.0s and flushes buffered alerts upon release.
+   - **Mute Test:** Press the `BOOT` / `GPIO0` button on either board to simulate hardware radio link loss / signal outage. The link detects disconnection after 3.0s and flushes buffered alerts upon release.
    - **Activity LED:** On-board LED flashes on each valid packet transmission.
 
 ---
@@ -189,15 +189,15 @@ drone_node: video → YOLO → gate                   ground_station: FastAPI + 
 
 Run our automated verification suites, cryptographic assertions, and multi-scenario aerial evaluations.
 
-### 1. Automated Headless Verification Suite (116 Tests)
-Executes 116 tests across 5 verification tiers (virtual radio bridges, blackout survival, sliding window budget auditor, UAARG logging schemas, and two-way control loops):
+### 1. Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)
+Executes 9 comprehensive test suites covering 5 verification tiers (virtual radio bridges, blackout survival, sliding window budget auditor, UAARG logging schemas, and two-way control loops):
 
 ```bash
 uv run --with pytest --with pyserial pytest scripts/test_integration_suite.py -q
 # Or direct CLI runner:
 python -m scripts.test_integration_suite
 ```
-*Expected: 9/9 test suites pass, 116 assertions verified in ~6.5 seconds.*
+*Expected: 9/9 integration test suites pass in ~6.5 seconds.*
 
 ---
 

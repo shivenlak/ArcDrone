@@ -11,7 +11,7 @@ This directory contains the automated test harnesses, simulated radio bridges, b
 - [3. Output 2: 6 Multi-Scenario Aerial Benchmarks](#3-output-2-6-multi-scenario-aerial-benchmarks)
 - [4. Output 3: Live VisDrone UDP Feeder & Browser Reconstructor](#4-output-3-live-visdrone-udp-feeder--browser-reconstructor)
 - [5. Output 4: Interactive Ground Station Showcase](#5-output-4-interactive-ground-station-showcase)
-- [6. Output 5: Automated Headless Verification Suite (116 Tests)](#6-output-5-automated-headless-verification-suite-116-tests)
+- [6. Output 5: Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)](#6-output-5-automated-headless-verification-suite-9-integration-tests-45-repo-total)
 - [7. Core Infrastructure Modules](#7-core-infrastructure-modules)
 - [8. Troubleshooting & Common Pitfalls](#8-troubleshooting--common-pitfalls)
 
@@ -159,12 +159,12 @@ Visit `http://localhost:8000` to interact with the tactical map and send operato
 
 ---
 
-## 6. Output 5: Automated Headless Verification Suite (116 Tests)
+## 6. Output 5: Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)
 
 **Script:** [`scripts/test_integration_suite.py`](test_integration_suite.py)
 
 ### What it produces
-A comprehensive headless test suite executing 116 tests across 5 verification tiers without physical hardware:
+A comprehensive headless test suite executing 9 integration test suites across 5 verification tiers without physical hardware:
 - **Tier 1 (Feature Coverage):** Bridge pairing, bandwidth budgeting, UAARG logging schema, WebSocket client, 2-way control loop.
 - **Tier 2 (Boundary & Corner Cases):** Exactly 3000 B/s threshold, 64-ring buffer rollover, 3.0s blackout timeout, sequence counter wrap.
 - **Tier 3 (Cross-Feature):** Blackout + command queuing, burst detection under link throttling.
@@ -208,7 +208,6 @@ Authenticated AEAD link encryption matching [`protocol/crypto.py`](../protocol/c
 2. **Fresh 48-bit Nonces:** A 6-byte random nonce is generated fresh for every transmission (retries included).
 3. **Forgery & Tamper Rejection:** Any flipped bit in header, nonce, ciphertext, or auth tag triggers tag failure; plain frames and wrong-key frames are dropped.
 4. **Hardware Measurements (Heltec V3):** 34.1 ms avg RTT on dual radio, 156.7 ms on LoRa-only.
-5. **Optional Zero-Overhead CTR Mode:** Backward-compatible fallback for zero-expansion (+0 B) requirements.
 
 ### How to Run
 

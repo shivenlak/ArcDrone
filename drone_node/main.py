@@ -11,8 +11,6 @@ import numpy as np
 from drone_node.delivery_verifier import DeliveryVerifier
 from drone_node.detector import Detector
 from drone_node.frame_source import open_frame_source
-from drone_node.manan_ground_panel import MananGroundPanel
-from drone_node.preview_stream import PreviewStream
 from drone_node.scene_codec import (
     LINK_MAX_KBPS,
     SCENE_HZ_DEFAULT,
@@ -178,18 +176,6 @@ def parse_args():
     parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
     parser.add_argument("--scene-host", type=str, default="127.0.0.1", help="Ground reconstructor IP")
     parser.add_argument("--scene-port", type=int, default=9999, help="Ground reconstructor UDP port")
-    parser.add_argument(
-        "--preview-port",
-        type=int,
-        default=8081,
-        help="MJPEG camera/HUD preview for dashboard Live camera (0 disables)",
-    )
-    parser.add_argument(
-        "--manan-panel-port",
-        type=int,
-        default=8082,
-        help="MJPEG Manan ground reconstructor for dashboard Scene twin (0 disables)",
-    )
     parser.add_argument("--headless", action="store_true", help="Run without local video window (Pi/Blind demo)")
     return parser.parse_args()
 
@@ -238,16 +224,6 @@ def main() -> None:
     sim_gps = SimGps()
     scene_codec = SceneCodec(max_kbps=SCENE_MAX_KBPS, dst_size=(720, 540))
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    preview = None
-    if args.preview_port > 0:
-        preview = PreviewStream(port=args.preview_port).start()
-    manan_panel = MananGroundPanel(vector_hz=args.scene_hz)
-    manan_preview = None
-    if args.manan_panel_port > 0:
-        # Full 1920x960 composite; higher JPEG quality keeps manifest text readable.
-        manan_preview = PreviewStream(
-            port=args.manan_panel_port, jpeg_quality=78
-        ).start()
     print(
         "[MAIN] Scene %d Hz, budget capped at %.1f kbps"
         % (int(args.scene_hz), SCENE_MAX_KBPS)
@@ -337,16 +313,6 @@ def main() -> None:
                     frame_idx += 1
 
                 current_boxes, alert = detector.process_frame(last_frame)
-                if manan_preview is not None and link.mode != p.MODE_HOLD:
-                    panel = manan_panel.on_video_frame(
-                        last_frame,
-                        current_boxes,
-                        frame_idx,
-                        args.fps,
-                        drone_lat,
-                        drone_lon,
-                    )
-                    manan_preview.update(panel)
 
             # 3. Scene vectors at --scene-hz (default 12/s); uses latest boxes, not full link cap
             if (
@@ -397,9 +363,9 @@ def main() -> None:
                     f"lat={t_lat:.5f} lon={t_lon:.5f}"
                 )
 
-            # 5. HUD for local window + optional MJPEG preview for the dashboard modal
+            # 5. HUD for the local window. The drone's video never leaves the drone.
             hud_frame = None
-            if last_frame is not None and (not args.headless or preview is not None):
+            if last_frame is not None and not args.headless:
                 hud_frame = draw_hud(
                     last_frame,
                     mode=link.mode,
@@ -413,8 +379,6 @@ def main() -> None:
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
                 )
-                if preview is not None:
-                    preview.update(hud_frame)
 
             if not args.headless and hud_frame is not None:
                 cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)
@@ -435,10 +399,6 @@ def main() -> None:
             print(verifier.report(link.summary()))
         except Exception:
             pass
-        if preview is not None:
-            preview.stop()
-        if manan_preview is not None:
-            manan_preview.stop()
         source.release()
         udp_sock.close()
         cv2.destroyAllWindows()

@@ -1,33 +1,33 @@
-# E2E Test Suite Ready
+# Automated Verification Suite Ready
 
-## Test Runner
-- Primary runner: `uv run --with pytest --with pyserial pytest scripts/test_integration_suite.py`
-- Direct CLI runner: `uv run --with pyserial python -m scripts.test_integration_suite`
-- Bandwidth benchmark: `uv run --with pyserial python -m scripts.test_lora_bandwidth`
-- Control loop test: `uv run --with pyserial python -m scripts.test_control_loop`
-- Link reliability test: `uv run --with pyserial python -m scripts.link_test`
-- Presentation demo harness: `uv run --with pyserial python scripts/demo_harness.py --speed 2.0`
-- Expected: All tests pass with exit code 0.
+## Test Runners
+- Integration suite: `uv run --with pytest --with pyserial pytest scripts/test_integration_suite.py -q`
+- Encryption suite: `uv run --with pytest --with pyserial --with cryptography pytest scripts/test_encryption.py -q`
+- Enhanced features suite: `uv run --with pytest --with pyserial --with cryptography pytest scripts/test_enhanced_features.py -q`
+- Protocol packet suite: `uv run --with pytest pytest protocol/test_packets.py -q`
+- Full test suite: `uv run --with pytest --with pyserial --with cryptography pytest protocol/test_packets.py scripts/test_integration_suite.py scripts/test_encryption.py scripts/test_enhanced_features.py -q`
 
-## Coverage Summary
-| Tier | Count | Description |
-|------|------:|-------------|
-| 1. Feature Coverage | 50 | Coverage across all 10 features (simulated bridge, bandwidth auditor, UAARG telemetry/logging, two-way control loop, outage recovery, git isolation) |
-| 2. Boundary & Corner | 50 | Limit testing at 3000 B/s budget ceiling, 64-ring buffer cap overflow, 3.0s blackout timeout, CRC16 corruption, sequence rollover |
-| 3. Cross-Feature | 10 | Pairwise interaction testing: blackout + command queuing, detection burst + bandwidth throttle, lossy bridge + stop-and-wait retries |
-| 4. Real-World Application | 6 | Full natHacks defense showcase mission scenarios (patrol, burst, tactical hold, blackout recovery, return-to-base, live showcase) |
-| **Total** | **116** | 100% verified headlessly |
+## Automated Test Counts
+| Test Module | Test Cases | Scope |
+|---|:---:|---|
+| `protocol/test_packets.py` | 9 | Packet encoding, decoding, bit invariants, CRC16, error handling |
+| `protocol/test_crypto.py` | 7 | AES-128-CCM AEAD auth tags, fresh nonces, forgery rejection (macOS/POSIX) |
+| `protocol/test_link.py` | 6 | Stop-and-wait ACK, retries, 30% loss recovery, buffering (macOS/POSIX) |
+| `scripts/test_integration_suite.py` | 9 | Virtual serial, link cut/restore, bandwidth audit, UAARG schemas, 2-way control loop |
+| `scripts/test_encryption.py` | 9 | AES-128-CCM wire frames, tamper rejection, lossy link delivery over SimBridge |
+| `scripts/test_enhanced_features.py` | 6 | Role learning, dual-path diversity, coasting tracker, delivery verifier |
+| **Total Automated Tests** | **45** | **100% automated test coverage across repository** |
 
-## Feature Checklist
-| Feature | Tier 1 | Tier 2 | Tier 3 | Tier 4 | Status |
-|---------|:------:|:------:|:------:|:------:|:------:|
-| F1: Simulated Link Bridge | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F2: Bandwidth Budget (<= 3 kB/s) | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F3: UAARG Telemetry & Status | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F4: UAARG Hierarchical Logging | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F5: Ground WebSocket Observer | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F6: Two-Way Control Loop | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F7: Link Outage & Recovery | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F8: Automated Test Suite | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F9: natHacks Showcase Demo | 5 | 5 | ✓ | ✓ | **VERIFIED** |
-| F10: Git Branch Isolation | 5 | 5 | ✓ | ✓ | **VERIFIED** |
+## Verified Capabilities
+| Capability | Scope | Status |
+|---|---|:---:|
+| F1: Simulated Link Bridge | Virtual serial pair, latency, packet loss, role learning | **VERIFIED** |
+| F2: Bandwidth Budget (<= 3 kB/s) | Sliding-window auditor, 12 Hz vector rate limiter | **VERIFIED** |
+| F3: UAARG Telemetry & Status | Heartbeat parsing, GPS coordinates, mission monitors | **VERIFIED** |
+| F4: UAARG Hierarchical Logging | Structured log schemas, severities (INFO/WARN/CRIT) | **VERIFIED** |
+| F5: Ground WebSocket Observer | Real-time browser bridge, state synchronization | **VERIFIED** |
+| F6: Two-Way Control Loop | `HOLD`, `RESUME`, `RTB` state machine transitions | **VERIFIED** |
+| F7: Link Outage & Recovery | 64-item ring buffer store-and-forward, 0 duplicates | **VERIFIED** |
+| F8: Authenticated Encryption | AES-128-CCM AEAD, 48-bit fresh nonces, 4-byte auth tags | **VERIFIED** |
+| F9: Edge Vision & Tracking | Grid-aware coasting tracker, 25s spatial alert gating | **VERIFIED** |
+| F10: Physical Hardware Diversity | ESP-NOW + LoRa SX1262 dual broadcast, LBT, auto-failover | **VERIFIED** |

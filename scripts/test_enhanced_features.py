@@ -187,12 +187,22 @@ class TestEnhancedFeatures(unittest.TestCase):
         self.assertIn("flushed after loss:2", rep)
 
     def test_demo_video_resolver_fallback(self):
-        """resolve_demo_video must locate existing data/ assets without raising errors."""
+        """resolve_demo_video must resolve explicit paths or raise descriptive SystemExit on empty data/."""
         from drone_node.demo_video import resolve_demo_video
 
-        # Resolving None should pick an existing clip from data/
-        resolved = resolve_demo_video(None)
-        self.assertTrue(os.path.exists(resolved) or os.path.exists(os.path.join(_REPO_ROOT, "data")))
+        # Numeric camera index returns immediately
+        self.assertEqual(resolve_demo_video("0"), "0")
+
+        # Existing explicit path returns absolute path
+        this_file = os.path.abspath(__file__)
+        self.assertEqual(resolve_demo_video(this_file), this_file)
+
+        # Resolving None: either finds a local demo video or cleanly raises SystemExit with guidance
+        try:
+            resolved = resolve_demo_video(None)
+            self.assertTrue(os.path.exists(resolved))
+        except SystemExit as e:
+            self.assertIn("No demo footage", str(e))
 
 
 if __name__ == "__main__":

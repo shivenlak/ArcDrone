@@ -96,7 +96,7 @@ def main_menu():
         print("   6. Launch Drone Node (Edge YOLO Inference)")
         print("   7. Launch Ground Station Server")
         print("\n APPROACH 3: TEST CASES, BENCHMARKS & ANALYTICS")
-        print("   8. Run Automated Headless Verification Suite (116 tests)")
+        print("   8. Run Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)")
         print("   9. Run Authenticated AES-128-CCM & Tactical Encryption Suite (9 tests)")
         print("  10. Run 6 Multi-Scenario Aerial Benchmarks (Batch MP4/PNG/JSON)")
         print("  11. Run Primary Link Bandwidth Compliance Auditor (<= 3 kB/s)")

@@ -118,7 +118,7 @@ def audit_solution() -> Dict[str, Any]:
         "tampered payloads, and forged commands are rejected before entering the flight-state machine."
     )
     report["doing_right"].append(
-        "Electronic Warfare Blackout Resilience: 64-item circular store-and-forward queue buffers critical alerts "
+        "Radio Link Outage & Store-and-Forward Resilience: 64-item circular store-and-forward queue buffers critical alerts "
         "during complete link loss, flushing oldest-first with guaranteed delivery (120/120 alerts verified after 14s blackout, "
         "recovering in 3.1s)."
     )
