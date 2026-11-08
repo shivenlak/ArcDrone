@@ -26,3 +26,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - 2026-11-08 (Ishan): Fix Manan Scene twin — full 1920×960 ishan_side_by_side composite, per-frame tracker clock, VisDrone box filter (was cropped wrong panel).
 - 2026-11-08 (Ishan): Grid-aware coasting (16×16) in Scene twin — edge contacts (outer 3 rings) drop in 2 frames, central contacts coast 3 frames (`GridCoastTracker`).
 - 2026-11-08 (Ishan): Delivery verifier on drone HUD + dashboard (seq ACK / queue / flush) using existing `protocol.Link` outbox — no database.
+- 2026-11-08 (Ishan): Three-stage operator SPA in `ground_station/static/index.html` (flyby intro, ops + drawers, range-gated feeds / Phantom Recon Vault) without dropping the WebSocket.
