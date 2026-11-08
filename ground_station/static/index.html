@@ -75,6 +75,20 @@ p { margin: 0; }
   .header-status small, .brand small { display: none; }
   .metric strong { font-size: 19px; }
 }
+/* Radio paths: what the ground board hears on each radio (from the bridge's "# radio" line) */
+.paths { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-bottom: 16px; }
+.path { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 13px 16px; min-width: 0; transition: border-color .3s, background .3s; }
+.path strong { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 20px; letter-spacing: -.03em; }
+.path small { display: block; margin-top: 3px; font-size: 13px; }
+.path.live { border-color: #2a5243; }
+.path.live strong { color: var(--green); }
+.path.dead { border-color: #63404a; background: #1c151b; }
+.path.dead strong { color: var(--red); }
+.path.off strong { color: var(--muted); }
+.path.active-path strong { font-size: 22px; }
+.path.active-path.failover { border-color: #665132; background: #241e14; }
+.path.active-path.failover strong { color: var(--amber); }
+@media (max-width: 780px) { .paths { grid-template-columns: 1fr; } }
 /* On the wire: the latest packet's real bytes, and measured link traffic */
 .wire { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); margin-bottom: 16px; }
 .wire-bytes, .wire-rate { padding: 15px 17px; min-width: 0; }
@@ -120,6 +134,11 @@ p { margin: 0; }
     <div class="metric"><span class="caption">Drone mode</span><strong id="mode">Waiting for data</strong></div>
     <div class="metric"><span class="caption">Buffered alerts</span><strong id="buffered">—</strong></div>
     <div class="metric"><span class="caption">Detections received</span><strong id="received">0</strong></div>
+  </section>
+  <section class="paths" aria-label="Radio paths">
+    <div class="path active-path" id="path-active"><span class="caption">Carrying traffic</span><strong id="path-active-name">Waiting for the radio</strong><small id="path-active-note">Ground board reports once a second</small></div>
+    <div class="path" id="path-espnow"><span class="caption">ESP-NOW · 2.4 GHz</span><strong><span class="dot"></span><span id="espnow-state">—</span></strong><small id="espnow-detail"></small></div>
+    <div class="path" id="path-lora"><span class="caption">LoRa · 915 MHz</span><strong><span class="dot"></span><span id="lora-state">—</span></strong><small id="lora-detail"></small></div>
   </section>
   <section class="panel wire" aria-labelledby="wire-title">
     <div class="wire-bytes">
@@ -271,6 +290,41 @@ function renderWire(alert) {
   byId("wire-caption").textContent = alert.delayed ? "Delayed alert, buffered during link loss" : "Latest alert, exact bytes received";
 }
 
+// A path is live if the ground board received anything on it in the last 3 s.
+function renderPath(name, radio) {
+  const box = byId(`path-${name}`);
+  const rx = radio?.[`${name}_rx`];
+  if (rx === undefined) {
+    box.className = "path off";
+    byId(`${name}-state`).textContent = radio ? "Not fitted" : "—";
+    byId(`${name}-detail`).textContent = radio ? "This board has no such radio" : "";
+    return false;
+  }
+  const off = (name === "espnow" && radio.mode === "LORA_ONLY") || radio.mode === "MUTED";
+  const age = radio[`${name}_age`];
+  const live = !off && age >= 0 && age < 3000;
+  box.className = `path ${off ? "off" : live ? "live" : "dead"}`;
+  byId(`${name}-state`).textContent = off ? "Off (button)" : live ? `${radio[`${name}_rssi`]} dBm` : "No signal";
+  const heard = age < 0 ? "never heard" : age < 1000 ? "heard just now" : `last heard ${(age / 1000).toFixed(0)} s ago`;
+  const extra = name === "lora" && live ? ` · SNR ${radio.lora_snr} dB · SF${radio.lora_sf}` : "";
+  byId(`${name}-detail`).textContent = `${rx.toLocaleString()} packets · ${heard}${extra}`;
+  return live;
+}
+
+function renderRadio(radio) {
+  const espnow = renderPath("espnow", radio);
+  const lora = renderPath("lora", radio);
+  const box = byId("path-active");
+  const name = !radio ? "No radio report" : espnow && lora ? "Both radios" :
+    lora ? "LoRa only" : espnow ? "ESP-NOW only" : "Nothing";
+  byId("path-active-name").textContent = name;
+  byId("path-active-note").textContent = !radio ? "Is the ground board plugged in?" :
+    espnow && lora ? "Every packet sent on both; duplicates dropped" :
+    lora ? "ESP-NOW lost: traffic failed over to LoRa" :
+    espnow ? "LoRa silent" : "Link down: drone is buffering";
+  box.className = `path active-path${lora && !espnow ? " failover" : !espnow && !lora ? " dead" : ""}`;
+}
+
 function renderTraffic(stats) {
   if (stats.bytes_tx === undefined) return;
   const bytes = stats.bytes_tx + stats.bytes_rx;
@@ -406,6 +460,7 @@ function handleMessage(message) {
       // The real server's link stats describe the ground station's own queue.
       if (playground) buffered = message.buffered;
       renderTraffic(message);
+      if ("radio" in message) renderRadio(message.radio);
       break;
     default:
       return;

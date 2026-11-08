@@ -83,3 +83,22 @@ def test_command_goes_ground_to_drone():
     commands = [pk for pk in drone.packets if pk["type"] == p.COMMAND]
     assert [c["cmd"] for c in commands] == [p.CMD_HOLD]
     teardown(drone, ground)
+
+
+def test_bridge_radio_status_is_parsed():
+    link = Link("unused")
+    link._handle_line("# radio mode=DUAL espnow_rx=12 espnow_rssi=-40 lora_snr=9.5")
+    radio = link.summary()["radio"]
+    assert radio == {"mode": "DUAL", "espnow_rx": 12, "espnow_rssi": -40, "lora_snr": 9.5}
+    assert link.summary()["bad_packets"] == 0
+
+
+def test_retry_timeout_adapts_to_rtt_and_is_capped():
+    link = Link("unused", retry_timeout=0.3)
+    assert link._retry_timeout() == 0.3          # no RTT yet: the minimum
+    link._srtt = 0.020                           # ESP-NOW-like
+    assert link._retry_timeout() == 0.3
+    link._srtt = 0.200                           # LoRa-like
+    assert abs(link._retry_timeout() - 0.5) < 1e-9
+    link._srtt = 5.0
+    assert link._retry_timeout() == 1.5          # capped
