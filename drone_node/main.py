@@ -153,7 +153,7 @@ def parse_args():
         required=True,
         help="MP4 path, VisDrone-VID image folder (uav.../0000001.jpg), or camera index (0)",
     )
-    parser.add_argument("--conf", type=float, default=0.25, help="Detection confidence gate")
+    parser.add_argument("--conf", type=float, default=0.5, help="Detection confidence gate")
     parser.add_argument(
         "--imgsz",
         type=int,
@@ -399,7 +399,7 @@ def main() -> None:
 
             # 5. HUD for local window + optional MJPEG preview for the dashboard modal
             hud_frame = None
-            if last_frame is not None:
+            if last_frame is not None and (not args.headless or preview is not None):
                 hud_frame = draw_hud(
                     last_frame,
                     mode=link.mode,
