@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
 
+from drone_node.delivery_verifier import DeliveryVerifier
 from drone_node.detector import Detector
 from drone_node.frame_source import open_frame_source
 from drone_node.manan_ground_panel import MananGroundPanel
@@ -35,6 +36,7 @@ def draw_hud(
     drone_lon: float,
     last_tx_str: str,
     scene_kbps: float = 0.0,
+    verifier_line: str = "",
 ) -> np.ndarray:
     canvas = frame.copy()
     h, w = canvas.shape[:2]
@@ -141,6 +143,19 @@ def draw_hud(
             1,
         )
 
+    # Delivery verifier line (sent / delivered / pending) just under the top bar.
+    if verifier_line:
+        cv2.putText(
+            canvas,
+            verifier_line,
+            (12, 58),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (120, 255, 170),
+            1,
+            cv2.LINE_AA,
+        )
+
     return canvas
 
 
@@ -204,9 +219,19 @@ def main() -> None:
         "scene_kbps": 0.0,
     }
 
+    verifier = DeliveryVerifier()
+
     def on_event(event_type: str, **kwargs: Any) -> None:
         if event_type == "delivered":
-            state["last_rtt"] = kwargs.get("rtt_ms")
+            seq = kwargs.get("seq")
+            rtt = kwargs.get("rtt_ms")
+            state["last_rtt"] = rtt
+            if seq is not None:
+                verifier.on_delivered(int(seq), rtt)
+        elif event_type == "link_down":
+            verifier.on_link_down()
+        elif event_type == "link_up":
+            verifier.on_link_up()
         print(f"[EVENT] {event_type} | {kwargs}")
 
     def on_packet(pkt: Dict[str, Any]) -> None:
@@ -371,6 +396,12 @@ def main() -> None:
                     lat=t_lat,
                     lon=t_lon,
                 )
+                verifier.on_send(
+                    seq,
+                    "DETECTION",
+                    f"{alert['label']} x{alert['count']}",
+                    buffered=(not link.up or link.buffered > 1),
+                )
                 state["last_tx_str"] = (
                     f"TX #{seq}: {alert['label']} x{alert['count']} ({alert['conf']:.2f})"
                 )
@@ -395,6 +426,7 @@ def main() -> None:
                     drone_lon=drone_lon,
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
+                    verifier_line=verifier.hud_line(),
                 )
                 if preview is not None:
                     preview.update(hud_frame)
@@ -414,6 +446,10 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[MAIN] Shutting down...")
     finally:
+        try:
+            print(verifier.report(link.summary()))
+        except Exception:
+            pass
         if preview is not None:
             preview.stop()
         if manan_preview is not None:

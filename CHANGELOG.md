@@ -25,3 +25,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - 2026-11-08 (Ishan): `drone_node.frame_source` accepts VisDrone-VID JPEG folders as `--video`; `drone_node.demo_video` auto-picks clips/sequences from `data/`.
 - 2026-11-08 (Ishan): Fix Manan Scene twin — full 1920×960 ishan_side_by_side composite, per-frame tracker clock, VisDrone box filter (was cropped wrong panel).
 - 2026-11-08 (Ishan): Grid-aware coasting (16×16) in Scene twin — edge contacts (outer 3 rings) drop in 2 frames, central contacts coast 3 frames (`GridCoastTracker`).
+- 2026-11-08 (Ishan): Delivery verifier on drone HUD + dashboard (seq ACK / queue / flush) using existing `protocol.Link` outbox — no database.
