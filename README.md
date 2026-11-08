@@ -83,6 +83,8 @@ export ARCDRONE_KEY=$(python -m protocol.crypto)    # use the SAME value on both
 
 **Demo button (PRG on Heltec, SW38 on Feather):** Heltec cycles DUAL → LORA ONLY → MUTED; Feather toggles MUTED.
 
+**Wi-Fi camera (optional):** add `--preview-port 8081` to the drone command. The dashboard's tab [03] shows the drone's HUD video only while the ground laptop can reach the drone over Wi-Fi; with two laptops open the dashboard as `http://localhost:8001/?drone=<drone laptop IP>`. This video goes over Wi-Fi, never over the radio. Measured: ~15 Mbit/s for the feed vs ~200 bit/s for the radio link.
+
 **Radio paths on the dashboard:** the three tiles under the status row show what the ground board hears on each radio (live with dBm, or "No signal") and which path is carrying traffic. Walk the drone board away and ESP-NOW goes red while LoRa stays green. For more LoRa range, flash **both** boards with `pio run -e heltec_v3_sf9 -t upload` (about 2× range, about 4× airtime).
 
 **Without hardware:** `python -m protocol.fake_bridge` prints two virtual serial ports. Pass one to each side as `--port`. It's for development only; the demo uses the real radios.

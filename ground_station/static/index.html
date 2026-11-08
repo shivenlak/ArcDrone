@@ -520,6 +520,30 @@
       .gauges-grid { grid-template-columns: 1fr 1fr; }
       .primary-mfd-grid, .wire-grid, .live-uplink-grid, .vault-grid { grid-template-columns: 1fr; }
     }
+  
+    /* Radio paths: what the ground board hears on each radio (bridge "# radio" line, 1 Hz) */
+    .paths-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .path-pod { transition: border-color .3s, background .3s; }
+    .path-pod .gauge-readout { display: flex; align-items: center; gap: 10px; }
+    .path-pod .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+    .path-pod.live { border-color: rgba(74, 222, 128, 0.55); }
+    .path-pod.live .gauge-readout { color: var(--hud-mint); }
+    .path-pod.dead { border-color: rgba(251, 113, 133, 0.55); background: linear-gradient(180deg, #2a1219 0%, #12090d 100%); }
+    .path-pod.dead .gauge-readout { color: var(--hud-coral); }
+    .path-pod.off .gauge-readout { color: var(--muted); }
+    .path-pod.failover { border-color: rgba(251, 191, 36, 0.65); background: linear-gradient(180deg, #2a2210 0%, #120e07 100%); }
+    .path-pod.failover .gauge-readout { color: var(--hud-amber); }
+    .path-detail { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+    /* Packet inspector: the alert's exact bytes, split by field */
+    .bytes { display: flex; flex-wrap: wrap; gap: 10px 6px; color: inherit; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field .cells { display: flex; gap: 2px; flex-wrap: wrap; }
+    .cell { font: 600 13px/1 var(--mono); padding: 6px 4px; border-radius: 4px; background: #0a1422; border: 1px solid var(--border); color: var(--f); }
+    .field small { font: 10px/1.3 var(--mono); color: var(--muted); max-width: 16ch; overflow-wrap: anywhere; }
+    .field small b { display: block; color: var(--f); letter-spacing: .06em; text-transform: uppercase; }
+    .bytes.flash .cell { animation: byteflash .9s ease-out; }
+    @keyframes byteflash { from { background: #1b3a57; } }
+    @media (max-width: 900px) { .paths-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -540,7 +564,7 @@
       <div class="deck-tabs">
         <button id="tab-intro" type="button" class="deck-tab active-tab" onclick="switchStage('view-intro')">[01] WINDSHIELD BRIEF</button>
         <button id="tab-ops" type="button" class="deck-tab" onclick="switchStage('view-ops')">[02] TACTICAL RADAR &amp; CONTROLS</button>
-        <button id="tab-feeds" type="button" class="deck-tab" onclick="switchStage('view-feeds')">[03] OPTICAL / PHANTOM VAULT</button>
+        <button id="tab-feeds" type="button" class="deck-tab" onclick="switchStage('view-feeds')">[03] WI-FI CAMERA / RECON VAULT</button>
         <span id="source-badge" class="deck-tab" style="cursor:default;">CONNECTING</span>
       </div>
     </div>
@@ -557,7 +581,7 @@
         <span class="intro-badge">AVIONICS TELEMETRY LINK READY &middot; NO ROUTER REQUIRED</span>
         <h1 class="intro-title">Tactical Edge Recon Flight Deck</h1>
         <p class="intro-desc">
-          Watch the autonomous edge node sweep the sector below. Onboard vision compresses aerial detections into 21-byte frames and 6-byte coordinate vectors &mdash; resistant to narrowband interference.
+          Watch the autonomous edge node sweep the sector below. Onboard vision turns aerial video into 21-byte alerts (29 bytes encrypted), sent over ESP-NOW 2.4 GHz and LoRa 915 MHz at once. If one radio drops, the other carries on.
         </p>
 
         <div class="flyby-lane">
@@ -584,8 +608,8 @@
         </div>
 
         <div class="avionics-pills">
-          <span class="avionics-pill">ALT: 120m AGL</span>
-          <span class="avionics-pill">LINK: 21-BYTE FRAMES</span>
+          <span class="avionics-pill">GPS: SIMULATED</span>
+          <span class="avionics-pill">LINK: ESP-NOW + LORA 915</span>
           <span class="avionics-pill">RESISTANT TO NARROWBAND INTERFERENCE</span>
           <span class="avionics-pill">NO ROUTER REQUIRED</span>
         </div>
@@ -620,12 +644,30 @@
           <div id="mode" class="gauge-readout">Waiting</div>
         </div>
         <div class="gauge-pod">
-          <div class="gauge-top"><span>REVIVED ALERTS</span><span>RING-BUF</span></div>
+          <div class="gauge-top"><span>BUFFERED ON DRONE</span><span>RING-BUF</span></div>
           <div id="buffered" class="gauge-readout">&mdash;</div>
         </div>
         <div class="gauge-pod">
           <div class="gauge-top"><span>DETECTIONS RECEIVED</span><span>RX-CNT</span></div>
           <div id="received" class="gauge-readout">0</div>
+        </div>
+      </div>
+
+      <div class="paths-grid" aria-label="Radio paths">
+        <div class="gauge-pod path-pod" id="path-active">
+          <div class="gauge-top"><span>CARRYING TRAFFIC</span><span>FAILOVER</span></div>
+          <div class="gauge-readout" id="path-active-name">Waiting for radio</div>
+          <div class="path-detail" id="path-active-note">Ground board reports once a second</div>
+        </div>
+        <div class="gauge-pod path-pod" id="path-espnow">
+          <div class="gauge-top"><span>ESP-NOW</span><span>2.4 GHZ</span></div>
+          <div class="gauge-readout"><span class="dot"></span><span id="espnow-state">&mdash;</span></div>
+          <div class="path-detail" id="espnow-detail"></div>
+        </div>
+        <div class="gauge-pod path-pod" id="path-lora">
+          <div class="gauge-top"><span>LORA</span><span>915 MHZ</span></div>
+          <div class="gauge-readout"><span class="dot"></span><span id="lora-state">&mdash;</span></div>
+          <div class="path-detail" id="lora-detail"></div>
         </div>
       </div>
 
@@ -691,21 +733,21 @@
           <div class="drawer-body"><div id="alerts"></div></div>
         </details>
 
-        <details class="cockpit-drawer">
+        <details class="cockpit-drawer" open>
           <summary class="drawer-pull">
-            <span>&#9660; [PULL DOWN] ON THE WIRE &mdash; 21-BYTE HEX INSPECTOR &amp; SPECTRUM LOAD</span>
-            <span id="wire-rate-summary" style="color:var(--hud-mint);">0 bit/s &middot; CRC16 OK</span>
+            <span>&#9660; ON THE WIRE &mdash; PACKET INSPECTOR &amp; SPECTRUM LOAD</span>
+            <span id="wire-rate-summary" style="color:var(--hud-mint);">0 bit/s</span>
           </summary>
           <div class="drawer-body">
             <div class="wire-grid">
               <div>
                 <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);">
                   <span>LATEST ALERT, EXACT BYTES RECEIVED</span>
-                  <span>21-byte DETECTION &middot; little-endian &middot; CRC16</span>
+                  <span id="wire-size">Waiting for an alert</span>
                 </div>
-                <div id="wire-bytes" class="hex-dump">WAITING FOR A PACKET FROM THE RADIO.</div>
+                <div id="wire-bytes" class="hex-dump bytes">WAITING FOR A PACKET FROM THE RADIO.</div>
                 <div id="wire-decoded" style="font-family:var(--mono);font-size:12px;color:var(--muted);">
-                  Resistant to narrowband interference &middot; No router required
+                  Each field of the packet, colour-coded, with the value the ground station decoded
                 </div>
               </div>
               <div>
@@ -744,7 +786,7 @@
       <div class="deck-header">
         <div>
           <div style="font-family:var(--mono);font-size:11px;color:var(--hud-cyan);letter-spacing:0.14em;">
-            AUXILIARY MFD // PROXIMITY-GATED SENSOR FEEDS
+            AUXILIARY MFD // WI-FI-GATED SENSOR FEEDS
           </div>
           <h2 style="font-size:26px;font-weight:800;margin-top:2px;">Optical Bay &amp; Phantom Recon Vault</h2>
         </div>
@@ -752,35 +794,36 @@
       </div>
 
       <div class="mfd-bezel" style="margin-bottom:18px;">
-        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);">PROXIMITY GATE (AUTO FROM RADIO LINK)</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);">WI-FI GATE (AUTO: CAN THIS LAPTOP REACH THE DRONE OVER WI-FI?)</div>
         <div id="range-headline" style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--hud-mint);margin-top:3px;">
-          IN RANGE — Live Camera &amp; Scene Twin Unlocked
+          CHECKING WI-FI RANGE&hellip;
         </div>
         <p id="range-sub" style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;">
-          Close range unlocks localhost optical feeds. Out of range keeps the 21-byte radio path only and opens Phantom Recon.
+          The camera feed is video over the Wi-Fi network, never over the radio. It appears only while the drone is reachable on Wi-Fi. Out of Wi-Fi range, the radio link keeps delivering alerts.
         </p>
       </div>
 
       <div id="in-range-feeds" class="live-uplink-grid">
         <div class="mfd-bezel">
           <div class="mfd-header">
-            <span class="mfd-title">Scene twin // Vector Display</span>
-            <span class="mfd-tag">IN RANGE</span>
+            <span class="mfd-title">Scene reconstructor // Vector Display</span>
+            <span class="mfd-tag">WI-FI UDP</span>
           </div>
           <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px;">
-            Reconstructed tactical view from 6-byte coordinate vectors (Manan 1:1 panel). Not raw video over the radio.
+            Ground-side rebuild of the scene from compact vectors the drone sends over Wi-Fi UDP (capped at 2 kbps). Needs <code>scene_ws_relay</code> on this laptop. Not over the radio.
           </p>
-          <button id="open-scene" class="engage-btn" type="button" style="width:100%;" onclick="openViewerModal('scene')">Open Scene Twin MFD</button>
+          <button id="open-scene" class="engage-btn" type="button" style="width:100%;" onclick="openViewerModal('reconstructor')">Open Scene Reconstructor</button>
         </div>
 
         <div class="mfd-bezel">
           <div class="mfd-header">
             <span class="mfd-title">Live camera // Optical Turret</span>
-            <span class="mfd-tag" style="color:var(--hud-cyan);">CLOSE PROXIMITY</span>
+            <span class="mfd-tag" style="color:var(--hud-cyan);">WI-FI VIDEO</span>
           </div>
           <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px;">
-            Onboard HUD MJPEG on localhost. Suppressed when out of range. Not sent over the radio.
+            The drone's HUD video (MJPEG) over the Wi-Fi network: start the drone with <code>--preview-port 8081</code>. Hidden when out of Wi-Fi range. Never sent over the radio.
           </p>
+          <p id="camera-where" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;"></p>
           <button id="open-footage" class="engage-btn" type="button" style="width:100%;background:linear-gradient(180deg,#38bdf8,#0284c7);border-color:#bae6fd;" onclick="openViewerModal('camera')">Open Live Camera MFD</button>
         </div>
       </div>
@@ -789,7 +832,7 @@
         <div class="mfd-header">
           <div>
             <div style="font-family:var(--mono);font-size:10px;color:var(--hud-amber);letter-spacing:0.14em;">
-              BEYOND WIFI / OPTICAL RANGE &middot; BLACKBOX RESTORATION ENGINE
+              BEYOND WI-FI RANGE &middot; RADIO-ONLY TELEMETRY
             </div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:800;color:var(--text);margin-top:2px;">
               PHANTOM RECON // TELEMETRY VAULT
@@ -797,14 +840,13 @@
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <span id="vault-status-badge" class="mfd-tag badge-delayed">STANDBY &middot; LINK ACTIVE</span>
-            <button class="deck-tab" type="button" style="border-color:var(--hud-amber);color:var(--hud-amber);" onclick="openViewerModal('reconstructor')">Launch Vector Reconstructor</button>
           </div>
         </div>
 
         <div class="vault-grid">
           <div>
             <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px;">
-              RESTORED TARGET PLOT (FROM CACHED &amp; BURST-RECOVERED PACKETS)
+              TARGET PLOT FROM RADIO ALERTS (INCLUDING ONES BUFFERED DURING OUTAGES)
             </div>
             <div id="vault-radar" class="recon-radar"></div>
           </div>
@@ -840,10 +882,14 @@
     const isDemo = params.get("demo") === "1";
     const localFile = window.location.protocol === "file:";
     const playground = !isDemo && (localFile || params.get("playground") === "1");
-    const sceneUrl = params.get("scene") || "http://127.0.0.1:8082/video.mjpg";
-    const cameraUrl = params.get("camera") || "http://127.0.0.1:8081/video.mjpg";
+    // The drone's camera feed lives on the DRONE laptop. Two laptops: open this page with
+    // ?drone=<drone laptop IP>. Same laptop: the default works.
+    const droneHost = params.get("drone") || window.location.hostname || "127.0.0.1";
+    const cameraUrl = params.get("camera") || `http://${droneHost}:8081/video.mjpg`;
+    const cameraProbeUrl = cameraUrl.replace(/video\.mjpg.*$/, "");
     const reconstructorHtmlUrl = "http://127.0.0.1:8080/reconstructor.html" + (isDemo ? "?demo=1" : "");
-    const sceneIsMjpeg = params.get("scene_mode") === "mjpeg" || /\/video\.mjpg|\.mjpg\b/i.test(sceneUrl);
+    const CLASS_NAMES = ["pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor"];
+    let wifiReachable = null;  // null = not checked yet
     const LORA_BPS = 5470, VIDEO_BPS = 2e6;
     const logWidth = (bps) => Math.max(0, Math.min(100, (Math.log10(Math.max(bps, 1)) - 1) / 6 * 100)) + "%";
 
@@ -872,35 +918,53 @@
       updateRangeGateUI();
     }
 
-    // Optical feeds unlock only when the radio link is up (or standalone demo).
-    // LoRa/radio stays the always-on path; video is never claimed over the radio.
+    // Wi-Fi gate: the camera feed is shown only while this laptop can actually reach the
+    // drone's preview server over Wi-Fi. That's a real range test, not a guess from the radio.
     function isDroneInRange() {
-      if (isDemo) return true;
-      return linkUp === true;
+      return wifiReachable === true;
+    }
+
+    async function probeWifi() {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 1500);
+      let ok = false;
+      try {
+        const res = await fetch(cameraProbeUrl, { cache: "no-store", signal: ctrl.signal });
+        ok = res.ok;
+      } catch (e) {
+        ok = false;
+      }
+      clearTimeout(timer);
+      if (ok !== wifiReachable) {
+        wifiReachable = ok;
+        if (!ok && document.getElementById("viewer-title").textContent.includes("CAMERA")) closeViewerModal();
+        updateRangeGateUI();
+      }
     }
 
     function updateRangeGateUI() {
       const inRange = isDroneInRange();
-      const liveGrid = document.getElementById("in-range-feeds");
       const headline = document.getElementById("range-headline");
       const sub = document.getElementById("range-sub");
       const vaultBadge = document.getElementById("vault-status-badge");
-      liveGrid.style.display = inRange ? "grid" : "none";
-      if (isDemo) {
-        headline.textContent = "IN RANGE (DEMO) — Live Camera & Scene Twin Unlocked";
-        headline.style.color = "var(--hud-mint)";
-        if (sub) sub.textContent = "Standalone demo treats the drone as in range so optical MFDs stay available.";
-        vaultBadge.textContent = "STANDBY · DEMO LINK ACTIVE";
+      document.getElementById("open-footage").disabled = !inRange;
+      document.getElementById("open-footage").style.opacity = inRange ? "1" : "0.4";
+      document.getElementById("camera-where").textContent = `Feed: ${cameraUrl}`;
+      if (wifiReachable === null) {
+        headline.textContent = "CHECKING WI-FI RANGE…";
+        headline.style.color = "var(--muted)";
       } else if (inRange) {
-        headline.textContent = "IN RANGE — Live Camera & Scene Twin Unlocked";
+        headline.textContent = "IN WI-FI RANGE — live camera available";
         headline.style.color = "var(--hud-mint)";
-        if (sub) sub.textContent = "Radio link up. Open Scene Twin / Live Camera when those localhost streams are running.";
-        vaultBadge.textContent = "STANDBY · LIVE LINK ACTIVE";
+        sub.textContent = "The camera is video over Wi-Fi, shown because the drone is reachable. Alerts and commands still go over the radio (ESP-NOW + LoRa).";
+        vaultBadge.textContent = "STANDBY · WI-FI AND RADIO";
       } else {
-        headline.textContent = "OUT OF RANGE — Radio telemetry only · Phantom Recon Active";
+        headline.textContent = "OUT OF WI-FI RANGE — radio telemetry only";
         headline.style.color = "var(--hud-amber)";
-        if (sub) sub.textContent = "Link down or far. Optical feeds stay hidden; alerts recover through the ring buffer.";
-        vaultBadge.textContent = "ACTIVE · RESTORING FROM TELEMETRY VAULT";
+        sub.textContent = isDemo
+          ? "Standalone demo: there is no drone camera to reach."
+          : `Can't reach the drone's camera at ${cameraUrl}. Alerts keep arriving over ESP-NOW / LoRa, and anything sent during an outage is buffered and delivered later.`;
+        vaultBadge.textContent = linkUp === false ? "RADIO DOWN · DRONE BUFFERING" : "ACTIVE · RADIO-ONLY TELEMETRY";
       }
     }
 
@@ -912,28 +976,16 @@
       content.innerHTML = "";
       hint.textContent = "";
 
-      if (kind === "scene") {
-        title.textContent = "MFD // SCENE TWIN (VECTOR STREAM)";
-        if (sceneIsMjpeg) {
-          hint.textContent = "MJPEG from drone --manan-panel-port 8082. Not raw video over the radio.";
-          const img = document.createElement("img");
-          img.alt = "Scene twin stream";
-          img.src = sceneUrl + (sceneUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
-          content.appendChild(img);
-        } else {
-          hint.textContent = "Browser twin — needs scene_ws_relay on :8080.";
-          content.innerHTML = `<iframe src="${sceneUrl}"></iframe>`;
-        }
-      } else if (kind === "camera") {
-        title.textContent = "MFD // LIVE OPTICAL CAMERA TURRET";
-        hint.textContent = "Needs drone --preview-port 8081. Not sent over the radio.";
+      if (kind === "camera") {
+        title.textContent = "MFD // LIVE CAMERA (WI-FI, NOT RADIO)";
+        hint.textContent = `Video over the Wi-Fi network from ${cameraUrl}. Never sent over the radio.`;
         const img = document.createElement("img");
         img.alt = "Live camera stream";
         img.src = cameraUrl + (cameraUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
         content.appendChild(img);
       } else {
-        title.textContent = "MFD // PHANTOM RECON VECTOR TWIN";
-        hint.textContent = "Offline / cached reconstructor twin at :8080.";
+        title.textContent = "MFD // SCENE RECONSTRUCTOR (WI-FI UDP)";
+        hint.textContent = "Scene vectors over Wi-Fi UDP, rebuilt on this laptop (scene_ws_relay :8080). Not over the radio.";
         content.innerHTML = `<iframe src="${reconstructorHtmlUrl}"></iframe>`;
       }
       overlay.classList.add("open");
@@ -970,7 +1022,9 @@
         renderCommands();
       } else if (msg.event === "stats") {
         if (typeof msg.up === "boolean") linkUp = msg.up;
-        if (typeof msg.buffered === "number") bufferedCount = msg.buffered;
+        // stats.buffered is the ground's own queue; the drone's comes from heartbeats ("drone").
+        if (playground && typeof msg.buffered === "number") bufferedCount = msg.buffered;
+        if ("radio" in msg) renderRadio(msg.radio);
         renderTraffic(msg);
         renderKpis();
         updateRangeGateUI();
@@ -989,7 +1043,7 @@
       const bps = Math.max(0, Math.round((last.bytes - first.bytes) * 8 / seconds));
       document.getElementById("bitrate-val").textContent = bps.toLocaleString();
       document.getElementById("this-link-bps").textContent = bps.toLocaleString() + " bit/s";
-      document.getElementById("wire-rate-summary").textContent = bps.toLocaleString() + " bit/s · CRC16 OK";
+      document.getElementById("wire-rate-summary").textContent = bps.toLocaleString() + " bit/s";
       document.getElementById("this-link-bar").style.width = logWidth(bps);
     }
 
@@ -1001,7 +1055,7 @@
       else { linkEl.textContent = linkUp ? "Link up" : "Link down"; linkEl.className = "gauge-readout " + (linkUp ? "status-up" : "status-down"); }
 
       const modeEl = document.getElementById("mode");
-      const modePretty = droneMode.charAt(0) + droneMode.slice(1).toLowerCase();
+      const modePretty = { PATROL: "Patrol", HOLD: "Hold", RTB: "Return to base", WAITING: "Waiting" }[droneMode] || droneMode;
       modeEl.textContent = modePretty;
       modeEl.className = "gauge-readout " + (droneMode === "HOLD" ? "status-hold" : "");
 
@@ -1094,25 +1148,110 @@
       });
     }
 
+    // Packet inspector. Plain frames: every field decoded. Encrypted frames (ARCDRONE_KEY):
+    // the body is ciphertext; the values shown are what the ground station decrypted.
+    const WIRE_FIELDS = [
+      ["magic", 1, "var(--muted)", () => "0xD2"],
+      ["type", 1, "var(--muted)", () => "DETECTION"],
+      ["seq", 2, "var(--hud-cyan)", (a) => `#${a.seq}`],
+      ["ts_ms", 4, "var(--hud-amber)", (a) => new Date(a.ts_ms).toLocaleTimeString()],
+      ["cls", 1, "var(--hud-mint)", (a) => a.cls],
+      ["conf", 1, "var(--hud-mint)", (a) => `${Math.round(a.conf * 100)}%`],
+      ["count", 1, "var(--hud-mint)", (a) => `×${a.count}`],
+      ["lat", 4, "#c4b5fd", (a) => `${a.lat.toFixed(5)}°`],
+      ["lon", 4, "#c4b5fd", (a) => `${a.lon.toFixed(5)}°`],
+      ["crc16", 2, "var(--hud-coral)", () => "valid"],
+    ];
+    const SECURE_FIELDS = [
+      ["magic", 1, "var(--muted)", () => "0xD3 secure"],
+      ["type", 1, "var(--muted)", () => "DETECTION"],
+      ["seq", 2, "var(--hud-cyan)", (a) => `#${a.seq}`],
+      ["nonce", 6, "var(--hud-amber)", () => "random per send"],
+      ["ciphertext", 15, "#c4b5fd", (a) => `decrypts to ${a.cls} ×${a.count}, ${Math.round(a.conf * 100)}%`],
+      ["tag", 4, "var(--hud-coral)", () => "authentic"],
+    ];
+
     function renderWirePacket(alertMsg) {
-      if (alertMsg.raw) {
-        const spaced = alertMsg.raw.match(/.{1,2}/g)?.join(" ") || alertMsg.raw;
-        document.getElementById("wire-bytes").textContent = spaced;
+      if (!alertMsg.raw) return;
+      const hex = alertMsg.raw.match(/../g);
+      const secure = alertMsg.raw.startsWith("D3");
+      const box = document.getElementById("wire-bytes");
+      box.replaceChildren();
+      let i = 0;
+      for (const [name, size, color, value] of secure ? SECURE_FIELDS : WIRE_FIELDS) {
+        const field = document.createElement("div");
+        field.className = "field";
+        field.style.setProperty("--f", color);
+        const cells = document.createElement("div");
+        cells.className = "cells";
+        for (const byte of hex.slice(i, i + size)) {
+          const cell = document.createElement("span");
+          cell.className = "cell";
+          cell.textContent = byte;
+          cells.append(cell);
+        }
+        i += size;
+        const label = document.createElement("small");
+        const title = document.createElement("b");
+        title.textContent = name;
+        label.append(title, value(alertMsg));
+        field.append(cells, label);
+        box.append(field);
       }
-      document.getElementById("wire-decoded").textContent =
-        `Decoded -> seq=${alertMsg.seq} cls=${alertMsg.cls} count=${alertMsg.count} conf=${Math.round(alertMsg.conf*100)}% lat=${alertMsg.lat.toFixed(4)} lon=${alertMsg.lon.toFixed(4)}`;
+      box.classList.remove("flash");
+      void box.offsetWidth;  // restart the flash animation
+      box.classList.add("flash");
+      document.getElementById("wire-size").textContent =
+        `${hex.length}-byte DETECTION · alert #${alertMsg.seq}` + (alertMsg.delayed ? " · DELAYED (buffered during outage)" : "");
+      document.getElementById("wire-decoded").textContent = secure
+        ? "AES-128-CCM encrypted · tag verified · header readable, body hidden"
+        : "Little-endian · CRC16 checked";
+    }
+
+    // Radio paths. A path is live if the ground board received anything on it in the last 3 s.
+    function renderPath(name, radio) {
+      const box = document.getElementById(`path-${name}`);
+      const rx = radio ? radio[`${name}_rx`] : undefined;
+      const state = document.getElementById(`${name}-state`);
+      const detail = document.getElementById(`${name}-detail`);
+      if (rx === undefined) {
+        box.className = "gauge-pod path-pod off";
+        state.textContent = radio ? "Not fitted" : "—";
+        detail.textContent = radio ? "This board has no such radio" : "";
+        return false;
+      }
+      const off = (name === "espnow" && radio.mode === "LORA_ONLY") || radio.mode === "MUTED";
+      const age = radio[`${name}_age`];
+      const live = !off && age >= 0 && age < 3000;
+      box.className = `gauge-pod path-pod ${off ? "off" : live ? "live" : "dead"}`;
+      state.textContent = off ? "Off (button)" : live ? `${radio[`${name}_rssi`]} dBm` : "No signal";
+      const heard = age < 0 ? "never heard" : age < 1000 ? "heard just now" : `last heard ${(age / 1000).toFixed(0)} s ago`;
+      const extra = name === "lora" && live ? ` · SNR ${radio.lora_snr} dB · SF${radio.lora_sf}` : "";
+      detail.textContent = `${rx.toLocaleString()} packets · ${heard}${extra}`;
+      return live;
+    }
+
+    function renderRadio(radio) {
+      const espnow = renderPath("espnow", radio);
+      const lora = renderPath("lora", radio);
+      const name = !radio ? "No radio report" : espnow && lora ? "Both radios" :
+        lora ? "LoRa only" : espnow ? "ESP-NOW only" : "Nothing";
+      document.getElementById("path-active-name").textContent = name;
+      document.getElementById("path-active-note").textContent = !radio ? "Is the ground board plugged in?" :
+        espnow && lora ? "Every packet sent on both; duplicates dropped" :
+        lora ? "ESP-NOW lost: traffic failed over to LoRa" :
+        espnow ? "LoRa silent" : "Link down: drone is buffering";
+      document.getElementById("path-active").className =
+        "gauge-pod path-pod" + (lora && !espnow ? " failover" : espnow || lora ? " live" : radio ? " dead" : "");
     }
 
     function sendOperatorCommand(cmd) {
       const refSeq = selectedAlertSeq || (alertsList[0] ? alertsList[0].seq : 0);
       if (isDemo) {
-        // Standalone demo has no server; show an optimistic confirmed row.
-        cmdHistory.unshift({ cmd_id: Math.floor(100 + Math.random() * 900), cmd, ref_seq: refSeq, status: "CONFIRMED" });
-        if (cmd === "HOLD") droneMode = "HOLD";
-        if (cmd === "RESUME") droneMode = "PATROL";
-        if (cmd === "RTB") droneMode = "RTB";
-        renderKpis();
-        renderCommands();
+        // Standalone demo: PENDING now, CONFIRMED when the fake drone "ACKs" (only while its link is up).
+        const command = { event: "cmd_status", cmd_id: demoCmdId++, cmd, ref_seq: refSeq, status: "PENDING" };
+        handleServerMessage(command);
+        demoPending.push(command);
         return;
       }
       // Live: let the ground station assign cmd_id and report PENDING -> CONFIRMED.
@@ -1150,30 +1289,67 @@
       };
     }
 
+    // ---- Standalone demo (?demo=1): schema-valid fake events, real packet bytes ----
+    let demoCmdId = 812;
+    const demoPending = [];
+
+    function crc16(bytes) {  // CRC-16/CCITT, init 0xFFFF: same as Python binascii.crc_hqx(data, 0xFFFF)
+      let crc = 0xffff;
+      for (const b of bytes) {
+        crc ^= b << 8;
+        for (let k = 0; k < 8; k++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+      }
+      return crc;
+    }
+
+    function encodeDetection(a) {
+      const buf = new DataView(new ArrayBuffer(21));
+      buf.setUint8(0, 0xd2); buf.setUint8(1, 0x01); buf.setUint16(2, a.seq & 0xffff, true);
+      buf.setUint32(4, a.ts_ms % 4294967296, true);
+      buf.setUint8(8, Math.max(0, CLASS_NAMES.indexOf(a.cls))); buf.setUint8(9, Math.round(a.conf * 255));
+      buf.setUint8(10, a.count);
+      buf.setInt32(11, Math.round(a.lat * 1e7), true); buf.setInt32(15, Math.round(a.lon * 1e7), true);
+      const bytes = new Uint8Array(buf.buffer);
+      buf.setUint16(19, crc16(bytes.slice(0, 19)), true);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    }
+
     function startDemoSimulator() {
-      let seq = 38190;
+      let seq = 38190, tick = 0, txBytes = 0, rxBytes = 0, espnowRx = 0, loraRx = 0;
       const classes = ["car", "pedestrian", "truck", "bicycle"];
       setInterval(() => {
-        seq += 1;
-        const cls = classes[seq % classes.length];
+        tick += 1;
+        // Every 40 s: 12 s where ESP-NOW is out of range and LoRa carries on (RTT ~130 ms).
+        const espnowLive = tick % 40 < 28;
+        if (espnowLive) espnowRx += 3;
+        loraRx += 2;
+        txBytes += 18; rxBytes += 33;
+        if (tick % 2 === 0) {
+          seq += 1;
+          const alert = {
+            event: "alert", seq, cls: classes[seq % classes.length],
+            conf: +(0.55 + (seq % 40) / 100).toFixed(2), count: (seq % 3) + 1,
+            lat: 53.5205 + Math.sin(seq * 0.4) * 0.0015, lon: -113.5205 + Math.cos(seq * 0.4) * 0.0018,
+            ts_ms: Date.now(), delayed: false,
+          };
+          alert.raw = encodeDetection(alert);
+          handleServerMessage(alert);
+        }
+        if (demoPending.length) {
+          const c = demoPending.shift();
+          handleServerMessage({ ...c, status: "CONFIRMED" });
+          droneMode = { HOLD: "HOLD", RESUME: "PATROL", RTB: "RTB" }[c.cmd] || droneMode;
+          renderKpis();
+        }
         handleServerMessage({
-          event: "alert", seq, cls,
-          conf: +(0.25 + (seq % 70) / 100).toFixed(2),
-          count: (seq % 3) + 1,
-          lat: 53.5205 + Math.sin(seq * 0.4) * 0.0015,
-          lon: -113.5205 + Math.cos(seq * 0.4) * 0.0018,
-          ts_ms: Date.now(),
-          delayed: seq % 7 === 0,
-          raw: "D201" + (seq & 0xffff).toString(16).padStart(4, "0") + "045B020035D255429AD1E2C29F3C",
+          event: "stats", up: true, buffered: 0, bytes_tx: txBytes, bytes_rx: rxBytes,
+          radio: {
+            mode: "DUAL",
+            espnow_rx: espnowRx, espnow_rssi: -44, espnow_age: espnowLive ? 200 : 4000 + (tick % 40 - 28) * 1000,
+            lora_rx: loraRx, lora_rssi: espnowLive ? -61 : -97, lora_age: 300, lora_snr: espnowLive ? 9.5 : 2.0, lora_sf: 7,
+          },
         });
-        handleServerMessage({
-          event: "stats",
-          up: true,
-          buffered: 0,
-          bytes_tx: 840 + seq * 21,
-          bytes_rx: 1260 + seq * 6,
-        });
-      }, 2200);
+      }, 1000);
     }
 
     window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeViewerModal(); });
@@ -1183,6 +1359,8 @@
     renderKpis();
     updateRangeGateUI();
     connectWebSocket();
+    probeWifi();
+    setInterval(probeWifi, 3000);
   </script>
 </body>
 </html>
