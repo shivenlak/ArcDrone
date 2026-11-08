@@ -68,7 +68,7 @@ python3 -m drone_node.scene_ws_relay
 - [x] **Phase 0:** Radio smoke test (hex lines echo both ways). Passed on 2× Feather V2, boards 1–2 cm apart, no antennas yet.
 - [x] **Phase 1:** MVP loop (detection → radio → ground print → ACK + RTT). 100/100 delivered, 0 retries, RTT 16.5 ms avg (same setup).
 - [ ] **Phase 2:** Real YOLO detections on VisDrone footage. YOLO runs on the Mac; Pi 4 benchmark not measured yet.
-- [ ] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, ring buffer). Passes in software tests; hardware test pending.
+- [x] **Phase 3:** Reliability (ACK/retry, dedup, heartbeat, LINK LOST, ring buffer). On real boards: 14 s SW38 mute → LINK_DOWN in 3.1 s, 120/120 delivered exactly once, 30 DELAYED; drone USB unplug/replug → auto-recovered in 2.7 s, 100/100.
 - [ ] **Phase 4:** Ground station UI + operator acknowledge/override. Built; hardware end-to-end test pending.
 - [ ] **Phase 5:** Stretch (dual-path ESP-NOW + LoRa, metrics panel, mute button)
 

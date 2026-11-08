@@ -11,3 +11,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - 2026-11-07 (Ishan): Browser reconstructor v2 UI — interactive per-object activity log and trace inspector grid.
 - 2026-11-07 (Ishan): Reconstructor live activity panel (direction/pace/heading per target), behavior-change event history, click-to-unlock; tester guide in `drone_node/static/RECONSTRUCTOR_SETUP.md`.
 - 2026-11-07 (Shiven): `shiven/integration`: main + `maybe` merged. Feather V2 firmware target. Phase 0/1 passed on real boards (1–2 cm, no antennas). README checklist reset to hardware-verified status.
+- 2026-11-07 (Shiven): Phase 3 passed on hardware: SW38 mute (120/120 exactly once, LINK_DOWN 3.1 s) and USB unplug/replug auto-recovery (100/100).
