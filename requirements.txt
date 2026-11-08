@@ -6,3 +6,4 @@ uvicorn
 pytest
 platformio
 websockets
+cryptography
