@@ -11,14 +11,22 @@ import random
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
-import serial
+
+try:
+    import serial
+    _ORIGINAL_SERIAL = serial.Serial
+    SerialException = serial.SerialException
+except ImportError:
+    serial = None
+    _ORIGINAL_SERIAL = None
+
+    class SerialException(IOError):
+        """Fallback SerialException when pyserial is not installed."""
+        pass
 
 # Global registry for named virtual ports (e.g., "sim://drone", "sim://ground")
 _VIRTUAL_REGISTRY: Dict[str, VirtualSerialPort] = {}
 _REGISTRY_LOCK = threading.Lock()
-
-# Preserve original serial.Serial for unmocked/hardware ports
-_ORIGINAL_SERIAL = serial.Serial
 _SERIAL_PATCHED = False
 
 
@@ -54,7 +62,7 @@ class VirtualSerialPort:
     def read(self, size: int = 1) -> bytes:
         """Read up to `size` bytes, blocking up to `self.timeout` seconds."""
         if not self.is_open:
-            raise serial.SerialException(f"Virtual port '{self.name}' is closed.")
+            raise SerialException(f"Virtual port '{self.name}' is closed.")
         if size <= 0:
             return b""
 
@@ -70,7 +78,7 @@ class VirtualSerialPort:
                     self._cond.wait(timeout=max(remaining, 0.001))
 
             if not self.is_open:
-                raise serial.SerialException(f"Virtual port '{self.name}' was closed during read.")
+                raise SerialException(f"Virtual port '{self.name}' was closed during read.")
             if len(self._rx_buf) == 0:
                 return b""
 
@@ -82,7 +90,7 @@ class VirtualSerialPort:
     def write(self, data: bytes) -> int:
         """Transmit data through the bridge to the peer port."""
         if not self.is_open:
-            raise serial.SerialException(f"Virtual port '{self.name}' is closed.")
+            raise SerialException(f"Virtual port '{self.name}' is closed.")
         if not data:
             return 0
 
@@ -133,6 +141,8 @@ class SimLinkBridge:
     """Bidirectional simulated radio link connecting two VirtualSerialPort instances.
 
     Supports:
+    - Dynamic Role Learning: Identifies DRONE vs GROUND automatically from packet types.
+    - Dual-Path Frequency Diversity: Simulates simultaneous transmission over ESP-NOW and LoRa.
     - cut() and restore() for deterministic radio blackout simulation.
     - packet_loss_rate (0.0 to 1.0) simulating wireless packet drops.
     - latency (seconds) simulating radio airtime / propagation delay.
@@ -146,13 +156,20 @@ class SimLinkBridge:
         packet_loss_rate: float = 0.0,
         latency: float = 0.0,
         timeout: float = 0.05,
+        dual_path: bool = False,
     ) -> None:
         self.name_a = name_a
         self.name_b = name_b
         self.packet_loss_rate = packet_loss_rate
         self.latency = latency
+        self.dual_path = dual_path
+        self.radio_mode = "BOTH"  # "BOTH", "LORA_ONLY", "MUTED"
         self._is_cut = False
         self._lock = threading.Lock()
+
+        # Dynamic role learning: learned from observed traffic
+        self.roles: Dict[str, str] = {name_a: "UNKNOWN", name_b: "UNKNOWN"}
+        self.last_activity: float = float("-inf")
 
         self.stats = collections.Counter()
         self.tx_hooks: List[Any] = []
@@ -170,7 +187,7 @@ class SimLinkBridge:
     @property
     def is_cut(self) -> bool:
         with self._lock:
-            return self._is_cut
+            return self._is_cut or self.radio_mode == "MUTED"
 
     def cut(self) -> None:
         """Cut the simulated radio link (all radio transmissions are dropped)."""
@@ -181,6 +198,38 @@ class SimLinkBridge:
         """Restore the simulated radio link."""
         with self._lock:
             self._is_cut = False
+            self.radio_mode = "BOTH"
+
+    def set_radio_mode(self, mode: str) -> None:
+        """Set radio mode: 'BOTH' (ESP-NOW + LoRa), 'LORA_ONLY', or 'MUTED'."""
+        with self._lock:
+            self.radio_mode = mode.upper()
+            if self.radio_mode == "MUTED":
+                self._is_cut = True
+            else:
+                self._is_cut = False
+
+    def get_role(self, port_name: str) -> str:
+        """Return dynamically inferred role ('DRONE', 'GROUND', or 'UNKNOWN')."""
+        with self._lock:
+            return self.roles.get(port_name, "UNKNOWN")
+
+    def _learn_role(self, sender_name: str, receiver_name: str, line: bytes) -> None:
+        """Infer DRONE vs GROUND dynamically from packet magic and opcode."""
+        try:
+            line_str = line.strip().decode("ascii", errors="ignore")
+            if len(line_str) >= 4:
+                raw = bytes.fromhex(line_str[:8])
+                if len(raw) >= 2 and raw[0] == 0xD2:  # p.MAGIC
+                    ptype = raw[1]
+                    if ptype in (0x01, 0x03):  # DETECTION or HEARTBEAT
+                        self.roles[sender_name] = "DRONE"
+                        self.roles[receiver_name] = "GROUND"
+                    elif ptype == 0x04:  # COMMAND
+                        self.roles[sender_name] = "GROUND"
+                        self.roles[receiver_name] = "DRONE"
+        except Exception:
+            pass
 
     def set_packet_loss_rate(self, rate: float) -> None:
         """Update simulated packet loss rate (0.0 - 1.0)."""
@@ -214,6 +263,9 @@ class SimLinkBridge:
             self.stats["dropped_cut"] += 1
             return len(data)
 
+        receiver = self.port_b if sender is self.port_a else self.port_a
+        self.last_activity = time.monotonic()
+
         # In ArcDrone, packets are sent as hex lines ending with \n.
         # We process line-by-line for realistic packet-loss simulation.
         chunks = data.split(b"\n")
@@ -226,15 +278,48 @@ class SimLinkBridge:
             if not payload:
                 continue
 
-            if loss > 0.0 and random.random() < loss:
-                self.stats["dropped_loss"] += 1
-                continue
+            self._learn_role(sender.name, receiver.name, chunk)
 
-            delivered_bytes.extend(payload)
-            self.stats["packets_transferred"] += 1
+            # Dual-path simulation (simultaneous ESP-NOW + LoRa broadcast)
+            if self.dual_path and self.radio_mode == "BOTH":
+                # Path 1: ESP-NOW (fast 2.4 GHz, baseline loss)
+                espnow_delivered = not (loss > 0.0 and random.random() < loss)
+                # Path 2: LoRa 915 MHz (narrowband, higher penetration / lower loss)
+                lora_delivered = not (loss > 0.0 and random.random() < (loss * 0.6))
+
+                if espnow_delivered:
+                    delivered_bytes.extend(payload)
+                    self.stats["packets_transferred_espnow"] += 1
+                if lora_delivered:
+                    # LoRa path delivers with airtime delay
+                    if delay > 0 or True:
+                        lora_delay = delay + 0.015
+                        def lora_delivery(p=payload):
+                            time.sleep(lora_delay)
+                            if not self.is_cut:
+                                receiver.deliver_bytes(bytes(p))
+                        threading.Thread(target=lora_delivery, daemon=True).start()
+                    self.stats["packets_transferred_lora"] += 1
+
+                if not espnow_delivered and not lora_delivered:
+                    self.stats["dropped_loss"] += 1
+                    continue
+            elif self.dual_path and self.radio_mode == "LORA_ONLY":
+                # LoRa only path
+                if loss > 0.0 and random.random() < (loss * 0.6):
+                    self.stats["dropped_loss"] += 1
+                    continue
+                delivered_bytes.extend(payload)
+                self.stats["packets_transferred_lora"] += 1
+            else:
+                # Standard single-path transmission
+                if loss > 0.0 and random.random() < loss:
+                    self.stats["dropped_loss"] += 1
+                    continue
+                delivered_bytes.extend(payload)
+                self.stats["packets_transferred"] += 1
 
         self.stats["bytes_transferred"] += len(delivered_bytes)
-        receiver = self.port_b if sender is self.port_a else self.port_a
 
         if delay > 0:
             def delayed_delivery():
@@ -287,7 +372,7 @@ def create_linked_pair(
 def patch_serial() -> None:
     """Monkey-patch serial.Serial to transparently intercept VirtualSerialPort and sim:// names."""
     global _SERIAL_PATCHED
-    if _SERIAL_PATCHED:
+    if _SERIAL_PATCHED or serial is None:
         return
 
     def patched_serial_factory(port: Any, *args, **kwargs) -> Any:
@@ -322,6 +407,6 @@ def patch_serial() -> None:
 def unpatch_serial() -> None:
     """Restore original serial.Serial."""
     global _SERIAL_PATCHED
-    if _SERIAL_PATCHED:
+    if _SERIAL_PATCHED and serial is not None:
         serial.Serial = _ORIGINAL_SERIAL  # type: ignore
         _SERIAL_PATCHED = False

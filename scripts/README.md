@@ -184,6 +184,7 @@ python -m scripts.test_integration_suite
 ```
 
 ### Component Test Scripts
+- [`scripts/test_enhanced_features.py`](test_enhanced_features.py): Validates dynamic role learning, dual-path radio emulation (ESP-NOW + LoRa diversity), grid-aware coasting tracker, and monotonic clock safety.
 - [`scripts/test_encryption.py`](test_encryption.py): Validates zero-byte payload expansion, round-trip correctness, and tamper detection.
 - [`scripts/test_lora_bandwidth.py`](test_lora_bandwidth.py): Rigorous 3.0 kB/s bandwidth assertion test.
 - [`scripts/link_test.py`](link_test.py): Link loss, 15s blackout, 64-item ring buffer flush test.
@@ -221,7 +222,7 @@ python -m unittest scripts/test_encryption.py
 
 | Script | Purpose | Key Interface / Methods |
 |---|---|---|
-| [`sim_link_bridge.py`](sim_link_bridge.py) | In-memory virtual serial radio bridge for Windows & Linux | `create_linked_pair()`, `cut()`, `restore()`, `packet_loss_rate` |
+| [`sim_link_bridge.py`](sim_link_bridge.py) | In-memory virtual serial radio bridge for Windows & Linux | `create_linked_pair()`, `cut()`, `restore()`, `dual_path`, `set_radio_mode()`, `get_role()`, `packet_loss_rate` |
 | [`bandwidth_monitor.py`](bandwidth_monitor.py) | Sliding window byte-rate auditor | `record_tx()`, `sample()`, `peak_wire_bps`, `within_budget` |
 | [`uaarg_adapter/event_logger.py`](uaarg_adapter/event_logger.py) | Shepard-style session logging | `log_event()`, writes `images/`, `bb/`, and structured `<seq>.json` |
 | [`uaarg_adapter/mission_monitor.py`](uaarg_adapter/mission_monitor.py) | Emu-style telemetry & liveness monitor | `update_mode()`, `log()`, `timeSinceMessage` |

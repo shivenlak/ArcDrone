@@ -28,8 +28,19 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from drone_node.detector import Detector, VISDRONE_CLASSES
-from drone_node.sim_gps import SimGps
+try:
+    from drone_node.detector import Detector, VISDRONE_CLASSES
+except ImportError:
+    Detector = None
+    VISDRONE_CLASSES = {
+        0: "pedestrian", 1: "people", 2: "bicycle", 3: "car", 4: "van",
+        5: "truck", 6: "tricycle", 7: "awning-tricycle", 8: "bus", 9: "motor"
+    }
+
+try:
+    from drone_node.sim_gps import SimGps
+except ImportError:
+    SimGps = None
 
 # True 0-indexed VisDrone class colors (BGR) — fixes the off-by-one bug
 CLASS_COLORS_BGR: Dict[int, Tuple[int, int, int]] = {
@@ -817,6 +828,53 @@ def render_bottom_index_manifest(
     return panel
 
 
+# Grid-aware coasting parameters
+GRID_CELLS = 16
+EDGE_RINGS = 3
+EDGE_UNSEEN_DROP = 2
+INTERIOR_UNSEEN_DROP = 3
+
+
+class GridCoastTracker(DroneIndexedTracker):
+    """DroneIndexedTracker with position-aware drop.
+    
+    Contacts disappearing in the outer border rings are dropped after 2 missed frames
+    (leaving scene). Contacts near the center coast for 3 frames across YOLO flickers.
+    """
+
+    @staticmethod
+    def _edge_distance(cx_r: float, cy_r: float) -> int:
+        cx = min(GRID_CELLS - 1, max(0, int(cx_r * GRID_CELLS)))
+        cy = min(GRID_CELLS - 1, max(0, int(cy_r * GRID_CELLS)))
+        return min(cx, GRID_CELLS - 1 - cx, cy, GRID_CELLS - 1 - cy)
+
+    def update(
+        self,
+        detections: List[Dict[str, Any]],
+        frame_w: int,
+        frame_h: int,
+        sim_t: float,
+    ) -> List[Dict[str, Any]]:
+        super().update(detections, frame_w, frame_h, sim_t)
+
+        for tid in list(self.tracks.keys()):
+            trk = self.tracks[tid]
+            if trk["unseen"] <= 0:
+                continue
+            d = self._edge_distance(trk["cx_r"], trk["cy_r"])
+            limit = EDGE_UNSEEN_DROP if d < EDGE_RINGS else INTERIOR_UNSEEN_DROP
+            if trk["unseen"] >= limit:
+                if trk.get("synced") and trk["id"] > 0:
+                    self.dropped_ids.append(trk["id"])
+                del self.tracks[tid]
+
+        return [
+            t
+            for t in self.tracks.values()
+            if t["id"] > 0 and t["unseen"] <= INTERIOR_UNSEEN_DROP
+        ]
+
+
 def run_pipeline(
     video_path: str = os.path.join(_REPO_ROOT, "data", "visdrone_aerial_sample.mp4"),
     model_path: str = os.path.join(_REPO_ROOT, "yolov8n-visdrone.pt"),
@@ -824,6 +882,8 @@ def run_pipeline(
     output_snapshot: str = os.path.join(_REPO_ROOT, "data", "ishan_visdrone_side_by_side.png"),
     num_frames: int = 150,
     scenario_title: str = "",
+    imgsz: int = 1280,
+    use_grid_coast: bool = True,
 ) -> Dict[str, Any]:
     print(f"[RATIO-VEC SHOWCASE] Opening video: {video_path}")
     cap = cv2.VideoCapture(video_path)
@@ -837,11 +897,12 @@ def run_pipeline(
     num_frames = min(num_frames, total_src_frames) if total_src_frames > 0 else num_frames
     print(f"[RATIO-VEC SHOWCASE] Source: {src_w}x{src_h} @ {video_fps:.2f} FPS ({total_src_frames} total frames)")
 
-    print(f"[RATIO-VEC SHOWCASE] Loading VisDrone weights: {model_path}")
-    detector = Detector(model_path=model_path, conf_thresh=0.30, cooldown_sec=1.0)
+    print(f"[RATIO-VEC SHOWCASE] Loading VisDrone weights: {model_path} (imgsz={imgsz})")
+    detector = Detector(model_path=model_path, conf_thresh=0.30, cooldown_sec=1.0, imgsz=imgsz)
     sim_gps = SimGps()
 
-    drone_tracker = DroneIndexedTracker(max_unseen_frames=36)
+    tracker_cls = GridCoastTracker if use_grid_coast else DroneIndexedTracker
+    drone_tracker = tracker_cls(max_unseen_frames=36)
     transmitter = SpreadOutVectorTransmitter(target_fps=12.0, max_updates_per_pkt=12)
     receiver = GroundVectorReceiver()
 
@@ -981,4 +1042,23 @@ def run_pipeline(
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    import argparse
+    parser = argparse.ArgumentParser(description="ArcDrone 1:1 Side-by-Side Video & Radar Reconstructor Generator")
+    parser.add_argument("--video", type=str, default=os.path.join(_REPO_ROOT, "data", "visdrone_aerial_sample.mp4"), help="Path to input aerial video")
+    parser.add_argument("--model", type=str, default=os.path.join(_REPO_ROOT, "yolov8n-visdrone.pt"), help="Path to YOLO weights (.pt)")
+    parser.add_argument("--output-mp4", type=str, default=os.path.join(_REPO_ROOT, "data", "ishan_visdrone_side_by_side.mp4"), help="Output video path")
+    parser.add_argument("--output-snapshot", type=str, default=os.path.join(_REPO_ROOT, "data", "ishan_visdrone_side_by_side.png"), help="Output snapshot path")
+    parser.add_argument("--frames", type=int, default=150, help="Number of frames to render")
+    parser.add_argument("--imgsz", type=int, default=1280, help="YOLO input size (1280 for small aerial targets, 640 for edge/fast)")
+    parser.add_argument("--no-grid-coast", action="store_true", help="Disable grid-aware coasting")
+    args = parser.parse_args()
+
+    run_pipeline(
+        video_path=args.video,
+        model_path=args.model,
+        output_mp4=args.output_mp4,
+        output_snapshot=args.output_snapshot,
+        num_frames=args.frames,
+        imgsz=args.imgsz,
+        use_grid_coast=not args.no_grid_coast,
+    )

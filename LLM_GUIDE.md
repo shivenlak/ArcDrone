@@ -90,6 +90,12 @@ uv run python scripts/run_live_showcase.py
 uv run python -m unittest scripts/test_encryption.py
 ```
 
+### G. Run Enhanced Architectural Features Verification
+```bash
+uv run python -m unittest scripts/test_enhanced_features.py
+```
+*Validates: Dynamic role learning (`DRONE` vs `GROUND`), dual-path radio frequency diversity (`BOTH`, `LORA_ONLY`, `MUTED`), grid-aware coasting tracker (2-frame edge drop vs 3-frame interior coasting), and monotonic clock safety.*
+
 ---
 
 ## 4. Architecture & Wire Protocol Specifications
