@@ -67,7 +67,9 @@ class Detector:
 
     def _resolve_class_id(self, raw_cls: int) -> Optional[int]:
         if self.is_coco:
-            return COCO_TO_VISDRONE.get(raw_cls, None)
+            if raw_cls in COCO_TO_VISDRONE:
+                return COCO_TO_VISDRONE[raw_cls]
+            return raw_cls % len(self.repo_classes)
         return raw_cls if raw_cls < len(self.repo_classes) else None
 
     @staticmethod

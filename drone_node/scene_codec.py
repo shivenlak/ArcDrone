@@ -366,21 +366,18 @@ class SceneCodec:
         scheduled = self._schedule_tracks()
 
         has_unsynced = any(not t.synced_on_wire for t in scheduled)
-        want_keyframe = (self._ticks_since_kf >= self.keyframe_interval) or (
-            has_unsynced and avail >= 22
-        )
+        want_keyframe = True
 
-        if want_keyframe and avail >= 12:
+        if want_keyframe:
             obj_payloads: List[bytes] = []
             used_bytes = 12
-            for trk in scheduled[:15]:
-                if used_bytes + 5 <= avail or (not obj_payloads and avail >= 17):
-                    obj_payloads.append(self._pack_keyframe_obj(trk))
-                    used_bytes += 5
-                    trk.sent_cx_q = trk.cx_q
-                    trk.sent_cy_q = trk.cy_q
-                    trk.synced_on_wire = True
-                    trk.ticks_since_sent = 0
+            for trk in scheduled[:12]:
+                obj_payloads.append(self._pack_keyframe_obj(trk))
+                used_bytes += 5
+                trk.sent_cx_q = trk.cx_q
+                trk.sent_cy_q = trk.cy_q
+                trk.synced_on_wire = True
+                trk.ticks_since_sent = 0
 
             type_count = (MSG_KEYFRAME << 4) | (len(obj_payloads) & 0x0F)
             pkt = struct.pack(
@@ -464,7 +461,7 @@ class SceneCodec:
                     tid, cls_id, conf, cx_q, cy_q, w6, h6, now, is_kf=True
                 )
             for tid in list(self._dec_tracks.keys()):
-                if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 1.2:
+                if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 2.5:
                     del self._dec_tracks[tid]
 
         elif msg_type == MSG_DELTA:
@@ -536,12 +533,16 @@ class SceneCodec:
             prev_cx, prev_cy = trk.trail[-1] if trk.trail else (cx_px, cy_px)
             dx = float(cx_px - prev_cx)
             dy = float(cy_px - prev_cy)
-            trk.vel = [dx * 0.65 + trk.vel[0] * 0.35, dy * 0.65 + trk.vel[1] * 0.35]
+            if abs(dx) > 0.5 or abs(dy) > 0.5:
+                trk.vel = [dx * 0.65 + trk.vel[0] * 0.35, dy * 0.65 + trk.vel[1] * 0.35]
+            else:
+                trk.vel = [trk.vel[0] * 0.85, trk.vel[1] * 0.85]
             trk.cls = cls_id
             trk.conf = conf
             trk.cx_q, trk.cy_q = cx_q, cy_q
             trk.w6, trk.h6 = w6, h6
-            trk.trail.append([cx_px, cy_px])
+            if cx_px != prev_cx or cy_px != prev_cy:
+                trk.trail.append([cx_px, cy_px])
             trk.last_update_ts = now
             if is_kf:
                 trk.last_keyframe_ts = now
@@ -550,7 +551,7 @@ class SceneCodec:
         objects_out: List[Dict[str, Any]] = []
         for tid in sorted(self._dec_tracks.keys()):
             trk = self._dec_tracks[tid]
-            if (now - trk.last_keyframe_ts) > 1.6:
+            if (now - trk.last_keyframe_ts) > 4.0:
                 continue
             cx = int(round((trk.cx_q / 255.0) * self.dst_w))
             cy = int(round((trk.cy_q / 255.0) * self.dst_h))

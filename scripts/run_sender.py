@@ -155,12 +155,10 @@ def prompt_for_video(default_video: Optional[str] = None) -> Optional[str]:
     print("   ArcDrone Video Source Selection")
     print("=" * 65)
 
-    options: List[Tuple[str, str]] = []
+    options: List[Tuple[str, str]] = [("0", "Live Webcam (Camera 0)")]
     for v in videos:
         rel = os.path.relpath(v, _REPO_ROOT)
         options.append((v, rel))
-
-    options.append(("0", "Live Webcam (Camera 0)"))
 
     print("\nAvailable Video Sources:")
     for idx, (_, label) in enumerate(options, start=1):
@@ -190,12 +188,14 @@ def prompt_for_video(default_video: Optional[str] = None) -> Optional[str]:
     return user_input
 
 
-def find_best_model() -> str:
-    """Return path to yolov8n-visdrone.pt if present, else yolov8n.pt."""
+def find_best_model(is_webcam: bool = False) -> str:
+    """Return path to yolov8n.pt for webcam, or yolov8n-visdrone.pt for aerial videos."""
+    yolo_pt = os.path.join(_REPO_ROOT, "yolov8n.pt")
     visdrone_pt = os.path.join(_REPO_ROOT, "yolov8n-visdrone.pt")
+    if is_webcam and os.path.isfile(yolo_pt):
+        return yolo_pt
     if os.path.isfile(visdrone_pt):
         return visdrone_pt
-    yolo_pt = os.path.join(_REPO_ROOT, "yolov8n.pt")
     if os.path.isfile(yolo_pt):
         return yolo_pt
     return "yolov8n.pt"
@@ -207,7 +207,7 @@ def main() -> None:
     parser.add_argument("--video", default=None, help="Video path or camera index")
     parser.add_argument("--model", default=None, help="YOLO model path")
     parser.add_argument("--imgsz", type=int, default=None, help="Inference resolution")
-    parser.add_argument("--fps", type=float, default=2.0, help="Camera / YOLO inference rate")
+    parser.add_argument("--fps", type=float, default=6.0, help="Camera / YOLO inference rate")
     parser.add_argument("--preview-port", type=int, default=8081, help="Wi-Fi MJPEG preview port (default: 8081)")
     parser.add_argument("--headless", action="store_true", help="Run without OpenCV GUI window")
     args = parser.parse_args()
@@ -222,7 +222,7 @@ def main() -> None:
         print("[*] Exiting.")
         return
 
-    model = args.model if args.model else find_best_model()
+    model = args.model if args.model else find_best_model(is_webcam=(video == "0"))
     imgsz = args.imgsz if args.imgsz else (640 if video == "0" else 1280)
 
     print("\n" + "=" * 65)

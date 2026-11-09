@@ -167,7 +167,7 @@ def parse_args():
         default=25.0,
         help="Suppress repeat alerts for the same contact while it stays in view (sec)",
     )
-    parser.add_argument("--fps", type=float, default=2.0, help="Camera / YOLO inference rate")
+    parser.add_argument("--fps", type=float, default=6.0, help="Camera / YOLO inference rate")
     parser.add_argument(
         "--scene-hz",
         type=float,
@@ -321,19 +321,31 @@ def main() -> None:
             drone_lat, drone_lon = sim_gps.position_at_frame(frame_idx, fps=args.fps)
             alert = None
 
-            # 2. Camera + YOLO at --fps (skipped in HOLD once a frame exists)
+            # 2. Capture fresh camera frame every loop tick for smooth ESP-NOW video preview;
+            #    run YOLO at --fps (skipped in HOLD once a frame exists).
+            if link.mode != p.MODE_HOLD or last_frame is None:
+                if use_camera and source.isOpened():
+                    ret, frame = source.read()
+                    if ret and frame is not None:
+                        last_frame = frame
+                        frame_idx += 1
+                        if preview is not None:
+                            preview.update(last_frame)
+
             if (link.mode != p.MODE_HOLD or last_frame is None) and (
                 now_mono - last_infer >= infer_period
             ):
                 last_infer = now_mono
-                if source.isOpened():
+                if not use_camera and source.isOpened():
                     ret, frame = source.read()
-                    if not ret and not use_camera:
+                    if not ret:
                         source.rewind()
                         ret, frame = source.read()
                     if ret and frame is not None:
                         last_frame = frame
                         frame_idx += 1
+                        if preview is not None:
+                            preview.update(last_frame)
 
                 if last_frame is None:
                     last_frame = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -347,6 +359,8 @@ def main() -> None:
                         2,
                     )
                     frame_idx += 1
+                    if preview is not None:
+                        preview.update(last_frame)
 
                 t_infer = time.perf_counter()
                 current_boxes, alert = detector.process_frame(last_frame)
@@ -442,10 +456,9 @@ def main() -> None:
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
                 )
-                # Send a frame only when YOLO produced a new one, plus once a second so banners
-                # (HOLD, link lost) still show while the video is frozen.
+                # Send clean raw frame to preview so ESP-NOW video stream has no duplicate HUD boxes.
                 if preview is not None and (state["new_frame"] or now_mono - state["preview_at"] > 1.0):
-                    preview.update(hud_frame)
+                    preview.update(last_frame)
                     state["new_frame"] = False
                     state["preview_at"] = now_mono
                     summary = link.summary()

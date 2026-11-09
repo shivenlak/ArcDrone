@@ -317,11 +317,12 @@
       senderLoraOnly: false,
       linkUp: true,
       pathOverride: "AUTO",
+      liveHardwareMode: !isDemo,
       hasRgb: false,
-      hasClipVideo: true,
-      clipId: CLIPS[0].id,
-      clipCase: CLIPS[0].caseLabel,
-      clipTitle: CLIPS[0].title,
+      hasClipVideo: false,
+      clipId: isDemo ? CLIPS[0].id : "LIVE_HARDWARE",
+      clipCase: isDemo ? CLIPS[0].caseLabel : "LIVE WEBCAM",
+      clipTitle: isDemo ? CLIPS[0].title : "LIVE HARDWARE WEBCAM -> HELTEC RADIO",
       clipData: null,
       simFrameIdx: 0
     };
@@ -548,12 +549,31 @@
 
       lctx.clearRect(0, 0, W, H);
       if (linkState.espNowActive) {
-        if (state.hasClipVideo && !rgb.classList.contains("on")) {
-          if (!clipVideo.classList.contains("on")) clipVideo.classList.add("on");
-          if (clipVideo.paused) clipVideo.play().catch(function () {});
-        }
-        if (!clipVideo.classList.contains("on") && !rgb.classList.contains("on")) {
-          drawGrid(lctx, W, H);
+        if (state.liveHardwareMode) {
+          clipVideo.classList.remove("on");
+          if (state.hasRgb) {
+            rgb.classList.add("on");
+          } else {
+            rgb.classList.remove("on");
+            drawGrid(lctx, W, H);
+            lctx.save();
+            lctx.textAlign = "center";
+            lctx.font = "800 18px " + getComputedStyle(document.body).fontFamily;
+            lctx.fillStyle = "#54f2b2";
+            lctx.fillText("ESP-NOW (2.4 GHz) ONLINE — AWAITING LIVE WEBCAM STREAM (:8081)", W / 2, H / 2 - 10);
+            lctx.font = "700 13px " + getComputedStyle(document.body).fontFamily;
+            lctx.fillStyle = "#aab6c4";
+            lctx.fillText("NO PRELOADED VIDEOS IN LIVE HARDWARE MODE", W / 2, H / 2 + 18);
+            lctx.restore();
+          }
+        } else {
+          rgb.classList.remove("on");
+          if (state.hasClipVideo) {
+            if (!clipVideo.classList.contains("on")) clipVideo.classList.add("on");
+            if (clipVideo.paused) clipVideo.play().catch(function () {});
+          } else {
+            drawGrid(lctx, W, H);
+          }
         }
       } else {
         clipVideo.classList.remove("on");
@@ -624,6 +644,7 @@
     }
 
     function stepVisDroneClip() {
+      if (state.liveHardwareMode) return;
       const data = state.clipData;
       if (!data || !data.frames || !data.frames.length) return;
 
@@ -664,19 +685,8 @@
       if (frame.sender_lora_only !== undefined) {
         state.senderLoraOnly = Boolean(frame.sender_lora_only);
       }
-      if (
-        !state.userSelectedClip &&
-        frame.clip_idx !== undefined &&
-        frame.clip_idx >= 1 &&
-        frame.clip_idx <= CLIPS.length &&
-        state.lastSenderClipIdx !== frame.clip_idx
-      ) {
-        state.lastSenderClipIdx = frame.clip_idx;
-        state.hasClipVideo = true;
-        const targetClip = CLIPS[frame.clip_idx - 1];
-        if (state.clipId !== targetClip.id) {
-          loadClip(targetClip.id);
-        }
+      if (state.liveHardwareMode) {
+        ingestFrame(frame);
       }
     }
 
@@ -686,6 +696,7 @@
         const ws = new WebSocket("ws://" + wsHost + ":8765");
         ws.onmessage = function (ev) {
           try {
+            if (state.radioSceneRx && (performance.now() - (state.lastRadioSceneAt || 0) < 3500)) return;
             const frame = JSON.parse(ev.data);
             handleLiveSceneFrame(frame);
           } catch (e) {}
@@ -707,6 +718,8 @@
           try {
             const msg = JSON.parse(ev.data);
             if (msg.event === "scene" && msg.frame) {
+              state.radioSceneRx = true;
+              state.lastRadioSceneAt = performance.now();
               if (msg.radio !== undefined) state.radio = msg.radio;
               handleLiveSceneFrame(msg.frame);
             } else if (msg.event === "stats") {
@@ -734,7 +747,32 @@
       } catch (e) {}
     }
 
+    function activateLiveHardwareMode() {
+      state.liveHardwareMode = true;
+      state.hasClipVideo = false;
+      state.clipId = "LIVE_HARDWARE";
+      state.clipCase = "LIVE WEBCAM";
+      state.clipTitle = "LIVE HARDWARE WEBCAM -> HELTEC RADIO";
+      state.objects = [];
+      state.prev.clear();
+      try { clipVideo.pause(); } catch (e) {}
+      clipVideo.removeAttribute("src");
+      clipVideo.removeAttribute("data-clip");
+      clipVideo.classList.remove("on");
+      document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
+        b.classList.toggle("on", b.dataset.seq === "LIVE_HARDWARE");
+      });
+      connectLiveCamera();
+      render();
+    }
+
+    function connectLiveCamera() {
+      if (isDemo || !state.liveHardwareMode) return;
+      rgb.src = cameraUrl + "?t=" + Date.now();
+    }
+
     async function loadClip(seqId) {
+      state.liveHardwareMode = false;
       const meta = CLIPS.find(function (c) { return c.id === seqId; }) || CLIPS[0];
       const alreadyLoaded = (state.clipId === meta.id && clipVideo.getAttribute("data-clip") === meta.id);
       state.clipId = meta.id;
@@ -759,7 +797,6 @@
         clipVideo.play().catch(function () {});
       }
       rgb.classList.remove("on");
-      state.hasRgb = true;
 
       document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
         b.classList.toggle("on", b.dataset.seq === meta.id);
@@ -787,6 +824,13 @@
 
     (function buildClipBar() {
       const bar = document.getElementById("clipBar");
+      const liveBtn = document.createElement("button");
+      liveBtn.type = "button";
+      liveBtn.dataset.seq = "LIVE_HARDWARE";
+      liveBtn.textContent = "[0] LIVE HARDWARE (WEBCAM)";
+      liveBtn.onclick = function () { activateLiveHardwareMode(); };
+      bar.appendChild(liveBtn);
+
       CLIPS.forEach(function (c, i) {
         const b = document.createElement("button");
         b.type = "button";
@@ -823,13 +867,26 @@
 
     rgb.onload = function () {
       state.hasRgb = true;
-      rgb.classList.add("on");
-      clipVideo.classList.remove("on");
+      if (state.liveHardwareMode && getRadioLinkState().espNowActive) {
+        rgb.classList.add("on");
+        clipVideo.classList.remove("on");
+      }
+      render();
     };
-    rgb.onerror = function () { rgb.classList.remove("on"); };
-    const qClip = new URLSearchParams(location.search).get("clip") || CLIPS[0].id;
-    loadClip(qClip);
-    if (!isDemo) rgb.src = cameraUrl;
+    rgb.onerror = function () {
+      state.hasRgb = false;
+      rgb.classList.remove("on");
+      if (state.liveHardwareMode) {
+        setTimeout(connectLiveCamera, 2000);
+      }
+      render();
+    };
+    const qClip = new URLSearchParams(location.search).get("clip");
+    if (isDemo || qClip) {
+      loadClip(qClip || CLIPS[0].id);
+    } else {
+      activateLiveHardwareMode();
+    }
 
     if (!isDemo) {
       connectWs();
