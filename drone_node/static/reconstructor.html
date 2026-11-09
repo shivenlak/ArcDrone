@@ -464,6 +464,9 @@
           const loraAge = r.lora_age;
           espNowActive = (espAge !== undefined && espAge >= 0 && espAge < 3500);
           loraActive = (loraAge !== undefined && loraAge >= 0 && loraAge < 6000) || state.wsLive || state.radioLive || espNowActive;
+        } else if (state.espNowVideoRx && (performance.now() - (state.lastEspNowVideoAt || 0) > 4000)) {
+          espNowActive = false;
+          loraActive = true;
         } else if (state.linkUp === false && !state.wsLive) {
           espNowActive = false;
           loraActive = true;
@@ -722,6 +725,19 @@
               state.lastRadioSceneAt = performance.now();
               if (msg.radio !== undefined) state.radio = msg.radio;
               handleLiveSceneFrame(msg.frame);
+            } else if (msg.event === "video_frame" && msg.src) {
+              state.espNowVideoRx = true;
+              state.lastEspNowVideoAt = performance.now();
+              if (msg.radio !== undefined) state.radio = msg.radio;
+              if (state.liveHardwareMode) {
+                state.hasRgb = true;
+                rgb.src = msg.src;
+                if (getRadioLinkState().espNowActive) {
+                  rgb.classList.add("on");
+                  clipVideo.classList.remove("on");
+                }
+                render();
+              }
             } else if (msg.event === "stats") {
               if ("radio" in msg) state.radio = msg.radio;
               if (msg.up !== undefined) state.linkUp = Boolean(msg.up);
@@ -751,8 +767,8 @@
       state.liveHardwareMode = true;
       state.hasClipVideo = false;
       state.clipId = "LIVE_HARDWARE";
-      state.clipCase = "LIVE WEBCAM";
-      state.clipTitle = "LIVE HARDWARE WEBCAM -> HELTEC RADIO";
+      state.clipCase = "LIVE ESP-NOW STREAM";
+      state.clipTitle = "LIVE SENDER -> ESP-NOW (VIDEO) + LORA (COORDS)";
       state.objects = [];
       state.prev.clear();
       try { clipVideo.pause(); } catch (e) {}
@@ -762,13 +778,11 @@
       document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
         b.classList.toggle("on", b.dataset.seq === "LIVE_HARDWARE");
       });
-      connectLiveCamera();
       render();
     }
 
     function connectLiveCamera() {
-      if (isDemo || !state.liveHardwareMode) return;
-      rgb.src = cameraUrl + "?t=" + Date.now();
+      // Video frames arrive over ESP-NOW (0xEF packets -> msg.event === "video_frame")
     }
 
     async function loadClip(seqId) {
@@ -876,9 +890,6 @@
     rgb.onerror = function () {
       state.hasRgb = false;
       rgb.classList.remove("on");
-      if (state.liveHardwareMode) {
-        setTimeout(connectLiveCamera, 2000);
-      }
       render();
     };
     const qClip = new URLSearchParams(location.search).get("clip");

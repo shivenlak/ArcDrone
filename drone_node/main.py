@@ -286,6 +286,8 @@ def main() -> None:
     scene_period = 1.0 / max(1.0, args.scene_hz)
     loop_period = 1.0 / max(args.fps, args.scene_hz, 1.0)
     last_infer = float("-inf")  # read a frame on the first loop (macOS monotonic() starts near 0)
+    last_video_read = float("-inf")
+    last_espnow_video_tx = 0.0
     last_scene_tx = 0.0
     current_boxes: List[Dict[str, Any]] = []
     drone_lat, drone_lon = sim_gps.base_lat, sim_gps.base_lon
@@ -321,24 +323,13 @@ def main() -> None:
             drone_lat, drone_lon = sim_gps.position_at_frame(frame_idx, fps=args.fps)
             alert = None
 
-            # 2. Capture fresh camera frame every loop tick for smooth ESP-NOW video preview;
+            # 2. Capture fresh frame (webcam or video) for ESP-NOW transmission & preview;
             #    run YOLO at --fps (skipped in HOLD once a frame exists).
             if link.mode != p.MODE_HOLD or last_frame is None:
-                if use_camera and source.isOpened():
+                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.095)):
+                    last_video_read = now_mono
                     ret, frame = source.read()
-                    if ret and frame is not None:
-                        last_frame = frame
-                        frame_idx += 1
-                        if preview is not None:
-                            preview.update(last_frame)
-
-            if (link.mode != p.MODE_HOLD or last_frame is None) and (
-                now_mono - last_infer >= infer_period
-            ):
-                last_infer = now_mono
-                if not use_camera and source.isOpened():
-                    ret, frame = source.read()
-                    if not ret:
+                    if not ret and not use_camera:
                         source.rewind()
                         ret, frame = source.read()
                     if ret and frame is not None:
@@ -347,6 +338,22 @@ def main() -> None:
                         if preview is not None:
                             preview.update(last_frame)
 
+                if last_frame is not None and (now_mono - last_espnow_video_tx >= 0.22):
+                    last_espnow_video_tx = now_mono
+                    try:
+                        thumb = cv2.resize(last_frame, (160, 96), interpolation=cv2.INTER_AREA)
+                        ok_jpg, jpg_buf = cv2.imencode(
+                            ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 26]
+                        )
+                        if ok_jpg:
+                            link.send_video_frame(jpg_buf.tobytes())
+                    except Exception:
+                        pass
+
+            if (link.mode != p.MODE_HOLD or last_frame is None) and (
+                now_mono - last_infer >= infer_period
+            ):
+                last_infer = now_mono
                 if last_frame is None:
                     last_frame = np.zeros((480, 640, 3), dtype=np.uint8)
                     cv2.putText(

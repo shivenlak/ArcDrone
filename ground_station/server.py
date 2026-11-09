@@ -11,6 +11,7 @@ browser -> radio: {"action": "command", ...} -> link.send(COMMAND), shown PENDIN
 
 import argparse
 import asyncio
+import base64
 import json
 import time
 from contextlib import asynccontextmanager
@@ -105,6 +106,14 @@ class Station:
                     "frame": frame,
                     "radio": self.link.summary().get("radio"),
                 })
+        elif packet["type"] == 0xEF and "jpeg_bytes" in packet:
+            b64 = base64.b64encode(packet["jpeg_bytes"]).decode("ascii")
+            await self.broadcast({
+                "event": "video_frame",
+                "frame_id": packet.get("frame_id", 0),
+                "src": "data:image/jpeg;base64," + b64,
+                "radio": self.link.summary().get("radio"),
+            })
 
     async def _handle_event(self, name, info):
         if name in ("link_up", "link_down"):
