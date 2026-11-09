@@ -40,10 +40,11 @@ def draw_hud(
     canvas = frame.copy()
     h, w = canvas.shape[:2]
 
-    # Draw detected bounding boxes
+    # Draw detected bounding boxes (matching receiver tracked boxes + #track_id)
     for b in boxes:
         x1, y1, x2, y2 = b["bbox"]
-        label = f"{b['label']} {b['conf']:.2f}"
+        tid_prefix = f"#{b['track_id']} " if "track_id" in b else ""
+        label = f"{tid_prefix}{b['label']} {b['conf']:.2f}"
         cv2.rectangle(canvas, (x1, y1), (x2, y2), (0, 255, 255), 2)
         cv2.putText(
             canvas,
@@ -157,8 +158,8 @@ def parse_args():
     parser.add_argument(
         "--imgsz",
         type=int,
-        default=1280,
-        help="YOLO inference size; use 1280/1536 for high-res aerial footage",
+        default=640,
+        help="YOLO inference size; 640 gives low-lag ~23ms CPU inference for real-time LoRa tracking",
     )
     parser.add_argument("--cooldown", type=float, default=3.0, help="Per-class cooldown (sec)")
     parser.add_argument(
@@ -279,6 +280,8 @@ def main() -> None:
     last_espnow_video_tx = 0.0
     last_scene_tx = 0.0
     current_boxes: List[Dict[str, Any]] = []
+    display_boxes: List[Dict[str, Any]] = []
+    is_hw_serial = str(args.port).startswith("/dev/") or str(args.port).upper().startswith("COM")
     drone_lat, drone_lon = sim_gps.base_lat, sim_gps.base_lon
 
     print("[MAIN] Pipeline active. Press 'q' or ESC in OpenCV window (or Ctrl+C) to exit.")
@@ -324,11 +327,12 @@ def main() -> None:
                 )
             )
             if link.mode != p.MODE_HOLD or last_frame is None:
-                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.065)):
+                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.095)):
                     last_video_read = now_mono
                     ret, frame = source.read()
                     if not ret and not use_camera:
                         source.rewind()
+                        scene_codec.reset_for_rewind()
                         ret, frame = source.read()
                     if ret and frame is not None:
                         last_frame = frame
@@ -350,10 +354,11 @@ def main() -> None:
                         if ok_img:
                             raw_bytes = img_buf.tobytes()
                             link.send_video_frame(raw_bytes)
-                            try:
-                                udp_sock.sendto(raw_bytes, (args.scene_host, 9998))
-                            except Exception:
-                                pass
+                            if not is_hw_serial:
+                                try:
+                                    udp_sock.sendto(raw_bytes, (args.scene_host, 9998))
+                                except Exception:
+                                    pass
                     except Exception:
                         pass
 
@@ -402,6 +407,9 @@ def main() -> None:
                     slon,
                     scene_hz=args.scene_hz,
                     sender_lora_only=sender_lora_only,
+                )
+                display_boxes = scene_codec.get_sender_boxes(
+                    last_frame.shape[1], last_frame.shape[0]
                 )
                 state["scene_kbps"] = kbps
                 link.send_scene(scene_bytes)
@@ -454,7 +462,7 @@ def main() -> None:
                     buffered_count=link.buffered,
                     ack_banner=state["ack_banner"],
                     last_rtt=state["last_rtt"],
-                    boxes=current_boxes,
+                    boxes=display_boxes if display_boxes else current_boxes,
                     drone_lat=drone_lat,
                     drone_lon=drone_lon,
                     last_tx_str=state["last_tx_str"],

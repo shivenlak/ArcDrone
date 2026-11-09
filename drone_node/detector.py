@@ -39,7 +39,7 @@ class Detector:
         cooldown_sec: float = 3.0,
         spatial_hold_sec: float = 25.0,
         match_gate_frac: float = 0.33,
-        imgsz: int = 1280,
+        imgsz: int = 640,
     ):
         self.conf_thresh = conf_thresh
         self.cooldown_sec = cooldown_sec
@@ -119,7 +119,7 @@ class Detector:
     ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         now = time.time()
         results = self.model.predict(
-            source=frame_bgr, conf=self.conf_thresh, imgsz=self.imgsz, verbose=False
+            source=frame_bgr, conf=min(self.conf_thresh, 0.22), imgsz=self.imgsz, verbose=False
         )
 
         all_boxes: List[Dict[str, Any]] = []
@@ -152,7 +152,7 @@ class Detector:
             }
             all_boxes.append(box_item)
 
-            if mapped_cls is not None:
+            if mapped_cls is not None and conf >= self.conf_thresh:
                 qualifying.append(box_item)
 
         if not qualifying:

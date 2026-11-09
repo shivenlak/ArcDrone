@@ -57,11 +57,14 @@ class Station:
         self.loop = asyncio.get_running_loop()
         self.queue = asyncio.Queue()
         self.link = Link(self.port, on_packet=self._on_packet, on_event=self._on_event).start()
-        return [
+        is_hw = str(self.port).startswith("/dev/") or str(self.port).upper().startswith("COM")
+        tasks = [
             asyncio.create_task(self._consume()),
             asyncio.create_task(self._stats_loop()),
-            asyncio.create_task(self._udp_video_loop()),
         ]
+        if not is_hw:
+            tasks.append(asyncio.create_task(self._udp_video_loop()))
+        return tasks
 
     async def _udp_video_loop(self):
         class _VideoUdp(asyncio.DatagramProtocol):

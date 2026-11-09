@@ -598,6 +598,9 @@
           clipVideo.classList.remove("on");
           if (state.hasRgb) {
             rgb.classList.add("on");
+            for (const obj of state.objects) {
+              drawBox(lctx, obj, sx, sy, false);
+            }
           } else {
             rgb.classList.remove("on");
             drawGrid(lctx, W, H);
@@ -616,6 +619,9 @@
           if (state.hasClipVideo) {
             if (!clipVideo.classList.contains("on")) clipVideo.classList.add("on");
             if (clipVideo.paused) clipVideo.play().catch(function () {});
+            for (const obj of state.objects) {
+              drawBox(lctx, obj, sx, sy, false);
+            }
           } else {
             drawGrid(lctx, W, H);
           }

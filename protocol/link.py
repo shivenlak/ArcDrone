@@ -82,6 +82,7 @@ class Link:
         self._pending_scene = None
         self._latest_scene = b""
         self._last_scene_tx = 0.0
+        self._lora_free_at = 0.0
         self._video_chunks = collections.deque()
         self._last_video_tx = 0.0
         self._video_frame_seq = 0
@@ -200,9 +201,22 @@ class Link:
                 pass
         self._ser = None
 
+    @staticmethod
+    def _lora_airtime(payload_len):
+        """SX1262 SF9 / 125 kHz / CR 4/5 Time-on-Air in seconds so loraTxQueue never overflows."""
+        import math
+        t_sym = (2 ** 9) / 125000.0  # 4.096 ms
+        num = max(0, 8 * payload_len - 36 + 28 + 16)
+        payload_sym = 8 + max(int(math.ceil(num / 36.0)) * 5, 0)
+        return (12.25 + payload_sym) * t_sym + 0.012
+
     def _write(self, data):
+        is_espnow_only = bool(data and data[0] == 0xEF)
         if self.sealer is not None:
             data = self.sealer.seal(data)  # fresh nonce on every transmission, retries included
+        if not is_espnow_only:
+            now_m = time.monotonic()
+            self._lora_free_at = max(now_m, self._lora_free_at) + self._lora_airtime(len(data))
         self.stats["bytes_tx"] += len(data)
         raw_line = p.to_line(data).encode()
         if len(raw_line) <= 240:
@@ -266,6 +280,8 @@ class Link:
                     sbytes = data[5 : 5 + slen]
                     if sbytes[0] in (0xAD, 0xAE):
                         self.on_packet({"type": sbytes[0], "scene_bytes": sbytes, "wire": sbytes.hex().upper()})
+            if total == 0:
+                return
             payload = data[offset:]
             if fid != self._rx_video_id or total != self._rx_video_total:
                 self._rx_video_id = fid
@@ -371,20 +387,25 @@ class Link:
                 )
             )
         )
-        scene_interval = 0.065 if espnow_live else 0.12
+        lora_ready = now >= self._lora_free_at
+        scene_due = (
+            (lora_ready and (now - self._last_scene_tx) >= 0.08)
+            if not espnow_live
+            else ((now - self._last_scene_tx) >= 0.075)
+        )
         scene_pkt = None
         video_pkt = None
         with self._lock:
             if not espnow_live:
                 self._video_chunks.clear()
             if not self._outbox:
-                if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
+                if self._pending_scene is not None and scene_due:
                     scene_pkt = self._pending_scene
                     self._pending_scene = None
                     self._last_scene_tx = now
                 elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.025:
                     raw_v = self._video_chunks.popleft()
-                    if self._latest_scene and len(self._latest_scene) <= 27:
+                    if self._latest_scene and len(self._latest_scene) <= 32:
                         s_b = self._latest_scene
                         video_pkt = bytes([0xEF, (raw_v[1] & 0x7F) | 0x80, raw_v[2], raw_v[3], len(s_b)]) + s_b + raw_v[4:]
                         self._pending_scene = None
@@ -401,13 +422,13 @@ class Link:
                     and (now - self._last_tx) < self._timeout
                     and (now - self._last_tx) >= 0.04
                 ):
-                    if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
+                    if self._pending_scene is not None and scene_due:
                         scene_pkt = self._pending_scene
                         self._pending_scene = None
                         self._last_scene_tx = now
                     elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.025:
                         raw_v = self._video_chunks.popleft()
-                        if self._latest_scene and len(self._latest_scene) <= 27:
+                        if self._latest_scene and len(self._latest_scene) <= 32:
                             s_b = self._latest_scene
                             video_pkt = bytes([0xEF, (raw_v[1] & 0x7F) | 0x80, raw_v[2], raw_v[3], len(s_b)]) + s_b + raw_v[4:]
                             self._pending_scene = None
@@ -420,6 +441,9 @@ class Link:
                 b = bytearray(scene_pkt)
                 b[2] |= 0x80
                 scene_pkt = bytes(b)
+            elif espnow_live and not lora_ready and self.sealer is None and len(scene_pkt) <= 48:
+                # LoRa SX1262 is mid-airtime: send intermediate update on ESP-NOW (0xEF) so loraTxQueue stays at 0 lag
+                scene_pkt = bytes([0xEF, 0x80, 0, 0, len(scene_pkt)]) + scene_pkt
             self._write(scene_pkt)
             return
         if video_pkt is not None:
