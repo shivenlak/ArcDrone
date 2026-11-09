@@ -552,11 +552,7 @@
           if (!clipVideo.classList.contains("on")) clipVideo.classList.add("on");
           if (clipVideo.paused) clipVideo.play().catch(function () {});
         }
-        if (clipVideo.classList.contains("on") && clipVideo.readyState >= 2) {
-          try {
-            lctx.drawImage(clipVideo, 0, 0, W, H);
-          } catch (e) {}
-        } else if (!rgb.classList.contains("on")) {
+        if (!clipVideo.classList.contains("on") && !rgb.classList.contains("on")) {
           drawGrid(lctx, W, H);
         }
       } else {
@@ -628,16 +624,16 @@
     }
 
     function stepVisDroneClip() {
-      if (state.wsLive && (performance.now() - (state.lastLiveRx || 0) < 4000)) return;
-      state.wsLive = false;
       const data = state.clipData;
       if (!data || !data.frames || !data.frames.length) return;
 
       state.seq = (state.seq + 1) & 0xffff;
       let fIdx = 0;
-      if (!clipVideo.paused && !isNaN(clipVideo.currentTime)) {
+      const linkState = getRadioLinkState();
+      if (linkState.espNowActive && !clipVideo.paused && !isNaN(clipVideo.currentTime) && clipVideo.readyState >= 2) {
         const fps = data.fps || 10.0;
         fIdx = Math.floor(clipVideo.currentTime * fps) % data.frames.length;
+        state.simFrameIdx = fIdx;
       } else {
         state.simFrameIdx = (state.simFrameIdx + 1) % data.frames.length;
         fIdx = state.simFrameIdx;
@@ -651,7 +647,7 @@
       const pktBytes = objects.length === 0 ? 12 : (12 + spreadUpdates * 8);
 
       ingestFrame({
-        seq: state.seq,
+        seq: state.radioLive ? state.radioSeq : state.seq,
         lat: baseLat + drift,
         lon: baseLon + drift * 0.8,
         count: objects.length,
@@ -662,35 +658,26 @@
 
     function handleLiveSceneFrame(frame) {
       if (!frame) return;
-      state.wsLive = true;
+      state.radioLive = true;
+      if (frame.seq !== undefined) state.radioSeq = frame.seq;
       state.lastLiveRx = performance.now();
       if (frame.sender_lora_only !== undefined) {
         state.senderLoraOnly = Boolean(frame.sender_lora_only);
       }
-      if (frame.clip_idx !== undefined) {
-        if (frame.clip_idx >= 1 && frame.clip_idx <= CLIPS.length) {
-          state.hasClipVideo = true;
-          const targetClip = CLIPS[frame.clip_idx - 1];
-          if (state.clipId !== targetClip.id) {
-            loadClip(targetClip.id);
-          }
-          if (frame.video_frame !== undefined && clipVideo.readyState >= 2 && clipVideo.duration) {
-            const targetSec = ((frame.video_frame % 150) / 10.0) % clipVideo.duration;
-            if (Math.abs(clipVideo.currentTime - targetSec) > 0.7) {
-              try { clipVideo.currentTime = targetSec; } catch (e) {}
-            }
-          }
-        } else if (frame.clip_idx === 0) {
-          state.hasClipVideo = false;
-          clipVideo.classList.remove("on");
-          state.clipCase = "LIVE SENDER";
-          state.clipTitle = "LIVE SENDER EDGE CAMERA STREAM";
-          document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
-            b.classList.remove("on");
-          });
+      if (
+        !state.userSelectedClip &&
+        frame.clip_idx !== undefined &&
+        frame.clip_idx >= 1 &&
+        frame.clip_idx <= CLIPS.length &&
+        state.lastSenderClipIdx !== frame.clip_idx
+      ) {
+        state.lastSenderClipIdx = frame.clip_idx;
+        state.hasClipVideo = true;
+        const targetClip = CLIPS[frame.clip_idx - 1];
+        if (state.clipId !== targetClip.id) {
+          loadClip(targetClip.id);
         }
       }
-      ingestFrame(frame);
     }
 
     function connectWs() {
@@ -738,10 +725,6 @@
               state.radioAlert = msg;
               if (msg.lat) state.lat = msg.lat;
               if (msg.lon) state.lon = msg.lon;
-              if (!state.wsLive && msg.count >= 60 && state.clipId !== "uav0000137_00458_v") {
-                loadClip("uav0000137_00458_v");
-              }
-              render();
             }
           } catch (e) {}
         };
@@ -753,22 +736,28 @@
 
     async function loadClip(seqId) {
       const meta = CLIPS.find(function (c) { return c.id === seqId; }) || CLIPS[0];
+      const alreadyLoaded = (state.clipId === meta.id && clipVideo.getAttribute("data-clip") === meta.id);
       state.clipId = meta.id;
       state.clipCase = meta.caseLabel;
       state.clipTitle = meta.title;
       state.hasClipVideo = true;
-      state.prev.clear();
-      state.simFrameIdx = 0;
 
-      const url = "/clips/" + meta.id + ".mp4?v=h264";
-      clipVideo.src = url;
+      if (!alreadyLoaded) {
+        state.prev.clear();
+        state.simFrameIdx = 0;
+        const url = "/clips/" + meta.id + ".mp4?v=h264";
+        clipVideo.setAttribute("data-clip", meta.id);
+        clipVideo.src = url;
+        clipVideo.load();
+      }
       if (getRadioLinkState().espNowActive) {
         clipVideo.classList.add("on");
       } else {
         clipVideo.classList.remove("on");
       }
-      clipVideo.load();
-      clipVideo.play().catch(function () {});
+      if (clipVideo.paused) {
+        clipVideo.play().catch(function () {});
+      }
       rgb.classList.remove("on");
       state.hasRgb = true;
 
@@ -803,7 +792,7 @@
         b.type = "button";
         b.dataset.seq = c.id;
         b.textContent = "[" + (i + 1) + "] " + c.label;
-        b.onclick = function () { state.wsLive = false; loadClip(c.id); };
+        b.onclick = function () { state.userSelectedClip = true; state.wsLive = false; loadClip(c.id); };
         bar.appendChild(b);
       });
       const pathBtn = document.createElement("button");
@@ -846,7 +835,7 @@
       connectWs();
       connectRadioWs();
     }
-    setInterval(function () { if (!state.wsLive) stepVisDroneClip(); }, Math.round(1000 / 12));
+    setInterval(function () { stepVisDroneClip(); }, Math.round(1000 / 12));
   </script>
 </body>
 </html>

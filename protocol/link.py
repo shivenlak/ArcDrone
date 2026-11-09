@@ -216,10 +216,6 @@ class Link:
             if not self.up:
                 self.up = True
                 self.on_event("link_up")
-            try:
-                self._scene_udp.sendto(data, ("127.0.0.1", 9999))
-            except OSError:
-                pass
             self.on_packet({"type": data[0], "scene_bytes": data, "wire": wire.hex().upper()})
             return
         packet = p.decode(data) if data is not None else None
