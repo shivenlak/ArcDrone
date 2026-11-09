@@ -33,8 +33,9 @@ H3_TABLE: Tuple[int, ...] = (4, 6, 9, 12, 16, 21, 28, 38)
 # Grid-aware coasting parameters optimized for LoRa stability (no pop-in/pop-out)
 GRID_CELLS = 16
 EDGE_RINGS = 2
-EDGE_UNSEEN_DROP = 10      # ~1.0s at outer border before dropping off-screen contact
-INTERIOR_UNSEEN_DROP = 40  # ~3.5s in center/interior so objects never pop out on brief YOLO dips
+EDGE_UNSEEN_DROP = 5       # ~0.35-0.5s at outer border before dropping off-screen contact
+INTERIOR_UNSEEN_DROP = 20  # ~1.4-1.7s in center/interior so objects don't pop out on brief YOLO dips
+DECODER_STALE_SEC = 9.0    # receiver fallback: prune tracks with no update (e.g. lost drop packet)
 
 # v1 wire labels (reconstructor palette)
 LABEL_TO_CLS = {
@@ -669,8 +670,8 @@ class SceneCodec:
                 trk = self._dec_tracks[tid]
                 if tid not in updated_tids:
                     trk.vel = [trk.vel[0] * 0.70, trk.vel[1] * 0.70]
-                    # Only prune if completely abandoned for > 18 seconds
-                    if (now - trk.last_update_ts) > 18.0:
+                    # Only prune if abandoned (no update) for > DECODER_STALE_SEC
+                    if (now - trk.last_update_ts) > DECODER_STALE_SEC:
                         del self._dec_tracks[tid]
                 else:
                     trk.last_keyframe_ts = now
@@ -831,7 +832,7 @@ class SceneCodec:
         objects_out: List[Dict[str, Any]] = []
         for tid in sorted(self._dec_tracks.keys()):
             trk = self._dec_tracks[tid]
-            if (now - trk.last_update_ts) > 18.0:
+            if (now - trk.last_update_ts) > DECODER_STALE_SEC:
                 continue
             cx = int(round((trk.cx_q / 255.0) * self.dst_w))
             cy = int(round((trk.cy_q / 255.0) * self.dst_h))
