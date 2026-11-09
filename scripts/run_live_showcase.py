@@ -149,6 +149,23 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
     drone_link.stop()
 
 
+def _free_port(port: int) -> None:
+    """Free any stale process occupying the given TCP port so uvicorn never hits Errno 48."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if s.connect_ex(("127.0.0.1", port)) != 0:
+            return
+    try:
+        out = subprocess.check_output(["lsof", "-ti", f"tcp:{port}"], text=True, stderr=subprocess.DEVNULL)
+        my_pid = os.getpid()
+        for tok in out.split():
+            pid = int(tok)
+            if pid != my_pid:
+                os.kill(pid, signal.SIGTERM)
+        time.sleep(0.4)
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="ArcDrone End-to-End Live Simulation Showcase")
     parser.add_argument("--http-port", type=int, default=8000, help="Web dashboard port (default: 8000)")
@@ -160,6 +177,10 @@ def main():
     print("  ARCDRONE LIVE INTERACTIVE SHOWCASE")
     print("  natHacks 2026 Defense & Security Challenge")
     print("=" * 70)
+
+    _free_port(args.http_port)
+    _free_port(8080)
+    _free_port(8765)
 
     # 1. Start Virtual Radio Bridge
     bridge = SimLinkBridge(name_a="sim://drone", name_b="sim://ground")

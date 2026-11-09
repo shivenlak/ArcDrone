@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -121,6 +122,23 @@ def prompt_for_port(default_port: Optional[str] = None) -> Optional[str]:
     return user_input
 
 
+def _free_port(port: int) -> None:
+    """Free any stale process occupying the given TCP port so uvicorn never hits Errno 48."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if s.connect_ex(("127.0.0.1", port)) != 0:
+            return
+    try:
+        out = subprocess.check_output(["lsof", "-ti", f"tcp:{port}"], text=True, stderr=subprocess.DEVNULL)
+        my_pid = os.getpid()
+        for tok in out.split():
+            pid = int(tok)
+            if pid != my_pid:
+                os.kill(pid, signal.SIGTERM)
+        time.sleep(0.4)
+    except Exception:
+        pass
+
+
 def start_scene_relay():
     """Start UDP :9999 -> ws :8765 relay without occupying HTTP port 8080 (UI is served on :8000)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -180,20 +198,21 @@ def main() -> None:
         print("[*] Exiting.")
         return
 
+    _free_port(args.http_port)
+    _free_port(8080)
+    _free_port(8765)
+
     dashboard_url = f"http://localhost:{args.http_port}"
-    relay = start_scene_relay()
 
     if selected_port == "SIM":
         print("\n[*] Starting Live Simulation Showcase with virtual radio bridge...")
         from scripts.run_live_showcase import main as run_showcase
         if not args.no_browser:
             threading.Thread(target=open_browser_when_ready, args=(dashboard_url,), daemon=True).start()
-        try:
-            run_showcase()
-        finally:
-            if relay is not None and relay.poll() is None:
-                relay.terminate()
+        run_showcase()
         return
+
+    relay = start_scene_relay()
 
     print("\n" + "=" * 65)
     print(f"  ArcDrone Ground Station starting on {selected_port}")
