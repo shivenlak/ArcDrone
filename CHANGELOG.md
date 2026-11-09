@@ -40,3 +40,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - Take Manan's real YOLO benchmark (scripts/bench_pi.py); the old one slept instead of running the model.
 - README: scene feed is Wi-Fi (not radio) and its 2 kbps is a budget; SF9 range is theory; loop_test names the right mute button.
 - protocol/range_walk.py: per-second range logger (radio heard, RSSI/SNR, delivery, RTT) with floor marks, to CSV.
+- Range walk measured: ESP-NOW lost 2 floors down, LoRa SF7/10 dBm alone to the 6th floor, link gone by the 5th (README).

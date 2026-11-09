@@ -148,6 +148,20 @@ All on our own boards and a MacBook M4 Pro (November 7–8, 2026). Boards were o
 | Receiver with no key | 0 frames accepted, link never comes up | — | — |
 | Live failover: 30 alerts on both radios, then drone ESP-NOW killed mid-run, 50 more (3 runs) | 80/80 each run, each shown once | 0–10 after the switch | before 22–25 ms; after 126–145 ms avg |
 
+**Range walk (Heltec V3, both radios, LoRa SF7 at 10 dBm, indoors).** Ground board on the 8th floor; walker carried the drone board along the 8th floor, then down the stairwell, sending 1 alert/s (`protocol/range_walk.py`, 486 alerts over 8 min). Distances were not measured, only floors.
+
+| Where (walker) | Link up | ESP-NOW | LoRa RSSI / worst SNR |
+|---|---|---|---|
+| 8th floor, walking away | 178/178 s | heard, down to −87 dBm | down to −90 dBm / +9.2 dB |
+| 7th floor | 35/35 s | heard, down to −99 dBm | down to −100 dBm / +3.5 dB |
+| 6th floor | 25/58 s | lost after 2 s (−99 dBm) | down to −114 dBm / −8.8 dB, then drops |
+| 5th floor | 10/77 s | not heard | −111 to −118 dBm in short bursts |
+
+- On the 6th floor ESP-NOW died and LoRa alone carried the alerts for ~12 s, below the noise floor (negative SNR), before it ran out too.
+- 432 alerts delivered; the ground dashboard dropped 247 extra copies (the same alert arriving on both radios, and retries), so none was shown twice. 129 retries.
+- 54 alerts were lost: the outage lasted ~100 s at 1 alert/s, more than the drone's 64-alert buffer holds, so the oldest were dropped (by design).
+- On the way back up, the 64 buffered alerts flushed and the link was clean again (0 retries) once back on the 8th floor.
+
 **Reliability (Feather V2, ESP-NOW, boards 1–2 cm apart, no antennas)**
 
 | Test | Result |
@@ -181,7 +195,7 @@ All on our own boards and a MacBook M4 Pro (November 7–8, 2026). Boards were o
 
 Live link traffic, both directions, measured by the ground station: about 200 bit/s during the demo, against LoRa SF7/BW125's ~5,470 bit/s and a typical 720p video downlink of ~2 Mbit/s.
 
-**Not measured yet:** range beyond one desk, the Pi 4 frame rate, behaviour in a crowded 2.4 GHz venue.
+**Not measured yet:** range in metres or outdoors, range with SF9 or higher TX power, the Pi 4 frame rate, behaviour in a crowded 2.4 GHz venue.
 
 ## Progress
 
