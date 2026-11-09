@@ -197,6 +197,13 @@ def main() -> None:
         "ack_banner": "",
         "last_tx_str": "",
         "scene_kbps": 0.0,
+        # Live numbers for the dashboard (over Wi-Fi via --preview-port; not the radio).
+        "infer_ms": None,
+        "fps": None,
+        "alerts_sent": 0,
+        "last_alert": "",
+        "new_frame": False,
+        "preview_at": 0.0,
     }
 
     verifier = DeliveryVerifier()
@@ -323,7 +330,15 @@ def main() -> None:
                     )
                     frame_idx += 1
 
+                t_infer = time.perf_counter()
                 current_boxes, alert = detector.process_frame(last_frame)
+                infer_ms = (time.perf_counter() - t_infer) * 1000
+                state["infer_ms"] = infer_ms if state["infer_ms"] is None else 0.8 * state["infer_ms"] + 0.2 * infer_ms
+                if state.get("last_frame_t"):
+                    fps_now = 1.0 / max(1e-3, now_mono - state["last_frame_t"])
+                    state["fps"] = fps_now if state["fps"] is None else 0.8 * state["fps"] + 0.2 * fps_now
+                state["last_frame_t"] = now_mono
+                state["new_frame"] = True
 
             # 3. Scene vectors at --scene-hz (default 12/s); uses latest boxes, not full link cap
             if (
@@ -368,6 +383,8 @@ def main() -> None:
                 state["last_tx_str"] = (
                     f"TX #{seq}: {alert['label']} x{alert['count']} ({alert['conf']:.2f})"
                 )
+                state["alerts_sent"] += 1
+                state["last_alert"] = f"#{seq} {alert['label']} x{alert['count']} ({alert['conf']:.2f})"
                 print(
                     f"[TX DETECTION] seq={seq} cls={alert['cls']} ({alert['label']}) "
                     f"conf={alert['conf']:.2f} count={alert['count']} "
@@ -390,8 +407,30 @@ def main() -> None:
                     last_tx_str=state["last_tx_str"],
                     scene_kbps=state["scene_kbps"],
                 )
-                if preview is not None:
+                # Send a frame only when YOLO produced a new one, plus once a second so banners
+                # (HOLD, link lost) still show while the video is frozen.
+                if preview is not None and (state["new_frame"] or now_mono - state["preview_at"] > 1.0):
                     preview.update(hud_frame)
+                    state["new_frame"] = False
+                    state["preview_at"] = now_mono
+                    summary = link.summary()
+                    preview.update_stats({
+                        "source": str(args.video),
+                        "model": args.model,
+                        "imgsz": args.imgsz,
+                        "conf_gate": args.conf,
+                        "infer_ms": round(state["infer_ms"], 1) if state["infer_ms"] else None,
+                        "fps": round(state["fps"], 1) if state["fps"] else None,
+                        "objects": len(current_boxes),
+                        "alerts_sent": state["alerts_sent"],
+                        "last_alert": state["last_alert"],
+                        "mode": p.MODE_NAMES.get(link.mode, "?"),
+                        "link_up": link.up,
+                        "buffered": link.buffered,
+                        "delivered": summary["delivered"],
+                        "rtt_ms_avg": summary["rtt_ms_avg"],
+                        "radio_bytes": summary["bytes_tx"] + summary["bytes_rx"],
+                    })
 
             if not args.headless and hud_frame is not None:
                 cv2.imshow("ArcDrone - Airborne Edge Node", hud_frame)

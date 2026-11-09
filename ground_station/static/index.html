@@ -544,6 +544,18 @@
     .bytes.flash .cell { animation: byteflash .9s ease-out; }
     @keyframes byteflash { from { background: #1b3a57; } }
     @media (max-width: 900px) { .paths-grid { grid-template-columns: 1fr; } }
+    /* Live drone camera (Wi-Fi) + numbers, inline on the flight deck */
+    .live-feed-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 18px; margin-bottom: 18px; }
+    .cam-frame { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; border: 1px solid var(--border); }
+    .cam-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .cam-overlay { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-family: var(--mono); font-size: 13px; color: var(--hud-amber); background: rgba(4, 8, 14, 0.88); padding: 24px; line-height: 1.6; }
+    .cam-overlay strong { display: block; font-size: 17px; letter-spacing: .08em; }
+    .num-head { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: var(--hud-cyan); margin: 12px 0 2px; }
+    .num-head:first-child { margin-top: 0; }
+    .num-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .num-row b { color: var(--text); font-size: 15px; font-weight: 800; text-align: right; }
+    .num-row b.big { font-size: 20px; color: var(--hud-mint); }
+    @media (max-width: 900px) { .live-feed-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -650,6 +662,41 @@
         <div class="gauge-pod">
           <div class="gauge-top"><span>DETECTIONS RECEIVED</span><span>RX-CNT</span></div>
           <div id="received" class="gauge-readout">0</div>
+        </div>
+      </div>
+
+      <div class="live-feed-grid">
+        <div class="mfd-bezel">
+          <div class="mfd-header">
+            <span class="mfd-title">Drone camera // YOLO on VisDrone</span>
+            <span class="mfd-tag" id="cam-tag">WI-FI VIDEO &middot; NOT RADIO</span>
+          </div>
+          <div class="cam-frame">
+            <img id="live-cam" alt="Drone HUD video with YOLO boxes">
+            <div class="cam-overlay" id="cam-overlay"><div><strong>CHECKING WI-FI RANGE&hellip;</strong></div></div>
+          </div>
+          <div class="mfd-footer">
+            <span>What the drone sees. Only alerts cross the radio.</span>
+            <span id="cam-where" style="color:var(--muted);"></span>
+          </div>
+        </div>
+        <div class="mfd-bezel">
+          <div class="mfd-header">
+            <span class="mfd-title">Live numbers</span>
+            <span class="mfd-tag" id="num-tag">MEASURED</span>
+          </div>
+          <div class="num-head">ON THE DRONE (YOLO)</div>
+          <div class="num-row"><span>Inference per frame</span><b id="n-infer">&mdash;</b></div>
+          <div class="num-row"><span>Frames processed</span><b id="n-fps">&mdash;</b></div>
+          <div class="num-row"><span>Objects in frame</span><b id="n-objects">&mdash;</b></div>
+          <div class="num-row"><span>Model</span><b id="n-model">&mdash;</b></div>
+          <div class="num-head">ALERTS</div>
+          <div class="num-row"><span>Sent by drone / received here</span><b id="n-alerts">&mdash;</b></div>
+          <div class="num-row"><span>Last alert</span><b id="n-last" style="font-size:12px;">&mdash;</b></div>
+          <div class="num-head">BANDWIDTH</div>
+          <div class="num-row"><span>Radio link (alerts, ACKs, heartbeats)</span><b class="big" id="n-radio">&mdash;</b></div>
+          <div class="num-row"><span>This video feed over Wi-Fi</span><b id="n-video">&mdash;</b></div>
+          <div class="num-row"><span>Video would need</span><b id="n-ratio" style="color:var(--hud-amber);">&mdash;</b></div>
         </div>
       </div>
 
@@ -886,7 +933,8 @@
     // ?drone=<drone laptop IP>. Same laptop: the default works.
     const droneHost = params.get("drone") || window.location.hostname || "127.0.0.1";
     const cameraUrl = params.get("camera") || `http://${droneHost}:8081/video.mjpg`;
-    const cameraProbeUrl = cameraUrl.replace(/video\.mjpg.*$/, "");
+    const cameraProbeUrl = cameraUrl.replace(/video\.mjpg.*$/, "") + "stats.json";
+    let droneStats = null, videoSamples = [], radioBps = null;
     const reconstructorHtmlUrl = "http://127.0.0.1:8080/reconstructor.html" + (isDemo ? "?demo=1" : "");
     const CLASS_NAMES = ["pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor"];
     let wifiReachable = null;  // null = not checked yet
@@ -926,15 +974,23 @@
 
     async function probeWifi() {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 1500);
+      const timer = setTimeout(() => ctrl.abort(), 1200);
       let ok = false;
       try {
         const res = await fetch(cameraProbeUrl, { cache: "no-store", signal: ctrl.signal });
         ok = res.ok;
+        if (ok) {
+          droneStats = await res.json();
+          videoSamples.push({ t: droneStats.t, bytes: droneStats.video_bytes_sent });
+          while (videoSamples.length > 6) videoSamples.shift();
+        }
       } catch (e) {
         ok = false;
       }
       clearTimeout(timer);
+      if (!ok) { droneStats = null; videoSamples = []; }
+      renderLiveCam(ok);
+      renderNumbers();
       if (ok !== wifiReachable) {
         wifiReachable = ok;
         if (!ok && document.getElementById("viewer-title").textContent.includes("CAMERA")) closeViewerModal();
@@ -1045,6 +1101,8 @@
       document.getElementById("this-link-bps").textContent = bps.toLocaleString() + " bit/s";
       document.getElementById("wire-rate-summary").textContent = bps.toLocaleString() + " bit/s";
       document.getElementById("this-link-bar").style.width = logWidth(bps);
+      radioBps = bps;
+      renderNumbers();
     }
 
     function renderKpis() {
@@ -1208,6 +1266,47 @@
         : "Little-endian · CRC16 checked";
     }
 
+    // Inline drone camera: attach the stream while the drone is reachable on Wi-Fi, drop it when not.
+    function renderLiveCam(reachable) {
+      const img = document.getElementById("live-cam");
+      const overlay = document.getElementById("cam-overlay");
+      document.getElementById("cam-where").textContent = cameraUrl.replace(/^https?:\/\//, "");
+      if (reachable) {
+        if (!img.getAttribute("src")) img.src = cameraUrl + (cameraUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
+        overlay.style.display = "none";
+        return;
+      }
+      img.removeAttribute("src");
+      overlay.style.display = "grid";
+      overlay.innerHTML = isDemo
+        ? "<div><strong>STANDALONE DEMO</strong>No drone camera in demo mode. Alerts below are simulated.</div>"
+        : `<div><strong>OUT OF WI-FI RANGE</strong>Can't reach the drone's camera at ${cameraUrl}.<br>` +
+          "Alerts and commands keep flowing over the radio (ESP-NOW / LoRa).<br>" +
+          "Start the drone with <code>--preview-port 8081</code>; with two laptops open this page with <code>?drone=&lt;drone IP&gt;</code>.</div>";
+    }
+
+    const fmtBps = (bps) => bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbit/s` : bps >= 1e3 ? `${(bps / 1e3).toFixed(1)} kbit/s` : `${Math.round(bps)} bit/s`;
+
+    function renderNumbers() {
+      const d = droneStats;
+      const set = (id, text) => { document.getElementById(id).textContent = text; };
+      set("n-infer", d && d.infer_ms != null ? `${d.infer_ms.toFixed(0)} ms` : "—");
+      set("n-fps", d && d.fps != null ? `${d.fps.toFixed(1)} /s` : "—");
+      set("n-objects", d ? String(d.objects) : "—");
+      set("n-model", d ? `${d.model.replace(/\.pt$/, "")} @ ${d.imgsz}` : "—");
+      set("n-alerts", d ? `${d.alerts_sent} / ${totalReceived}` : `— / ${totalReceived}`);
+      set("n-last", d && d.last_alert ? d.last_alert : (alertsList[0] ? `#${alertsList[0].seq} ${alertsList[0].cls} x${alertsList[0].count}` : "—"));
+      set("n-radio", radioBps != null ? fmtBps(radioBps) : "—");
+      let videoBps = null;
+      if (videoSamples.length >= 2) {
+        const a = videoSamples[0], b = videoSamples[videoSamples.length - 1];
+        if (b.t > a.t) videoBps = (b.bytes - a.bytes) * 8 / (b.t - a.t);
+      }
+      set("n-video", videoBps != null ? fmtBps(videoBps) : d ? "measuring…" : "out of Wi-Fi range");
+      set("n-ratio", videoBps && radioBps ? `${Math.round(videoBps / radioBps).toLocaleString()}× the radio link` : "—");
+      set("num-tag", d ? "MEASURED · DRONE VIA WI-FI" : "MEASURED · RADIO ONLY");
+    }
+
     // Radio paths. A path is live if the ground board received anything on it in the last 3 s.
     function renderPath(name, radio) {
       const box = document.getElementById(`path-${name}`);
@@ -1360,7 +1459,7 @@
     updateRangeGateUI();
     connectWebSocket();
     probeWifi();
-    setInterval(probeWifi, 3000);
+    setInterval(probeWifi, 1000);
   </script>
 </body>
 </html>
