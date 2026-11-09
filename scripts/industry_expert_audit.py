@@ -77,7 +77,7 @@ def audit_solution() -> Dict[str, Any]:
     # Run integration suite
     test_integration = run_test_module([
         "uv", "run", "--with", "pytest", "--with", "pyserial", "--with", "cryptography",
-        "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "-q"
+        "python", "-m", "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "-q"
     ])
 
     report["test_results"]["encryption_suite"] = test_crypto
