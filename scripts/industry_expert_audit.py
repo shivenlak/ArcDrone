@@ -146,15 +146,16 @@ def audit_solution() -> Dict[str, Any]:
         "and heartbeat jitter. Hardware failover trials verified 80/80 alerts delivered across 3 runs with ESP-NOW killed mid-flight."
     )
     report["doing_right"].append(
-        "Multi-Floor Stairwell Range Trial (Shiven commit 96a63b3): Measured indoor non-line-of-sight range from the 8th floor "
-        "down to the 5th floor (486 alerts over 8 min, LoRa SF7 at 10 dBm). On the 6th floor, 2.4 GHz ESP-NOW died after 2 s (-99 dBm) "
-        "while 915 MHz LoRa continued carrying alerts below the noise floor (-114 dBm, -8.8 dB SNR). Upon walking back up, all 64 "
-        "buffered alerts flushed in order with 0 duplicate alerts shown."
+        "Multi-Floor Stairwell Range & SF9 Failover Trials (Shiven commits 96a63b3 & d431280): Measured indoor non-line-of-sight "
+        "range from the 8th floor down to the 5th floor (486 alerts over 8 min, LoRa SF7 at 10 dBm). On the 6th floor, 2.4 GHz ESP-NOW "
+        "died after 2 s (-99 dBm) while 915 MHz LoRa continued carrying alerts below the noise floor (-114 dBm, -8.8 dB SNR). "
+        "Additionally, the SF9 long-range profile (heltec_v3_sf9) was verified on desk: 379 ms LoRa-only RTT (p95 627 ms) and 80/80 "
+        "failover delivery at 1 alert/s."
     )
     report["doing_right"].append(
         "On-Demand LoRa Target Crop Transfer (scripts/lora_image_transfer.py): Enables ground operators to request a 64x64 ROI "
         "visual confirmation thumbnail (<= 960 B, 5-8 chunks of 131 B plain / 139 B AES-128-CCM) over LoRa using a 4-gate "
-        "Scavenger Protocol (Link-Up, Buffered==0 Zero-Blocking, SNR >= -6.0 dB Cliff, and <= 3 kB/s Pacing)."
+        "Scavenger Protocol (Link-Up, Buffered==0 Zero-Blocking, SNR >= -6.0 dB Cliff, and <= 3 kB/s RTT-Adaptive Pacing)."
     )
 
     # 4. Analyze Weaknesses, Gaps & Tactical Risks ("What We Are Doing Wrong / Missing")
@@ -175,9 +176,9 @@ def audit_solution() -> Dict[str, Any]:
         "remains non-portable to Windows workstations."
     )
     report["doing_wrong_or_gaps"].append(
-        "Outdoor Line-of-Sight & SF9 Range Unmeasured: While indoor multi-floor stairwell range (8th to 5th floor) is now measured "
-        "at LoRa SF7 / 10 dBm, outdoor line-of-sight range in metres, SF9 long-range profile (heltec_v3_sf9), and higher TX power "
-        "levels remain unmeasured."
+        "Outdoor Line-of-Sight Range Unmeasured: While indoor multi-floor stairwell range (8th to 5th floor at SF7) and desk SF9 "
+        "latency/failover (379 ms RTT, 80/80 at 1 alert/s) are measured, outdoor line-of-sight range in metres, SF9 multi-floor "
+        "range, and higher TX power levels (>10 dBm) remain unmeasured."
     )
 
     # 5. Tactical Recommendations for the Team
