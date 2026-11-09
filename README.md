@@ -147,6 +147,9 @@ All on our own boards and a MacBook M4 Pro (November 7–8, 2026). Boards were o
 | Encrypted, LoRa only, 60 alerts | 60/60 | 8 | 156.7 / 213.0 ms |
 | Receiver with no key | 0 frames accepted, link never comes up | — | — |
 | Live failover: 30 alerts on both radios, then drone ESP-NOW killed mid-run, 50 more (3 runs) | 80/80 each run, each shown once | 0–10 after the switch | before 22–25 ms; after 126–145 ms avg |
+| **SF9**, both radios, 60 alerts | 60/60, each shown once | 0 | 23.9 / 56.1 ms |
+| **SF9** live failover at 1 alert/s: 30 on both radios, ESP-NOW killed, 50 more | 80/80, each shown once | 32 after the switch | LoRa only 379 / 627 ms |
+| **SF9** same test at 2 alerts/s | 76/80 within the 20 s test window (LoRa SF9 can't keep up with 2/s; rest still queued) | 55 | LoRa only 329 / 515 ms |
 
 **Range walk (Heltec V3, both radios, LoRa SF7 at 10 dBm, indoors).** Ground board on the 8th floor; walker carried the drone board along the 8th floor, then down the stairwell, sending 1 alert/s (`protocol/range_walk.py`, 486 alerts over 8 min). Distances were not measured, only floors.
 
