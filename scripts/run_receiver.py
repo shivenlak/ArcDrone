@@ -27,10 +27,13 @@ import uvicorn
 from ground_station.server import make_app
 
 
-def is_likely_radio_device(desc: str, hwid: str) -> bool:
-    """Check if device description or HWID looks like an ESP32 / Heltec / USB-UART bridge."""
-    keywords = ["cp210", "ch34", "ch910", "ftdi", "usb serial", "uart", "esp32", "heltec", "jtag"]
-    combined = f"{desc} {hwid}".lower()
+def is_likely_radio_device(device: str, desc: str, hwid: str) -> bool:
+    """Check if device name, description or HWID looks like an ESP32 / Heltec / USB-UART bridge."""
+    keywords = [
+        "cp210", "ch34", "ch910", "ftdi", "usb serial", "uart",
+        "esp32", "heltec", "jtag", "usbserial", "usbmodem", "wchusb", "slab"
+    ]
+    combined = f"{device} {desc} {hwid}".lower()
     return any(k in combined for k in keywords)
 
 
@@ -39,7 +42,10 @@ def detect_ports() -> List[Tuple[str, str, bool]]:
     ports = serial.tools.list_ports.comports()
     results = []
     for p in ports:
-        recommended = is_likely_radio_device(p.description, p.hwid)
+        # On macOS, prefer /dev/cu.* over /dev/tty.* to avoid DCD assertion hang
+        if sys.platform == "darwin" and p.device.startswith("/dev/tty."):
+            continue
+        recommended = is_likely_radio_device(p.device, p.description, p.hwid)
         results.append((p.device, p.description, recommended))
     return sorted(results, key=lambda x: (not x[2], x[0]))
 

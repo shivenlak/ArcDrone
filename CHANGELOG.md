@@ -27,3 +27,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - Range walk measured: ESP-NOW lost 2 floors down, LoRa SF7/10 dBm alone to the 6th floor, link gone by the 5th (README).
 - Both Heltecs now on SF9 (heltec_v3_sf9). Desk: 60/60 both radios; LoRa-only failover 80/80 at 1 alert/s, RTT 379 ms; 2/s is too fast for SF9.
 - 2026-11-09 (Manan): One-click Windows setup and launchers: setup.bat, run_receiver.bat (ground station + auto-browser), run_sender.bat (airborne node + video/port discovery), and run_simulation.bat.
+- 2026-11-09 (Manan): macOS one-click scripts (.sh and double-clickable .command for Finder) with /dev/cu.* serial priority and Darwin auto-detection.
