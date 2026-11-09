@@ -145,6 +145,12 @@ def audit_solution() -> Dict[str, Any]:
         "render per-radio RSSI, packet counts, and failover status. Half-duplex LoRa collisions are eliminated via preamble LBT "
         "and heartbeat jitter. Hardware failover trials verified 80/80 alerts delivered across 3 runs with ESP-NOW killed mid-flight."
     )
+    report["doing_right"].append(
+        "Multi-Floor Stairwell Range Trial (Shiven commit 96a63b3): Measured indoor non-line-of-sight range from the 8th floor "
+        "down to the 5th floor (486 alerts over 8 min, LoRa SF7 at 10 dBm). On the 6th floor, 2.4 GHz ESP-NOW died after 2 s (-99 dBm) "
+        "while 915 MHz LoRa continued carrying alerts below the noise floor (-114 dBm, -8.8 dB SNR). Upon walking back up, all 64 "
+        "buffered alerts flushed in order with 0 duplicate alerts shown."
+    )
 
     # 4. Analyze Weaknesses, Gaps & Tactical Risks ("What We Are Doing Wrong / Missing")
     report["doing_wrong_or_gaps"].append(
@@ -159,18 +165,14 @@ def audit_solution() -> Dict[str, Any]:
         "replay an obsolete alert if sequence numbers wrap or after system restarts."
     )
     report["doing_wrong_or_gaps"].append(
-        "LoRa vs UDP Transport Transparency for Judges: While the code correctly routes 12 Hz vectors over UDP and reserves LoRa for alerts, "
-        "the presentation and system docs must explicitly emphasize this dual-plane distinction so defense judges do not mistakenly assume "
-        "that 12 Hz vectors are being pushed through narrow 5.4 kbps LoRa channels."
-    )
-    report["doing_wrong_or_gaps"].append(
         "POSIX-Only Harness in Core Protocol: protocol/fake_bridge.py relies on POSIX termios/openpty, causing test imports "
         "to fail on Windows without custom wrappers. While scripts/sim_link_bridge.py solves this for scripts/, protocol/test_link.py "
         "remains non-portable to Windows workstations."
     )
     report["doing_wrong_or_gaps"].append(
-        "Range & Multi-Path Propagation Unknowns: All hardware tests were conducted on one desk. Radio range, antenna VSWR, "
-        "and multipath fading in congested 2.4 GHz environments remain uncharacterized."
+        "Outdoor Line-of-Sight & SF9 Range Unmeasured: While indoor multi-floor stairwell range (8th to 5th floor) is now measured "
+        "at LoRa SF7 / 10 dBm, outdoor line-of-sight range in metres, SF9 long-range profile (heltec_v3_sf9), and higher TX power "
+        "levels remain unmeasured."
     )
 
     # 5. Tactical Recommendations for the Team
