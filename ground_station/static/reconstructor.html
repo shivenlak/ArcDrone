@@ -33,7 +33,7 @@
       height: 100%;
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr) 195px;
+      grid-template-rows: auto minmax(0, 1fr) 195px auto;
       overflow: hidden;
     }
     .topbar {
@@ -65,26 +65,26 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .clip-bar { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; min-width: 0; }
-    .clip-bar button {
-      font-family: var(--mono);
-      font-size: clamp(9px, 0.95vw, 10px);
-      font-weight: 700;
-      background: #1a222c;
-      color: var(--text);
-      border: 1px solid #3a4654;
-      padding: 2px 6px;
-      cursor: pointer;
+    .bottom-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 6px 12px;
+      background: var(--header);
+      border-top: 1px solid #1e2833;
+      min-width: 0;
     }
-    .clip-bar button:hover { border-color: var(--gold); }
-    .clip-bar button.on { background: var(--gold); color: #111; border-color: var(--gold); }
-    .clip-bar button.path-btn {
-      margin-left: auto;
+    .bottom-bar button.path-btn {
+      font-family: var(--mono);
+      font-size: clamp(9px, 0.95vw, 11px);
+      font-weight: 700;
+      padding: 4px 10px;
+      cursor: pointer;
       background: #132a20;
       color: var(--mint);
-      border-color: var(--mint);
+      border: 1px solid var(--mint);
     }
-    .clip-bar button.path-btn.failover {
+    .bottom-bar button.path-btn.failover {
       background: #331c10;
       color: #ff9e3d;
       border-color: #ff9e3d;
@@ -221,7 +221,6 @@
     <header class="topbar">
       <h1 id="titleText">ARCDRONE TEST BENCH: VISDRONE-VID/MOT REAL TEST CASES (1:1 RATIO VECTOR LINK)</h1>
       <div class="meta" id="metaLine">SPREAD-OUT LINK: 12.0 FPS | WIRE RATE: -- | ACTIVE INDICES: 0 | GPS: --</div>
-      <div class="clip-bar" id="clipBar"></div>
     </header>
     <div class="stage">
       <section class="pane" style="display:none;" aria-hidden="true">
@@ -242,6 +241,9 @@
         <div class="mcol" id="colB"></div>
       </div>
     </section>
+    <footer class="bottom-bar">
+      <button type="button" id="pathToggleBtn" class="path-btn">[AUTO: DUAL LINK (ESP-NOW 2.4G + LORA 915M) | CLICK TO TEST LORA FAILOVER]</button>
+    </footer>
   </div>
   <script>
     const CLASS_MAP = {
@@ -760,9 +762,6 @@
       clipVideo.removeAttribute("src");
       clipVideo.removeAttribute("data-clip");
       clipVideo.classList.remove("on");
-      document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
-        b.classList.toggle("on", b.dataset.seq === "LIVE_HARDWARE");
-      });
       render();
     }
 
@@ -797,9 +796,6 @@
       }
       rgb.classList.remove("on");
 
-      document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
-        b.classList.toggle("on", b.dataset.seq === meta.id);
-      });
       document.getElementById("titleText").textContent =
         "ARCDRONE TEST BENCH: " + meta.title + " (1:1 RATIO VECTOR LINK)";
 
@@ -821,27 +817,9 @@
       } catch (e) {}
     }
 
-    (function buildClipBar() {
-      const bar = document.getElementById("clipBar");
-      const liveBtn = document.createElement("button");
-      liveBtn.type = "button";
-      liveBtn.dataset.seq = "LIVE_HARDWARE";
-      liveBtn.textContent = "[0] LIVE HARDWARE (WEBCAM)";
-      liveBtn.onclick = function () { activateLiveHardwareMode(); };
-      bar.appendChild(liveBtn);
-
-      CLIPS.forEach(function (c, i) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.dataset.seq = c.id;
-        b.textContent = "[" + (i + 1) + "] " + c.label;
-        b.onclick = function () { state.userSelectedClip = true; state.wsLive = false; loadClip(c.id); };
-        bar.appendChild(b);
-      });
-      const pathBtn = document.createElement("button");
-      pathBtn.type = "button";
-      pathBtn.id = "pathToggleBtn";
-      pathBtn.className = "path-btn";
+    (function initPathToggle() {
+      const pathBtn = document.getElementById("pathToggleBtn");
+      if (!pathBtn) return;
       pathBtn.onclick = function () {
         const ls = getRadioLinkState();
         if (state.pathOverride === "LORA_ONLY") {
@@ -860,7 +838,6 @@
         }
         render();
       };
-      bar.appendChild(pathBtn);
       updatePathButtonUI();
     })();
 
