@@ -340,7 +340,7 @@
     }
 
     function compass(dx, dy) {
-      if (Math.hypot(dx, dy) < 0.35) return "STATIONARY";
+      if (Math.hypot(dx, dy) < 1.15) return "STATIONARY";
       const deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
       const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
       return "MOVING " + dirs[Math.round(deg / 45) % 8];
@@ -365,12 +365,23 @@
       const bx = x1 * sx, by = y1 * sy, bw = (x2 - x1) * sx, bh = (y2 - y1) * sy;
       const cx = obj.center[0] * sx, cy = obj.center[1] * sy;
       ctx.save();
+      // Draw smooth historical movement trail (last 3 points from maybe branch)
+      if (obj.trail && obj.trail.length > 1) {
+        ctx.strokeStyle = info.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(obj.trail[0][0] * sx, obj.trail[0][1] * sy);
+        for (let i = 1; i < obj.trail.length; i++) {
+          ctx.lineTo(obj.trail[i][0] * sx, obj.trail[i][1] * sy);
+        }
+        ctx.stroke();
+      }
       if (filled) {
         ctx.fillStyle = info.color + "33";
         ctx.fillRect(bx, by, bw, bh);
       }
       ctx.strokeStyle = info.color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = obj.fresh ? 2 : 1.5;
       ctx.strokeRect(bx, by, bw, bh);
       const tag = "#" + obj.track_id;
       ctx.font = "800 11px " + getComputedStyle(document.body).fontFamily;
@@ -381,17 +392,31 @@
       ctx.fillText(tag, bx + 4, Math.max(10, by - 4));
       ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.arc(cx, cy, 2.4, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 3.0, 0, Math.PI * 2);
       ctx.fill();
-      const vx = (obj.vel && obj.vel[0]) || 0;
-      const vy = (obj.vel && obj.vel[1]) || 0;
-      if (Math.hypot(vx, vy) >= 0.35) {
+      // Clean bounded velocity vector arrow from maybe branch (clamped [-22, 22] px, threshold >= 3.0 px)
+      const rawVx = (obj.vel && obj.vel[0]) || 0;
+      const rawVy = (obj.vel && obj.vel[1]) || 0;
+      const vxPx = Math.max(-22.0, Math.min(22.0, rawVx * 4.5 * sx));
+      const vyPx = Math.max(-22.0, Math.min(22.0, rawVy * 4.5 * sy));
+      if (Math.hypot(vxPx, vyPx) >= 3.0) {
+        const endX = cx + vxPx;
+        const endY = cy + vyPx;
         ctx.strokeStyle = "#00ffff";
+        ctx.fillStyle = "#00ffff";
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + vx * 6 * sx, cy + vy * 6 * sy);
+        ctx.lineTo(endX, endY);
         ctx.stroke();
+        const angle = Math.atan2(vyPx, vxPx);
+        const headLen = Math.max(5.0, Math.hypot(vxPx, vyPx) * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
       }
       ctx.restore();
     }
@@ -411,16 +436,33 @@
         const [x1, y1, x2, y2] = o.bbox;
         const prev = state.prev.get(o.track_id);
         const cx = o.center[0], cy = o.center[1];
-        const vx = (o.vel && o.vel[0] !== undefined) ? o.vel[0] : (prev ? cx - prev.cx : 0);
-        const vy = (o.vel && o.vel[1] !== undefined) ? o.vel[1] : (prev ? cy - prev.cy : 0);
         const srcW = 720, srcH = 540;
+        const instDx = prev ? (cx - prev.cx) : ((o.vel && o.vel[0]) || 0);
+        const instDy = prev ? (cy - prev.cy) : ((o.vel && o.vel[1]) || 0);
+        // maybe branch velocity blending (0.55 * inst + 0.45 * prev_vel, or codec vel)
+        const vx = (o.vel && o.vel[0] !== undefined && Math.hypot(o.vel[0], o.vel[1] || 0) > 0.01)
+          ? o.vel[0]
+          : (prev ? (0.55 * instDx + 0.45 * (prev.vx || 0)) : 0);
+        const vy = (o.vel && o.vel[1] !== undefined && Math.hypot(o.vel[0] || 0, o.vel[1]) > 0.01)
+          ? o.vel[1]
+          : (prev ? (0.55 * instDy + 0.45 * (prev.vy || 0)) : 0);
+        const scaledCx = cx / srcW * LW;
+        const scaledCy = cy / srcH * LH;
+        let trail = (prev && prev.trail) ? prev.trail.slice() : [];
+        if (!trail.length || Math.hypot(scaledCx - trail[trail.length - 1][0], scaledCy - trail[trail.length - 1][1]) < 0.03 * LW) {
+          trail.push([scaledCx, scaledCy]);
+          if (trail.length > 3) trail.shift();
+        } else {
+          trail = [[scaledCx, scaledCy]];
+        }
         const scaled = {
           track_id: o.track_id,
           cls: o.cls,
           label: (o.label || clsOf(o).name),
           conf: o.conf,
           bbox: [x1 / srcW * LW, y1 / srcH * LH, x2 / srcW * LW, y2 / srcH * LH],
-          center: [cx / srcW * LW, cy / srcH * LH],
+          center: [scaledCx, scaledCy],
+          trail: trail,
           vel: [vx, vy],
           dx: vx / srcW,
           dy: vy / srcH,
@@ -428,10 +470,10 @@
           hr: (y2 - y1) / srcH,
           xr: cx / srcW,
           yr: cy / srcH,
-          motion: compass(vx, vy),
+          motion: o.motion_str || compass(vx, vy),
           fresh: true
         };
-        state.prev.set(o.track_id, { cx: cx, cy: cy });
+        state.prev.set(o.track_id, { cx: cx, cy: cy, vx: vx, vy: vy, trail: trail });
         return scaled;
       });
       state.objects = objs;

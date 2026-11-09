@@ -23,6 +23,12 @@ SCENE_HZ_DEFAULT = 12.0
 MAX_BYTES_PER_SEC = int(SCENE_MAX_KBPS * 1000 / 8)  # 250 B/s
 MAX_LORA_OBJECTS = 6
 
+# Grid-aware coasting parameters from maybe branch
+GRID_CELLS = 16
+EDGE_RINGS = 3
+EDGE_UNSEEN_DROP = 2
+INTERIOR_UNSEEN_DROP = 3
+
 # v1 wire labels (reconstructor palette)
 LABEL_TO_CLS = {
     "pedestrian": 1,
@@ -149,6 +155,8 @@ class _EncoderTrack:
         "cy_q",
         "w6",
         "h6",
+        "vx_q",
+        "vy_q",
         "sent_cx_q",
         "sent_cy_q",
         "synced_on_wire",
@@ -174,6 +182,8 @@ class _EncoderTrack:
         self.cy_q = cy_q
         self.w6 = w6
         self.h6 = h6
+        self.vx_q = 0.0
+        self.vy_q = 0.0
         self.sent_cx_q = cx_q
         self.sent_cy_q = cy_q
         self.synced_on_wire = False
@@ -229,7 +239,7 @@ class SceneCodec:
         src_size: Tuple[int, int] = (640, 480),
         dst_size: Tuple[int, int] = (720, 540),
         max_bytes_per_sec: int = MAX_BYTES_PER_SEC,
-        keyframe_interval_ticks: int = 3,
+        keyframe_interval_ticks: int = 6,
         top_k_pinned: int = 4,
         max_kbps: Optional[float] = None,
     ) -> None:
@@ -245,7 +255,7 @@ class SceneCodec:
         self._ticks_since_kf = keyframe_interval_ticks
         self._byte_window: Deque[Tuple[float, int]] = deque()
         self._enc_tracks: Dict[int, _EncoderTrack] = {}
-        self._prev_visible_tids: set = set()
+        self._dropped_tids: List[int] = []
 
         self._dec_lat = 53.5232
         self._dec_lon = -113.5263
@@ -264,10 +274,20 @@ class SceneCodec:
         used = sum(b for _, b in self._byte_window)
         return max(4, self.max_bytes_per_sec - used)
 
+    @staticmethod
+    def _edge_distance_q(cx_q: int, cy_q: int) -> int:
+        cx_g = min(GRID_CELLS - 1, max(0, (cx_q * GRID_CELLS) // 256))
+        cy_g = min(GRID_CELLS - 1, max(0, (cy_q * GRID_CELLS) // 256))
+        return min(cx_g, GRID_CELLS - 1 - cx_g, cy_g, GRID_CELLS - 1 - cy_g)
+
     def _update_encoder_tracks(self, detections: List[Dict[str, Any]]) -> None:
         for trk in self._enc_tracks.values():
             trk.ticks_unseen += 1
             trk.ticks_since_sent += 1
+            # Velocity coasting across brief YOLO dips (maybe branch physics: 0.8 damping)
+            if 1 <= trk.ticks_unseen <= INTERIOR_UNSEEN_DROP:
+                trk.cx_q = _clamp(int(round(trk.cx_q + trk.vx_q * 0.8)), 0, 255)
+                trk.cy_q = _clamp(int(round(trk.cy_q + trk.vy_q * 0.8)), 0, 255)
 
         matched_tids = set()
         for det in detections[:16]:
@@ -285,23 +305,28 @@ class SceneCodec:
             h6 = _clamp(int(round((bh / self.src_h) * 63)), 1, 63)
 
             best_tid = None
-            best_dist = 42.0
+            best_dist = 30.0
             for tid, trk in self._enc_tracks.items():
-                if tid in matched_tids:
+                if tid in matched_tids or trk.cls != cls_id:
                     continue
-                cls_penalty = 0.0 if trk.cls == cls_id else 14.0
-                dist = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q) + cls_penalty
+                dist = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q)
                 if dist <= best_dist:
                     best_dist = dist
                     best_tid = tid
 
             if best_tid is not None:
                 trk = self._enc_tracks[best_tid]
-                trk.speed_q = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q)
-                trk.cx_q, trk.cy_q = cx_q, cy_q
-                trk.w6, trk.h6 = w6, h6
-                trk.cls = cls_id
-                trk.conf = conf
+                inst_vx = max(-45.0, min(45.0, float(cx_q - trk.cx_q)))
+                inst_vy = max(-45.0, min(45.0, float(cy_q - trk.cy_q)))
+                # maybe branch position & velocity blending weights
+                trk.vx_q = 0.45 * inst_vx + 0.55 * trk.vx_q
+                trk.vy_q = 0.45 * inst_vy + 0.55 * trk.vy_q
+                trk.speed_q = math.hypot(inst_vx, inst_vy)
+                trk.cx_q = _clamp(int(round(0.75 * cx_q + 0.25 * trk.cx_q)), 0, 255)
+                trk.cy_q = _clamp(int(round(0.75 * cy_q + 0.25 * trk.cy_q)), 0, 255)
+                trk.w6 = _clamp(int(round(0.65 * w6 + 0.35 * trk.w6)), 1, 63)
+                trk.h6 = _clamp(int(round(0.65 * h6 + 0.35 * trk.h6)), 1, 63)
+                trk.conf = 0.7 * conf + 0.3 * trk.conf
                 trk.ticks_unseen = 0
                 matched_tids.add(best_tid)
             else:
@@ -311,6 +336,8 @@ class SceneCodec:
                         self._enc_tracks.keys(),
                         key=lambda k: self._enc_tracks[k].ticks_unseen,
                     )
+                    if self._enc_tracks[evict_tid].synced_on_wire:
+                        self._dropped_tids.append(evict_tid)
                     del self._enc_tracks[evict_tid]
                     new_tid = evict_tid
                 else:
@@ -320,8 +347,16 @@ class SceneCodec:
                 )
                 matched_tids.add(new_tid)
 
+        # GridCoastTracker position-aware drop from maybe branch
         for tid in list(self._enc_tracks.keys()):
-            if self._enc_tracks[tid].ticks_unseen > 1:
+            trk = self._enc_tracks[tid]
+            if trk.ticks_unseen <= 0:
+                continue
+            d = self._edge_distance_q(trk.cx_q, trk.cy_q)
+            limit = EDGE_UNSEEN_DROP if d < EDGE_RINGS else INTERIOR_UNSEEN_DROP
+            if trk.ticks_unseen >= limit or trk.ticks_unseen > 5:
+                if trk.synced_on_wire:
+                    self._dropped_tids.append(tid)
                 del self._enc_tracks[tid]
 
     def _schedule_tracks(self) -> List[_EncoderTrack]:
@@ -369,21 +404,52 @@ class SceneCodec:
 
         now = time.monotonic()
         self._seq = (self._seq + 1) & 0xFFFF
+        avail = self._available_budget(now)
         self._update_encoder_tracks(detections)
         scheduled = self._schedule_tracks()[:MAX_LORA_OBJECTS]
         flags_seq = (0x80 if sender_lora_only else 0x00) | (self._seq & 0x7F)
 
-        obj_payloads: List[bytes] = []
-        for trk in scheduled:
-            obj_payloads.append(self._pack_compact_kf_obj(trk))
-            trk.sent_cx_q = trk.cx_q
-            trk.sent_cy_q = trk.cy_q
-            trk.synced_on_wire = True
-            trk.ticks_since_sent = 0
+        has_unsynced = any(not t.synced_on_wire for t in scheduled)
+        want_keyframe = (
+            (self._ticks_since_kf >= self.keyframe_interval)
+            or has_unsynced
+            or bool(self._dropped_tids)
+        )
 
-        type_count = (MSG_COMPACT_KF << 4) | (len(obj_payloads) & 0x0F)
-        pkt = struct.pack(">BBB", MAGIC_V2, type_count, flags_seq) + b"".join(obj_payloads)
-        self._ticks_since_kf = 0
+        if want_keyframe:
+            self._dropped_tids.clear()
+            obj_payloads: List[bytes] = []
+            for trk in scheduled:
+                obj_payloads.append(self._pack_compact_kf_obj(trk))
+                trk.sent_cx_q = trk.cx_q
+                trk.sent_cy_q = trk.cy_q
+                trk.synced_on_wire = True
+                trk.ticks_since_sent = 0
+
+            type_count = (MSG_COMPACT_KF << 4) | (len(obj_payloads) & 0x0F)
+            pkt = struct.pack(">BBB", MAGIC_V2, type_count, flags_seq) + b"".join(obj_payloads)
+            self._ticks_since_kf = 0
+            self._byte_window.append((now, len(pkt)))
+            return pkt, self.current_kbps()
+
+        delta_payloads: List[bytes] = []
+        used_bytes = 3
+        for trk in scheduled:
+            if not trk.synced_on_wire or len(delta_payloads) >= 15:
+                continue
+            dcx = _clamp(trk.cx_q - trk.sent_cx_q, -31, 31)
+            dcy = _clamp(trk.cy_q - trk.sent_cy_q, -31, 31)
+            if abs(dcx) >= 1 or abs(dcy) >= 1:
+                if used_bytes + 2 <= avail:
+                    delta_payloads.append(self._pack_delta_obj(trk.track_id, dcx, dcy))
+                    used_bytes += 2
+                    trk.sent_cx_q += dcx
+                    trk.sent_cy_q += dcy
+                    trk.ticks_since_sent = 0
+
+        self._ticks_since_kf += 1
+        type_count = (MSG_COMPACT_DELTA << 4) | (len(delta_payloads) & 0x0F)
+        pkt = struct.pack(">BBB", MAGIC_V2, type_count, flags_seq) + b"".join(delta_payloads)
         self._byte_window.append((now, len(pkt)))
         return pkt, self.current_kbps()
 
@@ -442,6 +508,9 @@ class SceneCodec:
                     tid = (word >> 12) & 0x0F
                     dcx = _unpack_i6((word >> 6) & 0x3F)
                     dcy = _unpack_i6(word & 0x3F)
+                    if dcx == -32 and dcy == -32:
+                        self._dec_tracks.pop(tid, None)
+                        continue
                     trk = self._dec_tracks.get(tid)
                     if trk is not None:
                         new_cx_q = _clamp(trk.cx_q + dcx, 0, 255)
@@ -452,7 +521,7 @@ class SceneCodec:
                         updated_tids.add(tid)
                 for tid, trk in self._dec_tracks.items():
                     if tid not in updated_tids:
-                        trk.vel = [trk.vel[0] * 0.6, trk.vel[1] * 0.6]
+                        trk.vel = [trk.vel[0] * 0.4, trk.vel[1] * 0.4]
         else:
             if len(data) < 4:
                 return None
@@ -478,7 +547,7 @@ class SceneCodec:
                         tid, cls_id, conf, cx_q, cy_q, w6, h6, now, is_kf=True
                     )
                 for tid in list(self._dec_tracks.keys()):
-                    if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 2.5:
+                    if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 1.2:
                         del self._dec_tracks[tid]
 
             elif msg_type == MSG_DELTA:
@@ -548,16 +617,12 @@ class SceneCodec:
             prev_cx, prev_cy = trk.trail[-1] if trk.trail else (cx_px, cy_px)
             dx = float(cx_px - prev_cx)
             dy = float(cy_px - prev_cy)
-            if abs(dx) > 0.5 or abs(dy) > 0.5:
-                trk.vel = [dx * 0.65 + trk.vel[0] * 0.35, dy * 0.65 + trk.vel[1] * 0.35]
-            else:
-                trk.vel = [trk.vel[0] * 0.85, trk.vel[1] * 0.85]
+            trk.vel = [dx * 0.65 + trk.vel[0] * 0.35, dy * 0.65 + trk.vel[1] * 0.35]
             trk.cls = cls_id
             trk.conf = conf
             trk.cx_q, trk.cy_q = cx_q, cy_q
             trk.w6, trk.h6 = w6, h6
-            if cx_px != prev_cx or cy_px != prev_cy:
-                trk.trail.append([cx_px, cy_px])
+            trk.trail.append([cx_px, cy_px])
             trk.last_update_ts = now
             if is_kf:
                 trk.last_keyframe_ts = now
@@ -566,7 +631,7 @@ class SceneCodec:
         objects_out: List[Dict[str, Any]] = []
         for tid in sorted(self._dec_tracks.keys()):
             trk = self._dec_tracks[tid]
-            if (now - trk.last_keyframe_ts) > 4.0:
+            if (now - trk.last_keyframe_ts) > 1.6:
                 continue
             cx = int(round((trk.cx_q / 255.0) * self.dst_w))
             cy = int(round((trk.cy_q / 255.0) * self.dst_h))
