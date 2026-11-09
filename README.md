@@ -28,6 +28,7 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 | `firmware/bridge/` | ESP32 serial↔radio bridge (PlatformIO) | C++ (Arduino) |
 | `drone_node/` | YOLO detection, simulated GPS, command handling | Python |
 | `ground_station/` | FastAPI server + dashboard (`static/`) | Python + HTML/JS |
+| `analysis/` | Flight recorder: logs a live run and builds the judges' report | Python |
 | `scripts/` | Cross-platform sim bridge, bandwidth auditor, UAARG adapter, test harness, live demo | Python |
 | `data/` | VisDrone clips (gitignored) | — |
 
@@ -70,6 +71,15 @@ export ARCDRONE_KEY=$(python -m protocol.crypto)    # use the SAME value on both
 **Wi-Fi camera (optional):** add `--preview-port 8081` to the drone command. The dashboard shows the drone's HUD video only while the ground laptop can reach the drone over Wi-Fi; with two laptops open the dashboard as `http://localhost:8001/?drone=<drone laptop IP>`. The video is shown inline on tab [02] next to live numbers (YOLO ms/frame, frames/s, objects, alerts sent vs received, radio vs video bit/s). It goes over Wi-Fi, never over the radio. Measured (one viewer, 1280×720 HUD, JPEG q60): ~5.1 Mbit/s for the video vs ~500 bit/s for the radio link; YOLO 67 ms/frame, 5.7 frames/s with the HUD and preview running.
 
 **Radio paths on the dashboard:** the three tiles under the status row show what the ground board hears on each radio (live with dBm, or "No signal") and which path is carrying traffic. Walk the drone board away and ESP-NOW goes red while LoRa stays green. For more LoRa range, flash **both** boards with `pio run -e heltec_v3_sf9 -t upload` (in theory about 2× range for about 4× airtime; not measured yet).
+
+**Flight report for the judges:** while the demo runs, record it from the ground laptop:
+
+```bash
+python -m analysis.flight_recorder record --note "demo run 1"                     # ground side only
+python -m analysis.flight_recorder record --drone <drone laptop IP> --note "..."  # + YOLO/video numbers (drone needs --preview-port 8081)
+```
+
+Ctrl+C writes `runs/flight_<time>.html`: headline numbers, auto-written conclusions, a timeline (link, ESP-NOW, LoRa, alerts, commands), signal strength, radio bit/s, outages and command PENDING → CONFIRMED times. Every number comes from the recording.
 
 **Range walk:** ground server stays put; the walker carries the drone board on a laptop running `python -m protocol.range_walk --port <dronePort>`. It sends 1 alert/s and logs, every second, which radio is heard, RSSI/SNR, delivered/sent and RTT to a CSV. Type the floor and press Enter to mark it.
 

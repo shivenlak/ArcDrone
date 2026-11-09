@@ -427,7 +427,10 @@ def main() -> None:
                         "mode": p.MODE_NAMES.get(link.mode, "?"),
                         "link_up": link.up,
                         "buffered": link.buffered,
+                        "sent": summary["sent"],
                         "delivered": summary["delivered"],
+                        "retries": summary["retries"],
+                        "dropped": summary["dropped"],
                         "rtt_ms_avg": summary["rtt_ms_avg"],
                         "radio_bytes": summary["bytes_tx"] + summary["bytes_rx"],
                     })

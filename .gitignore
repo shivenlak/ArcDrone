@@ -17,3 +17,6 @@ data/*
 
 # OS
 .DS_Store
+
+# Flight recordings (analysis/flight_recorder.py)
+runs/
