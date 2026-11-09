@@ -96,18 +96,20 @@ def main_menu():
         print("   6. Launch Drone Node (Edge YOLO Inference at imgsz 1280)")
         print("   7. Launch Ground Station Server (http://localhost:8001)")
         print("   8. Generate & Display AES-128-CCM Key (python -m protocol.crypto)")
+        print("   9. Run Range Walk Logger (Carry drone board & log RSSI/SNR/RTT to CSV)")
         print("\n APPROACH 3: TEST CASES, BENCHMARKS & ANALYTICS")
-        print("   9. Run Full Pytest Suite (pytest -q)")
-        print("  10. Run Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)")
-        print("  11. Run Authenticated AES-128-CCM & Tactical Encryption Suite (9 tests)")
-        print("  12. Run 6 Multi-Scenario Aerial Benchmarks (Batch MP4/PNG/JSON)")
-        print("  13. Run Primary Link Bandwidth Compliance Auditor (<= 3 kB/s)")
-        print("  14. Run Industry Expert Defense & Architecture Audit")
-        print("\n  15. Re-run Environment & Hardware Diagnostics")
+        print("  10. Run Full Pytest Suite (pytest -q)")
+        print("  11. Run Automated Headless Verification Suite (9 Integration Tests, 45 Repo Total)")
+        print("  12. Run Authenticated AES-128-CCM & Tactical Encryption Suite (9 tests)")
+        print("  13. Run Real Edge YOLO Inference Benchmark (scripts/bench_pi.py)")
+        print("  14. Run 6 Multi-Scenario Aerial Benchmarks (Batch MP4/PNG/JSON)")
+        print("  15. Run Primary Link Bandwidth Compliance Auditor (<= 3 kB/s)")
+        print("  16. Run Industry Expert Defense & Architecture Audit")
+        print("\n  17. Re-run Environment & Hardware Diagnostics")
         print("   0. Exit")
         print("=" * 70)
 
-        choice = input("Enter choice [0-15]: ").strip()
+        choice = input("Enter choice [0-17]: ").strip()
         if choice == "0":
             print("\nExiting. Good luck with natHacks!")
             sys.exit(0)
@@ -144,21 +146,26 @@ def main_menu():
             print(f"export ARCDRONE_KEY={key}    # On macOS/Linux")
             print(f"$env:ARCDRONE_KEY=\"{key}\"   # On Windows PowerShell\n")
         elif choice == "9":
-            run_command([sys.executable, "-m", "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "scripts/test_encryption.py", "scripts/test_enhanced_features.py", "-q"])
+            port = input("Enter drone ESP32 serial port (e.g. COM3 or /dev/cu.usbserial-1): ").strip()
+            run_command([sys.executable, "-m", "protocol.range_walk", "--port", port])
         elif choice == "10":
-            run_command([sys.executable, "-m", "scripts.test_integration_suite"])
+            run_command([sys.executable, "-m", "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "scripts/test_encryption.py", "scripts/test_enhanced_features.py", "-q"])
         elif choice == "11":
-            run_command([sys.executable, "-m", "unittest", "scripts/test_encryption.py"])
+            run_command([sys.executable, "-m", "scripts.test_integration_suite"])
         elif choice == "12":
-            run_command([sys.executable, "scripts/run_test_cases.py"])
+            run_command([sys.executable, "-m", "unittest", "scripts/test_encryption.py"])
         elif choice == "13":
-            run_command([sys.executable, "-m", "scripts.test_lora_bandwidth"])
+            run_command([sys.executable, "scripts/bench_pi.py"])
         elif choice == "14":
-            run_command([sys.executable, "scripts/industry_expert_audit.py"])
+            run_command([sys.executable, "scripts/run_test_cases.py"])
         elif choice == "15":
+            run_command([sys.executable, "-m", "scripts.test_lora_bandwidth"])
+        elif choice == "16":
+            run_command([sys.executable, "scripts/industry_expert_audit.py"])
+        elif choice == "17":
             check_environment()
         else:
-            print("\nInvalid selection. Please choose 0 to 15.")
+            print("\nInvalid selection. Please choose 0 to 17.")
 
 
 if __name__ == "__main__":
