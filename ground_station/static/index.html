@@ -498,7 +498,7 @@
       const localFile = window.location.protocol === "file:";
       // Same-origin copy of demo's reconstructor (ground_station/static/reconstructor.html).
       // Live UDP still comes from scene_ws_relay on ws://127.0.0.1:8765 when the sender is running.
-      const reconstructorUrl = "/reconstructor.html" + (isDemo ? "?demo=1" : "");
+      const reconstructorUrl = "/reconstructor.html?v=h264" + (isDemo ? "&demo=1" : "");
       const cameraUrl = "http://127.0.0.1:8081/video.mjpg";
 
       // VisDrone class names (index -> name). Server already sends the name for live alerts.
@@ -569,7 +569,7 @@
             }
             content.innerHTML = "";
             const vid = document.createElement("video");
-            vid.src = "/clips/uav0000268_05773_v.mp4";
+            vid.src = "/clips/uav0000268_05773_v.mp4?v=h264";
             vid.muted = true;
             vid.loop = true;
             vid.autoplay = true;

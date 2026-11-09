@@ -186,6 +186,32 @@ def main() -> None:
         os.makedirs(sd, exist_ok=True)
 
     for seq_meta in SEQUENCES:
+        mp4_path = os.path.join(CLIPS_DIR, f"{seq_meta['id']}.mp4")
+        if os.path.isfile(mp4_path):
+            cap = cv2.VideoCapture(mp4_path)
+            fcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+            codec = "".join([chr((fcc >> 8 * i) & 0xFF) for i in range(4)])
+            if codec.lower() != "h264" and codec.lower() != "avc1":
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS) or 10.0
+                tmp_mp4 = mp4_path + ".h264.mp4"
+                out_v = cv2.VideoWriter(tmp_mp4, cv2.VideoWriter_fourcc(*"avc1"), fps, (w, h))
+                if out_v.isOpened():
+                    while True:
+                        ret, frm = cap.read()
+                        if not ret:
+                            break
+                        out_v.write(frm)
+                    out_v.release()
+                    os.replace(tmp_mp4, mp4_path)
+            cap.release()
+            for sd in static_dirs:
+                dst_mp4 = os.path.join(sd, f"{seq_meta['id']}.mp4")
+                if os.path.exists(dst_mp4):
+                    os.remove(dst_mp4)
+                os.link(mp4_path, dst_mp4)
+
         data = build_sequence_json(seq_meta)
         out_path = os.path.join(CLIPS_DIR, f"{seq_meta['id']}.json")
         with open(out_path, "w") as f:

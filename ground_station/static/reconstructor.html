@@ -28,16 +28,16 @@
     .shell {
       height: 100%;
       display: grid;
-      grid-template-rows: 68px 1fr 210px;
+      grid-template-rows: auto 1fr 210px;
     }
     .topbar {
       background: var(--header);
       border-bottom: 1px solid #1e2833;
-      padding: 6px 14px 6px;
+      padding: 8px 14px 8px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 3px;
+      gap: 4px;
     }
     .topbar h1 {
       font-size: 13px;
@@ -496,9 +496,10 @@
       state.prev.clear();
       state.simFrameIdx = 0;
 
-      const url = "/clips/" + meta.id + ".mp4";
+      const url = "/clips/" + meta.id + ".mp4?v=h264";
       clipVideo.src = url;
       clipVideo.classList.add("on");
+      clipVideo.load();
       clipVideo.play().catch(function () {});
       rgb.classList.remove("on");
       state.hasRgb = true;
