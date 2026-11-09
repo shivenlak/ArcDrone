@@ -71,6 +71,8 @@ export ARCDRONE_KEY=$(python -m protocol.crypto)    # use the SAME value on both
 
 **Radio paths on the dashboard:** the three tiles under the status row show what the ground board hears on each radio (live with dBm, or "No signal") and which path is carrying traffic. Walk the drone board away and ESP-NOW goes red while LoRa stays green. For more LoRa range, flash **both** boards with `pio run -e heltec_v3_sf9 -t upload` (in theory about 2× range for about 4× airtime; not measured yet).
 
+**Range walk:** ground server stays put; the walker carries the drone board on a laptop running `python -m protocol.range_walk --port <dronePort>`. It sends 1 alert/s and logs, every second, which radio is heard, RSSI/SNR, delivered/sent and RTT to a CSV. Type the floor and press Enter to mark it.
+
 **Without hardware:** `python -m protocol.fake_bridge` prints two virtual serial ports. Pass one to each side as `--port`. It's for development only; the demo uses the real radios.
 
 **Team rules** (file ownership, git workflow, interface contracts): see [CLAUDE.md](CLAUDE.md#team-workflow-avoid-blocking-and-merge-conflicts).
