@@ -1,5 +1,6 @@
 """ArcDrone airborne edge node: CV detection, telemetry, HUD, and command handling."""
 import argparse
+import os
 import queue
 import socket
 import struct
@@ -255,6 +256,11 @@ def main() -> None:
 
     source = open_frame_source(args.video)
     use_camera = source.is_live_camera()
+    link.set_video_source_info(
+        is_video=not use_camera,
+        filename=os.path.basename(str(args.video)) if not use_camera else "LIVE_WEBCAM",
+        filepath=str(args.video) if not use_camera else "",
+    )
     if use_camera and args.imgsz > 640:
         detector.imgsz = 640
     if not source.isOpened():
@@ -277,11 +283,9 @@ def main() -> None:
     loop_period = 1.0 / max(args.fps, args.scene_hz, 1.0)
     last_infer = float("-inf")  # read a frame on the first loop (macOS monotonic() starts near 0)
     last_video_read = float("-inf")
-    last_espnow_video_tx = 0.0
     last_scene_tx = 0.0
     current_boxes: List[Dict[str, Any]] = []
     display_boxes: List[Dict[str, Any]] = []
-    is_hw_serial = str(args.port).startswith("/dev/") or str(args.port).upper().startswith("COM")
     drone_lat, drone_lon = sim_gps.base_lat, sim_gps.base_lon
 
     print("[MAIN] Pipeline active. Press 'q' or ESC in OpenCV window (or Ctrl+C) to exit.")
@@ -315,7 +319,7 @@ def main() -> None:
             drone_lat, drone_lon = sim_gps.position_at_frame(frame_idx, fps=args.fps)
             alert = None
 
-            # 2. Capture fresh frame (webcam or video) for ESP-NOW transmission & preview;
+            # 2. Capture fresh frame (webcam or video) for YOLO inference & local preview;
             #    run YOLO at --fps (skipped in HOLD once a frame exists).
             sender_radio = link.radio or {}
             sender_lora_only = (
@@ -339,28 +343,6 @@ def main() -> None:
                         frame_idx += 1
                         if preview is not None:
                             preview.update(last_frame)
-
-                if last_frame is not None and not sender_lora_only and (now_mono - last_espnow_video_tx >= 0.24):
-                    last_espnow_video_tx = now_mono
-                    try:
-                        thumb = cv2.resize(last_frame, (96, 54), interpolation=cv2.INTER_AREA)
-                        ok_img, img_buf = cv2.imencode(
-                            ".webp", thumb, [int(cv2.IMWRITE_WEBP_QUALITY), 8]
-                        )
-                        if not ok_img:
-                            ok_img, img_buf = cv2.imencode(
-                                ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 18]
-                            )
-                        if ok_img:
-                            raw_bytes = img_buf.tobytes()
-                            link.send_video_frame(raw_bytes)
-                            if not is_hw_serial:
-                                try:
-                                    udp_sock.sendto(raw_bytes, (args.scene_host, 9998))
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
 
             if (link.mode != p.MODE_HOLD or last_frame is None) and (
                 now_mono - last_infer >= infer_period

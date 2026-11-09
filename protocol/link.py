@@ -17,6 +17,8 @@ Set ARCDRONE_KEY on both sides to encrypt and authenticate every frame (protocol
 """
 
 import collections
+import json
+import os
 import random
 import socket
 import threading
@@ -83,12 +85,13 @@ class Link:
         self._latest_scene = b""
         self._last_scene_tx = 0.0
         self._lora_free_at = 0.0
-        self._video_chunks = collections.deque()
-        self._last_video_tx = 0.0
-        self._video_frame_seq = 0
-        self._rx_video_id = None
-        self._rx_video_total = 0
-        self._rx_video_parts = {}
+        self._video_src_info = None  # {"is_video": bool, "filename": str, "filepath": str}
+        self._dl_payload_parts = []
+        self._dl_chunks = collections.deque()
+        self._dl_req_pkt = None
+        self._dl_req_seq = 0
+        self._last_src_info_tx = 0.0
+        self._last_dl_tx = 0.0
         self._scene_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def start(self):
@@ -118,22 +121,65 @@ class Link:
                 self._latest_scene = b
 
     def send_video_frame(self, jpeg_bytes):
-        """Queue a compact WebP/JPEG frame as 0xEF chunks for ESP-NOW transmission to the receiver."""
-        if not jpeg_bytes:
-            return
-        chunk_size = 96
-        total = (len(jpeg_bytes) + chunk_size - 1) // chunk_size
-        if total <= 0 or total > 10:
-            return
+        """Live video feed over ESP-NOW has been eliminated per design."""
+        return
+
+    def is_espnow_live(self):
+        """Return True iff ESP-NOW (2.4 GHz) path is currently online and available."""
+        if not self.up:
+            return False
+        if not self.radio:
+            return True
+        if self.radio.get("mode", "DUAL") != "DUAL":
+            return False
+        if self.radio.get("espnow_rx", 0) == 0 and self.radio.get("lora_rx", 0) == 0:
+            return True
+        age = self.radio.get("espnow_age", -1)
+        return 0 <= age < 3500
+
+    def set_video_source_info(self, is_video: bool, filename: str = "", filepath: str = ""):
+        """Configure sender's video source so it can be advertised and downloaded strictly over ESP-NOW."""
+        fname = os.path.basename(filename or filepath) if is_video else "LIVE_WEBCAM"
+        abspath = os.path.abspath(filepath) if (is_video and filepath and os.path.isfile(filepath)) else ""
+        fsize = os.path.getsize(abspath) if abspath else 0
+        meta_json = json.dumps({
+            "filename": fname,
+            "filepath": abspath,
+            "size": fsize,
+            "is_video": bool(is_video),
+        }).encode("utf-8")
+        sample_bytes = b""
+        if abspath:
+            try:
+                with open(abspath, "rb") as f:
+                    sample_bytes = f.read(1400)
+            except Exception:
+                sample_bytes = b""
+        full_blob = len(meta_json).to_bytes(2, "big") + meta_json + sample_bytes
+        chunk_sz = 88
+        parts = [full_blob[i : i + chunk_sz] for i in range(0, len(full_blob), chunk_sz)]
+        if not parts:
+            parts = [b"\x00\x02{}"]
         with self._lock:
-            if self._video_chunks:
-                return
-            self._video_frame_seq = (self._video_frame_seq + 1) & 0xFF
-            fid = self._video_frame_seq
-            for idx in range(total):
-                part = jpeg_bytes[idx * chunk_size : (idx + 1) * chunk_size]
-                hdr = bytes([0xEF, fid, idx & 0xFF, total & 0xFF])
-                self._video_chunks.append(hdr + part)
+            self._video_src_info = {
+                "is_video": bool(is_video),
+                "filename": fname,
+                "filepath": abspath,
+                "size": fsize,
+            }
+            self._dl_payload_parts = parts[:64]
+
+    def request_video_download(self):
+        """Receiver requests the source video file strictly over ESP-NOW (0xEF, 0xF2)."""
+        if not self.is_espnow_live():
+            return None
+        with self._lock:
+            self._dl_req_seq = (self._dl_req_seq + 1) & 0xFF
+            if self._dl_req_seq == 0:
+                self._dl_req_seq = 1
+            req_id = self._dl_req_seq
+            self._dl_req_pkt = bytes([0xEF, 0xF2, req_id])
+            return req_id
 
     @property
     def buffered(self):
@@ -262,36 +308,61 @@ class Link:
         wire = data
         if self.sealer is not None:
             data = self.sealer.open(data)  # None for plain, forged, tampered or wrong-key frames
-        if data is not None and len(data) > 4 and data[0] == 0xEF:
+        if data is not None and len(data) >= 3 and data[0] == 0xEF:
             self.stats["bytes_rx"] += len(wire)
             now = time.monotonic()
             self._last_heard = now
             if not self.up:
                 self.up = True
                 self.on_event("link_up")
-            fid = data[1] & 0x7F
-            has_piggyback_scene = bool(data[1] & 0x80)
-            idx, total = data[2], data[3]
-            offset = 4
+            sub = data[1]
+            if sub == 0xF1:
+                flags = data[2]
+                is_vid = bool(flags & 0x01)
+                fname = data[3:].decode("utf-8", errors="replace").strip()
+                self.on_packet({
+                    "type": 0xEF,
+                    "subtype": "source_info",
+                    "is_video": is_vid,
+                    "filename": fname,
+                })
+                return
+            if sub == 0xF2:
+                req_id = data[2]
+                with self._lock:
+                    if (
+                        self.is_espnow_live()
+                        and self._video_src_info
+                        and self._video_src_info.get("is_video")
+                        and self._dl_payload_parts
+                    ):
+                        self._dl_chunks.clear()
+                        total = len(self._dl_payload_parts)
+                        # Queue 2 passes over ESP-NOW so any wireless collision is automatically healed
+                        for _pass in range(2):
+                            for idx, part in enumerate(self._dl_payload_parts):
+                                hdr = bytes([0xEF, 0xF3, req_id & 0xFF, idx & 0xFF, total & 0xFF])
+                                self._dl_chunks.append(hdr + part)
+                return
+            if sub == 0xF3 and len(data) >= 5:
+                req_id, idx, total = data[2], data[3], data[4]
+                payload = data[5:]
+                self.on_packet({
+                    "type": 0xEF,
+                    "subtype": "dl_chunk",
+                    "req_id": req_id,
+                    "idx": idx,
+                    "total": total,
+                    "payload": payload,
+                })
+                return
+            has_piggyback_scene = bool(sub & 0x80)
             if has_piggyback_scene and len(data) > 5:
                 slen = data[4]
-                offset = 5 + slen
                 if slen >= 3 and 5 + slen <= len(data):
                     sbytes = data[5 : 5 + slen]
                     if sbytes[0] in (0xAD, 0xAE):
                         self.on_packet({"type": sbytes[0], "scene_bytes": sbytes, "wire": sbytes.hex().upper()})
-            if total == 0:
-                return
-            payload = data[offset:]
-            if fid != self._rx_video_id or total != self._rx_video_total:
-                self._rx_video_id = fid
-                self._rx_video_total = total
-                self._rx_video_parts = {}
-            self._rx_video_parts[idx] = payload
-            if total > 0 and len(self._rx_video_parts) == total:
-                full_jpeg = b"".join(self._rx_video_parts[i] for i in range(total) if i in self._rx_video_parts)
-                self._rx_video_parts = {}
-                self.on_packet({"type": 0xEF, "frame_id": fid, "jpeg_bytes": full_jpeg})
             return
         if data is not None and len(data) >= 3 and data[0] in (0xAD, 0xAE):
             self.stats["bytes_rx"] += len(wire)
@@ -377,16 +448,7 @@ class Link:
 
         if not self.up:
             return  # hold everything in the buffer until we hear the peer again
-        espnow_live = (
-            not self.radio
-            or (
-                self.radio.get("mode", "DUAL") == "DUAL"
-                and (
-                    (self.radio.get("espnow_rx", 0) == 0 and self.radio.get("lora_rx", 0) == 0)
-                    or 0 <= self.radio.get("espnow_age", -1) < 3500
-                )
-            )
-        )
+        espnow_live = self.is_espnow_live()
         lora_ready = now >= self._lora_free_at
         scene_due = (
             (lora_ready and (now - self._last_scene_tx) >= 0.08)
@@ -394,48 +456,44 @@ class Link:
             else ((now - self._last_scene_tx) >= 0.075)
         )
         scene_pkt = None
-        video_pkt = None
+        espnow_pkt = None
         with self._lock:
             if not espnow_live:
-                self._video_chunks.clear()
-            if not self._outbox:
+                self._dl_chunks.clear()
+                self._dl_req_pkt = None
+            can_send_aux = not self._outbox or (
+                self._outbox[0][0] == self._tx_seq
+                and (now - self._last_tx) < self._timeout
+                and (now - self._last_tx) >= 0.04
+            )
+            if can_send_aux:
                 if self._pending_scene is not None and scene_due:
                     scene_pkt = self._pending_scene
                     self._pending_scene = None
                     self._last_scene_tx = now
-                elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.025:
-                    raw_v = self._video_chunks.popleft()
-                    if self._latest_scene and len(self._latest_scene) <= 32:
-                        s_b = self._latest_scene
-                        video_pkt = bytes([0xEF, (raw_v[1] & 0x7F) | 0x80, raw_v[2], raw_v[3], len(s_b)]) + s_b + raw_v[4:]
-                        self._pending_scene = None
-                        self._last_scene_tx = now
-                    else:
-                        video_pkt = raw_v
-                    self._last_video_tx = now
-                else:
-                    return
-            else:
-                seq, data = self._outbox[0]
-                if (
-                    seq == self._tx_seq
-                    and (now - self._last_tx) < self._timeout
-                    and (now - self._last_tx) >= 0.04
+                elif espnow_live and self._dl_req_pkt is not None:
+                    espnow_pkt = self._dl_req_pkt
+                    self._dl_req_pkt = None
+                elif espnow_live and self._dl_chunks and (now - self._last_dl_tx) >= 0.025:
+                    espnow_pkt = self._dl_chunks.popleft()
+                    self._last_dl_tx = now
+                elif (
+                    espnow_live
+                    and self._video_src_info is not None
+                    and (now - self._last_src_info_tx) >= 1.2
                 ):
-                    if self._pending_scene is not None and scene_due:
-                        scene_pkt = self._pending_scene
-                        self._pending_scene = None
-                        self._last_scene_tx = now
-                    elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.025:
-                        raw_v = self._video_chunks.popleft()
-                        if self._latest_scene and len(self._latest_scene) <= 32:
-                            s_b = self._latest_scene
-                            video_pkt = bytes([0xEF, (raw_v[1] & 0x7F) | 0x80, raw_v[2], raw_v[3], len(s_b)]) + s_b + raw_v[4:]
-                            self._pending_scene = None
-                            self._last_scene_tx = now
-                        else:
-                            video_pkt = raw_v
-                        self._last_video_tx = now
+                    self._last_src_info_tx = now
+                    flags = 0x01 if self._video_src_info.get("is_video") else 0x00
+                    if self._dl_chunks:
+                        flags |= 0x02
+                    fname_b = self._video_src_info.get("filename", "").encode("utf-8")[:64]
+                    espnow_pkt = bytes([0xEF, 0xF1, flags]) + fname_b
+                elif not self._outbox:
+                    return
+            if not self._outbox and scene_pkt is None and espnow_pkt is None:
+                return
+            if self._outbox and scene_pkt is None and espnow_pkt is None:
+                seq, data = self._outbox[0]
         if scene_pkt is not None:
             if not espnow_live and len(scene_pkt) >= 3 and scene_pkt[0] == 0xAE:
                 b = bytearray(scene_pkt)
@@ -446,8 +504,8 @@ class Link:
                 scene_pkt = bytes([0xEF, 0x80, 0, 0, len(scene_pkt)]) + scene_pkt
             self._write(scene_pkt)
             return
-        if video_pkt is not None:
-            self._write(video_pkt)
+        if espnow_pkt is not None:
+            self._write(espnow_pkt)
             return
         if seq == self._tx_seq:
             if now - self._last_tx < self._timeout:

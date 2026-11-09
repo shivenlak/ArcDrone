@@ -104,7 +104,7 @@
       width: 100%;
       min-width: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       min-height: 0;
       border-bottom: 1px solid var(--line);
       overflow: hidden;
@@ -224,14 +224,14 @@
       <div class="clip-bar" id="clipBar"></div>
     </header>
     <div class="stage">
-      <section class="pane">
+      <section class="pane" style="display:none;" aria-hidden="true">
         <div class="pane-tag" id="leftTag">DRONE RGB + VISDRONE-VID/MOT INDEXED BOXES</div>
         <video id="clipVideo" muted loop autoplay playsinline></video>
         <img id="rgbVideo" alt="drone optical" />
         <canvas id="leftCanvas" width="960" height="540"></canvas>
       </section>
       <section class="pane">
-        <div class="pane-tag" id="rightTag">GROUND RECEIVER: NO RGB (1:1 RATIO BOXES + VECTORS)</div>
+        <div class="pane-tag" id="rightTag">GROUND RECEIVER: 1:1 RECONSTRUCTED BOXES + VECTORS</div>
         <canvas id="rightCanvas" width="960" height="540"></canvas>
       </section>
     </div>
@@ -575,65 +575,25 @@
       if (!btn) return;
       const ls = getRadioLinkState();
       if (state.pathOverride === "LORA_ONLY") {
-        btn.textContent = "[MODE: LORA-ONLY FAILOVER (VIDEO OFF | CLICK FOR AUTO/ESP-NOW)]";
+        btn.textContent = "[MODE: LORA-ONLY FAILOVER (ESP-NOW OFF | CLICK FOR DUAL AUTO)]";
         btn.classList.add("failover");
       } else if (ls.failover) {
         btn.textContent = "[AUTO: LORA FAILOVER ACTIVE (ESP-NOW OFF | CLICK TO FORCE DUAL)]";
         btn.classList.add("failover");
       } else {
-        btn.textContent = "[AUTO: ESP-NOW (VIDEO) + LORA (BOX COORDS) | CLICK TO TEST LORA FAILOVER]";
+        btn.textContent = "[AUTO: DUAL LINK (ESP-NOW 2.4G + LORA 915M) | CLICK TO TEST LORA FAILOVER]";
         btn.classList.remove("failover");
       }
     }
 
     function render() {
-      const W = left.width, H = left.height;
+      const W = right.width, H = right.height;
       const sx = 1, sy = 1;
       const linkState = getRadioLinkState();
       updatePathButtonUI();
 
-      lctx.clearRect(0, 0, W, H);
-      if (linkState.espNowActive) {
-        if (state.liveHardwareMode) {
-          clipVideo.classList.remove("on");
-          if (state.hasRgb) {
-            rgb.classList.add("on");
-            for (const obj of state.objects) {
-              drawBox(lctx, obj, sx, sy, false);
-            }
-          } else {
-            rgb.classList.remove("on");
-            drawGrid(lctx, W, H);
-            lctx.save();
-            lctx.textAlign = "center";
-            lctx.font = "800 18px " + getComputedStyle(document.body).fontFamily;
-            lctx.fillStyle = "#54f2b2";
-            lctx.fillText("ESP-NOW (2.4 GHz) ONLINE — AWAITING SENDER VIDEO STREAM", W / 2, H / 2 - 10);
-            lctx.font = "700 13px " + getComputedStyle(document.body).fontFamily;
-            lctx.fillStyle = "#aab6c4";
-            lctx.fillText("NO PRELOADED VIDEOS IN LIVE HARDWARE MODE", W / 2, H / 2 + 18);
-            lctx.restore();
-          }
-        } else {
-          rgb.classList.remove("on");
-          if (state.hasClipVideo) {
-            if (!clipVideo.classList.contains("on")) clipVideo.classList.add("on");
-            if (clipVideo.paused) clipVideo.play().catch(function () {});
-            for (const obj of state.objects) {
-              drawBox(lctx, obj, sx, sy, false);
-            }
-          } else {
-            drawGrid(lctx, W, H);
-          }
-        }
-      } else {
-        clipVideo.classList.remove("on");
-        rgb.classList.remove("on");
-        drawEspNowOfflineScreen(lctx, W, H, linkState);
-      }
-
       drawGrid(rctx, W, H);
-      if (linkState.loraActive) {
+      if (linkState.loraActive || linkState.espNowActive) {
         for (const obj of state.objects) {
           drawBox(rctx, obj, sx, sy, true);
         }
@@ -645,34 +605,24 @@
       const kbps = Math.min(2.85, (totalB / 1000) / span);
       const hz = state.history.length / span;
       const pathDesc = linkState.espNowActive
-        ? "DUAL [ESP-NOW VIDEO + LORA COORDS]"
-        : (linkState.loraActive ? "FAILOVER [LORA-ONLY COORDS | ESP-NOW VIDEO OFF]" : "MUTED");
+        ? "DUAL [ESP-NOW 2.4G + LORA 915M COORDS]"
+        : (linkState.loraActive ? "FAILOVER [LORA 915M COORDS ONLY | ESP-NOW OFF]" : "MUTED");
       const pktNum = state.radioLive ? state.radioSeq : state.seq;
       const rxAlertTag = state.radioAlert
         ? (" | RX #" + state.radioSeq + " " + String(state.radioAlert.cls).toUpperCase() + " x" + state.radioAlert.count)
         : "";
       document.getElementById("titleText").textContent =
-        "ARCDRONE TEST BENCH: " + state.clipTitle + " (" + pathDesc + ")";
+        "ARCDRONE RECONSTRUCTOR: " + state.clipTitle + " (" + pathDesc + ")";
       document.getElementById("metaLine").textContent =
-        "LORA COORD LINK: " + hz.toFixed(1) + " FPS (" + state.rx + " pkts, " + state.bytes + " B/pkt) | WIRE RATE: " +
+        "COORD LINK: " + hz.toFixed(1) + " FPS (" + state.rx + " pkts, " + state.bytes + " B/pkt) | WIRE RATE: " +
         kbps.toFixed(2) + " kB/s (CAP <= 3.00 kB/s) | ACTIVE INDICES: " + state.objects.length +
-        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | AUTO-SWITCH: " + pathDesc + rxAlertTag;
-
-      const leftTagEl = document.getElementById("leftTag");
-      if (linkState.espNowActive) {
-        leftTagEl.style.color = "#54f2b2";
-        leftTagEl.textContent =
-          "DRONE VIDEO [ESP-NOW 2.4 GHz: ONLINE" + linkState.espRssi + "] | " + state.clipCase + " FULL OPTICAL VIDEO STREAM";
-      } else {
-        leftTagEl.style.color = "#ff9e3d";
-        leftTagEl.textContent =
-          "DRONE VIDEO [ESP-NOW 2.4 GHz: OFFLINE] | VIDEO HALTED — AUTO-SWITCHED TO LORA 915 MHz";
-      }
+        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | PATH: " + pathDesc + rxAlertTag;
 
       const rightTagEl = document.getElementById("rightTag");
       rightTagEl.style.color = linkState.failover ? "#ffc800" : "#54f2b2";
+      const espStatusStr = linkState.espNowActive ? ("ONLINE" + linkState.espRssi) : "OFFLINE";
       rightTagEl.textContent =
-        "GROUND COORDS [LORA 915 MHz: " + (linkState.failover ? "FAILOVER ACTIVE" : "ONLINE") + linkState.loraRssi + "] | 1:1 BOX RECONSTRUCTOR | PKT #" + pktNum + " | " + state.objects.length + " INDICES" + rxAlertTag;
+        "GROUND RECEIVER [LORA 915 MHz: " + (linkState.failover ? "FAILOVER ACTIVE" : "ONLINE") + linkState.loraRssi + " | ESP-NOW 2.4 GHz: " + espStatusStr + "] | 1:1 RECONSTRUCTED BOXES & VECTORS | PKT #" + pktNum + " | " + state.objects.length + " INDICES" + rxAlertTag;
 
       const hdr = "INDEX  CLASS            CONF   POS RATIO (X%, Y%)     SIZE RATIO (W% x H%)    VEC DELTA (dX%, dY%)     MOTION";
       const rows = state.objects.slice().sort(function (a, b) { return a.track_id - b.track_id; });
@@ -773,19 +723,6 @@
               state.lastRadioSceneAt = performance.now();
               if (msg.radio !== undefined) state.radio = msg.radio;
               handleLiveSceneFrame(msg.frame);
-            } else if (msg.event === "video_frame" && msg.src) {
-              state.espNowVideoRx = true;
-              state.lastEspNowVideoAt = performance.now();
-              if (msg.radio !== undefined) state.radio = msg.radio;
-              if (state.liveHardwareMode) {
-                state.hasRgb = true;
-                rgb.src = msg.src;
-                if (getRadioLinkState().espNowActive) {
-                  rgb.classList.add("on");
-                  clipVideo.classList.remove("on");
-                }
-                render();
-              }
             } else if (msg.event === "stats") {
               if ("radio" in msg) state.radio = msg.radio;
               if (msg.up !== undefined) state.linkUp = Boolean(msg.up);
@@ -815,8 +752,8 @@
       state.liveHardwareMode = true;
       state.hasClipVideo = false;
       state.clipId = "LIVE_HARDWARE";
-      state.clipCase = "LIVE ESP-NOW STREAM";
-      state.clipTitle = "LIVE SENDER -> ESP-NOW (VIDEO) + LORA (COORDS)";
+      state.clipCase = "LIVE RECONSTRUCTOR";
+      state.clipTitle = "LIVE SENDER -> 1:1 RECONSTRUCTED BOXES & VECTORS";
       state.objects = [];
       state.prev.clear();
       try { clipVideo.pause(); } catch (e) {}

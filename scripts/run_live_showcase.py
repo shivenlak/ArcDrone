@@ -87,6 +87,14 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
         retry_timeout=0.25,
         boot_wait=0.0,
     ).start()
+    default_clip = os.path.join(_REPO_ROOT, "data", "clips", "uav0000268_05773_v.mp4")
+    if not os.path.isfile(default_clip):
+        default_clip = os.path.join(_REPO_ROOT, "ground_station", "static", "clips", "uav0000268_05773_v.mp4")
+    drone_link.set_video_source_info(
+        is_video=True,
+        filename="uav0000268_05773_v.mp4",
+        filepath=default_clip,
+    )
 
     frame_idx = 0
     while not stop_event.is_set():

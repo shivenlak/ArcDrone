@@ -56,18 +56,6 @@
     .brand-mark { background: var(--text-main); color: var(--bg-panel); font-weight: bold; font-size: 14px; padding: 4px 8px; }
     .brand-title { font-weight: bold; font-size: 14px; }
 
-    .stage-tabs { display: flex; gap: 4px; }
-    .stage-tab {
-      background: var(--bg-base);
-      color: var(--text-main);
-      border: 2px solid var(--border-main);
-      padding: 6px 12px;
-      font-size: 12px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .stage-tab.active, .stage-tab:hover { background: var(--text-main); color: var(--bg-panel); }
-
     .kpi-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
     .kpi-pill {
       background: var(--bg-panel);
@@ -311,14 +299,46 @@
       font-weight: bold;
       cursor: pointer;
     }
-    .btn-subtle:hover { background: var(--text-main); color: var(--bg-panel); }
+    .btn-subtle:hover:not(:disabled) { background: var(--text-main); color: var(--bg-panel); }
+    .btn-subtle:disabled { opacity: 0.45; cursor: not-allowed; border-color: #666; color: #888; }
 
-    /* STAGE 3: aux feeds + fullscreen viewer */
-    #view-feeds { flex-direction: column; padding: 16px; gap: 16px; }
-    .feeds-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
-    .feed-card { background: var(--bg-panel); border: 2px solid var(--border-main); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-    .feed-card h3 { font-size: 14px; font-weight: bold; }
-    .feed-card p { font-size: 12px; text-transform: none; color: var(--text-muted); }
+    /* Bottom ESP-NOW Source Video Download Bar */
+    .espnow-download-bar {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg-panel);
+      border: 2px solid var(--border-main);
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .espnow-dl-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: bold;
+      min-width: 0;
+    }
+    .espnow-dl-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .espnow-dl-progress-wrap {
+      width: 160px;
+      height: 14px;
+      background: #1a1a1a;
+      border: 1px solid var(--border-main);
+      overflow: hidden;
+    }
+    .espnow-dl-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--success);
+    }
 
     #viewer-overlay { position: fixed; inset: 0; z-index: 60; background: #000; display: none; flex-direction: column; padding: 16px; }
     #viewer-overlay.active { display: flex; }
@@ -345,14 +365,9 @@
       <span class="brand-title" id="source-badge">OUROBOROS GND-STN</span>
     </div>
 
-    <nav class="stage-tabs" aria-label="Stage Navigation">
-      <button type="button" class="stage-tab active" data-stage-btn="view-ops" onclick="switchStage('view-ops')">[01] OPS</button>
-      <button type="button" class="stage-tab" data-stage-btn="view-feeds" onclick="switchStage('view-feeds')">[02] AUX</button>
-    </nav>
-
     <div class="kpi-strip">
       <div class="kpi-pill"><span class="kpi-label">LINK:</span><span id="link" class="status-wait">WAIT</span></div>
-      <div class="kpi-pill" id="espnow-pill" style="cursor:pointer;" title="Click to toggle ESP-NOW (Video) / LoRa-Only Failover"><span class="kpi-label">ESP-NOW (VIDEO):</span><span id="espnow-status" class="status-up">ON</span></div>
+      <div class="kpi-pill" id="espnow-pill" style="cursor:pointer;" title="Click to toggle ESP-NOW (2.4 GHz) / LoRa-Only Failover"><span class="kpi-label">ESP-NOW (2.4G):</span><span id="espnow-status" class="status-up">ON</span></div>
       <div class="kpi-pill"><span class="kpi-label">LORA 915 (COORDS):</span><span id="lora-status" class="status-up">ON</span></div>
       <div class="kpi-pill"><span class="kpi-label">MODE:</span><span id="mode">--</span></div>
       <div class="kpi-pill"><span class="kpi-label">BUF:</span><span id="buffered">0</span></div>
@@ -410,7 +425,7 @@
     <div class="ops-grid">
       <div class="mfd-panel">
         <div class="mfd-header">
-          <span>SCENE RECONSTRUCTOR // LIVE TWIN (LOCALHOST)</span>
+          <span>SCENE RECONSTRUCTOR // 1:1 RECONSTRUCTED BOXES &amp; VECTORS</span>
           <span id="selected-pin-badge" class="mfd-badge">ACTIVE</span>
         </div>
         <div class="reconstructor-mfd-frame">
@@ -459,26 +474,21 @@
             <ul id="commands" aria-live="polite"></ul>
           </div>
         </div>
-
-        <div class="ops-footer-actions">
-          <button type="button" class="btn-subtle" onclick="switchStage('view-feeds')">AUX FEEDS &rarr;</button>
-        </div>
       </div>
     </div>
-  </section>
 
-  <!-- STAGE 3 -->
-  <section id="view-feeds" class="stage-view" aria-label="Auxiliary Feeds">
-    <div class="feeds-grid">
-      <div class="feed-card">
-        <h3>SCENE RECONSTRUCTOR</h3>
-        <p>6-byte-per-object UDP vector stream rendered at 12 Hz. Runs over localhost / Wi-Fi relay.</p>
-        <div><button type="button" class="btn-subtle" onclick="openViewerModal('reconstructor')">OPEN WINDOW</button></div>
+    <div class="espnow-download-bar" aria-label="ESP-NOW Source Video Download">
+      <div class="espnow-dl-info">
+        <span class="mfd-badge" id="espnow-dl-badge">ESP-NOW 2.4G</span>
+        <span id="espnow-dl-status">SOURCE VIDEO DOWNLOAD: AWAITING SENDER METADATA OVER ESP-NOW...</span>
       </div>
-      <div class="feed-card">
-        <h3>LOCAL OPTICAL PREVIEW</h3>
-        <p>High-bandwidth MJPEG optical stream. Available only over local Wi-Fi when drone is in close range. Not the radio link.</p>
-        <div><button type="button" class="btn-subtle" onclick="openViewerModal('footage')">OPEN STREAM</button></div>
+      <div class="espnow-dl-actions">
+        <div id="espnow-dl-progress-wrap" class="espnow-dl-progress-wrap" style="display:none;">
+          <div id="espnow-dl-progress-bar" class="espnow-dl-progress-bar"></div>
+        </div>
+        <button type="button" id="espnow-dl-btn" class="btn-subtle" disabled onclick="requestEspNowVideoDownload()">
+          DOWNLOAD SOURCE VIDEO (ESP-NOW ONLY)
+        </button>
       </div>
     </div>
   </section>
@@ -514,7 +524,12 @@
             retrievedNoteEl = el("retrieved-note"),
             selectedSummaryEl = el("selected-alert-summary"),
             opsIframeEl = el("ops-reconstructor-iframe"),
-            offlineMsgEl = el("reconstructor-offline-msg");
+            offlineMsgEl = el("reconstructor-offline-msg"),
+            dlBadgeEl = el("espnow-dl-badge"),
+            dlStatusEl = el("espnow-dl-status"),
+            dlProgWrapEl = el("espnow-dl-progress-wrap"),
+            dlProgBarEl = el("espnow-dl-progress-bar"),
+            dlBtnEl = el("espnow-dl-btn");
 
       let ws = null;
       let receivedCount = 0;
@@ -522,27 +537,126 @@
       let pathOverride = "AUTO";
       let lastRadio = null;
       let senderLoraOnly = false;
+      let sourceInfo = { known: false, is_video: false, filename: "", espnow_available: false, can_download: false };
+      let dlInProgress = false;
       const alertsList = [];
       const cmdRows = new Map();   // cmd_id -> <li>
 
+      function isEspNowOnline() {
+        const r = lastRadio;
+        if (pathOverride === "LORA_ONLY") return false;
+        if (pathOverride === "DUAL") return true;
+        if (r && r.mode === "MUTED") return false;
+        if (senderLoraOnly || (r && r.mode === "LORA_ONLY")) return false;
+        if (r && ((r.espnow_rx || 0) > 0 || (r.lora_rx || 0) > 0)) {
+          return (r.espnow_age !== undefined && r.espnow_age >= 0 && r.espnow_age < 3500);
+        }
+        return true;
+      }
+
+      function updateDownloadBarUI() {
+        if (!dlBtnEl || !dlStatusEl || !dlBadgeEl) return;
+        const espOn = isEspNowOnline() && (isDemo || sourceInfo.espnow_available);
+        if (dlInProgress) {
+          dlBtnEl.disabled = true;
+          return;
+        }
+        if (dlProgWrapEl) dlProgWrapEl.style.display = "none";
+        if (!isEspNowOnline()) {
+          dlBadgeEl.textContent = "ESP-NOW OFF";
+          dlBadgeEl.style.background = "var(--warning)";
+          dlBadgeEl.style.color = "#000";
+          dlStatusEl.textContent = "SOURCE VIDEO DOWNLOAD UNAVAILABLE // STRICTLY REQUIRES ACTIVE ESP-NOW (2.4 GHz) LINK";
+          dlBtnEl.disabled = true;
+          dlBtnEl.textContent = "ESP-NOW OFFLINE (DOWNLOAD LOCKED)";
+          return;
+        }
+        if (!sourceInfo.known && !isDemo) {
+          dlBadgeEl.textContent = "ESP-NOW 2.4G";
+          dlBadgeEl.style.background = "var(--text-main)";
+          dlBadgeEl.style.color = "var(--bg-panel)";
+          dlStatusEl.textContent = "SOURCE VIDEO DOWNLOAD: AWAITING SENDER METADATA OVER ESP-NOW...";
+          dlBtnEl.disabled = true;
+          dlBtnEl.textContent = "DOWNLOAD SOURCE VIDEO (ESP-NOW ONLY)";
+          return;
+        }
+        if (!sourceInfo.is_video && !isDemo) {
+          dlBadgeEl.textContent = "WEBCAM SOURCE";
+          dlBadgeEl.style.background = "#555";
+          dlBadgeEl.style.color = "#fff";
+          dlStatusEl.textContent = "SENDER SOURCE IS LIVE WEBCAM // FILE DOWNLOAD ONLY AVAILABLE FOR VIDEO FILE SOURCES";
+          dlBtnEl.disabled = true;
+          dlBtnEl.textContent = "WEBCAM SOURCE (NO FILE TO DOWNLOAD)";
+          return;
+        }
+        if (!espOn) {
+          dlBadgeEl.textContent = "ESP-NOW OFF";
+          dlBadgeEl.style.background = "var(--warning)";
+          dlBadgeEl.style.color = "#000";
+          dlStatusEl.textContent = "SOURCE VIDEO DOWNLOAD UNAVAILABLE // STRICTLY REQUIRES ACTIVE ESP-NOW (2.4 GHz) LINK";
+          dlBtnEl.disabled = true;
+          dlBtnEl.textContent = "ESP-NOW OFFLINE (DOWNLOAD LOCKED)";
+          return;
+        }
+        const fname = sourceInfo.filename || "uav0000268_05773_v.mp4";
+        dlBadgeEl.textContent = "ESP-NOW READY";
+        dlBadgeEl.style.background = "var(--success)";
+        dlBadgeEl.style.color = "#000";
+        dlStatusEl.textContent = `SOURCE VIDEO READY OVER ESP-NOW (2.4 GHz): ${fname}`;
+        dlBtnEl.disabled = false;
+        dlBtnEl.textContent = `DOWNLOAD SOURCE VIDEO OVER ESP-NOW [${fname}]`;
+      }
+
+      window.requestEspNowVideoDownload = function () {
+        if (!isEspNowOnline()) return;
+        if (isDemo) {
+          dlInProgress = true;
+          let step = 0;
+          const fname = sourceInfo.filename || "uav0000268_05773_v.mp4";
+          const iv = setInterval(() => {
+            if (!isEspNowOnline()) {
+              clearInterval(iv);
+              dlInProgress = false;
+              updateDownloadBarUI();
+              return;
+            }
+            step += 25;
+            if (step < 100) {
+              handleServerMessage({
+                event: "video_download",
+                status: "downloading",
+                progress: step,
+                received_chunks: step / 5,
+                total_chunks: 20,
+                filename: fname,
+              });
+            } else {
+              clearInterval(iv);
+              handleServerMessage({
+                event: "video_download",
+                status: "complete",
+                progress: 100,
+                received_chunks: 20,
+                total_chunks: 20,
+                filename: fname,
+                url: `/clips/${fname}`,
+              });
+            }
+          }, 180);
+          return;
+        }
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: "download_video" }));
+        }
+      };
+
       function updateRadioPills() {
         const r = lastRadio;
-        let espOn = true;
+        const espOn = isEspNowOnline();
         let loraOn = true;
-        if (pathOverride === "LORA_ONLY") {
-          espOn = false;
-          loraOn = true;
-        } else if (pathOverride === "DUAL") {
-          espOn = true;
-          loraOn = true;
-        } else if (r && r.mode === "MUTED") {
-          espOn = false;
+        if (r && r.mode === "MUTED") {
           loraOn = false;
-        } else if (senderLoraOnly || (r && r.mode === "LORA_ONLY")) {
-          espOn = false;
-          loraOn = true;
         } else if (r && ((r.espnow_rx || 0) > 0 || (r.lora_rx || 0) > 0)) {
-          espOn = (r.espnow_age !== undefined && r.espnow_age >= 0 && r.espnow_age < 3500);
           loraOn = (r.lora_age !== undefined && r.lora_age >= 0 && r.lora_age < 6000) || espOn;
         }
         if (espnowEl) {
@@ -553,6 +667,7 @@
           loraEl.textContent = loraOn ? (espOn ? "ON" : "FAILOVER") : "MUTED";
           loraEl.className = loraOn ? "status-up" : "status-down";
         }
+        updateDownloadBarUI();
       }
       if (espnowPillEl) {
         espnowPillEl.addEventListener("click", () => {
@@ -567,8 +682,6 @@
       // ---------------- stage router ----------------
       window.switchStage = function (stageId) {
         document.querySelectorAll(".stage-view").forEach((v) => v.classList.toggle("active", v.id === stageId));
-        document.querySelectorAll("[data-stage-btn]").forEach((b) =>
-          b.classList.toggle("active", b.getAttribute("data-stage-btn") === stageId));
         if (stageId === "view-ops") checkReconstructorEmbed(false);
       };
 
@@ -716,6 +829,72 @@
             break;
           case "radio_path":
             if (msg.path) { pathOverride = msg.path; updateRadioPills(); }
+            break;
+          case "source_info":
+            sourceInfo = {
+              known: Boolean(msg.known),
+              is_video: Boolean(msg.is_video),
+              filename: msg.filename || "",
+              espnow_available: Boolean(msg.espnow_available),
+              can_download: Boolean(msg.can_download),
+            };
+            updateDownloadBarUI();
+            break;
+          case "video_download":
+            if (msg.status === "downloading") {
+              dlInProgress = true;
+              const pct = Math.max(0, Math.min(100, Number(msg.progress || 0)));
+              if (dlBadgeEl) {
+                dlBadgeEl.textContent = "ESP-NOW 0xEF";
+                dlBadgeEl.style.background = "var(--warning)";
+                dlBadgeEl.style.color = "#000";
+              }
+              if (dlStatusEl) {
+                dlStatusEl.textContent = `DOWNLOADING ${msg.filename || "VIDEO"} STRICTLY OVER ESP-NOW... ${pct}% (${msg.received_chunks || 0}/${msg.total_chunks || 20} PKTS)`;
+              }
+              if (dlProgWrapEl) dlProgWrapEl.style.display = "block";
+              if (dlProgBarEl) dlProgBarEl.style.width = pct + "%";
+              if (dlBtnEl) {
+                dlBtnEl.disabled = true;
+                dlBtnEl.textContent = `TRANSFERRING (${pct}%)...`;
+              }
+            } else if (msg.status === "complete") {
+              dlInProgress = false;
+              if (dlProgWrapEl) dlProgWrapEl.style.display = "block";
+              if (dlProgBarEl) dlProgBarEl.style.width = "100%";
+              if (dlBadgeEl) {
+                dlBadgeEl.textContent = "COMPLETE";
+                dlBadgeEl.style.background = "var(--success)";
+                dlBadgeEl.style.color = "#000";
+              }
+              if (dlStatusEl) {
+                dlStatusEl.textContent = `ESP-NOW DOWNLOAD COMPLETE: ${msg.filename || "source_video.mp4"}`;
+              }
+              if (dlBtnEl) {
+                dlBtnEl.disabled = !isEspNowOnline();
+                dlBtnEl.textContent = `DOWNLOAD SOURCE VIDEO OVER ESP-NOW [${msg.filename || "source_video.mp4"}]`;
+              }
+              if (msg.url) {
+                const a = document.createElement("a");
+                a.href = msg.url;
+                a.download = msg.filename || "source_video.mp4";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }
+            } else if (msg.status === "error") {
+              dlInProgress = false;
+              if (dlProgWrapEl) dlProgWrapEl.style.display = "none";
+              if (dlBadgeEl) {
+                dlBadgeEl.textContent = "ABORTED";
+                dlBadgeEl.style.background = "var(--danger)";
+                dlBadgeEl.style.color = "#fff";
+              }
+              if (dlStatusEl) {
+                dlStatusEl.textContent = String(msg.error || "ESP-NOW DOWNLOAD FAILED").toUpperCase();
+              }
+              setTimeout(updateDownloadBarUI, 2800);
+            }
             break;
         }
       }
