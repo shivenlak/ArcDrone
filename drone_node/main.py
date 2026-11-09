@@ -2,6 +2,7 @@
 import argparse
 import queue
 import socket
+import struct
 import time
 from typing import Any, Dict, List, Optional
 
@@ -253,6 +254,19 @@ def main() -> None:
 
     source = open_frame_source(args.video)
     use_camera = source.is_live_camera()
+    _clip_order = [
+        "uav0000268_05773_v",
+        "uav0000086_00000_v",
+        "uav0000182_00000_v",
+        "uav0000117_02622_v",
+        "uav0000339_00001_v",
+        "uav0000137_00458_v",
+    ]
+    clip_idx = 0
+    for _i, _cid in enumerate(_clip_order, start=1):
+        if _cid in str(args.video):
+            clip_idx = _i
+            break
     if not source.isOpened():
         if use_camera:
             print(
@@ -360,7 +374,9 @@ def main() -> None:
                     slon,
                     scene_hz=args.scene_hz,
                 )
+                scene_bytes = scene_bytes + struct.pack(">BBH", 0xCF, clip_idx, frame_idx & 0xFFFF)
                 state["scene_kbps"] = kbps
+                link.send_scene(scene_bytes)
                 udp_sock.sendto(scene_bytes, (args.scene_host, args.scene_port))
                 if args.scene_host == "127.0.0.1":
                     try:

@@ -21,6 +21,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from drone_node.scene_codec import SceneCodec
 from protocol import packets as p
 from protocol.link import Link
 
@@ -47,6 +48,7 @@ class Station:
         self.link = None
         self.loop = None
         self.queue = None
+        self.scene_decoder = SceneCodec(dst_size=(720, 540))
 
     # --- startup / shutdown ---
 
@@ -95,6 +97,10 @@ class Station:
             self.mode = p.MODE_NAMES.get(packet["mode"], "PATROL")
             self.drone_buffered = packet["buffered"]
             await self.broadcast(self.drone_msg())
+        elif packet["type"] in (0xAD, 0xAE) and "scene_bytes" in packet:
+            frame = self.scene_decoder.decode_frame(packet["scene_bytes"], canvas_w=720, canvas_h=540)
+            if frame is not None:
+                await self.broadcast({"event": "scene", "frame": frame})
 
     async def _handle_event(self, name, info):
         if name in ("link_up", "link_down"):

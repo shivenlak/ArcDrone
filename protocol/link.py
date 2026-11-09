@@ -18,6 +18,7 @@ Set ARCDRONE_KEY on both sides to encrypt and authenticate every frame (protocol
 
 import collections
 import random
+import socket
 import threading
 import time
 
@@ -78,6 +79,9 @@ class Link:
         self._heartbeat_period = HEARTBEAT_PERIOD
         self.radio = {}  # last "# radio ..." status line from the bridge, parsed
         self._radio_at = 0.0
+        self._pending_scene = None
+        self._last_scene_tx = 0.0
+        self._scene_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def start(self):
         self._running = True
@@ -96,6 +100,12 @@ class Link:
                 self.stats["dropped"] += 1
             self._outbox.append((seq, p.encode(ptype, seq, **fields)))
         return seq
+
+    def send_scene(self, scene_bytes):
+        """Queue the latest SceneCodec (0xAD/0xAE) frame for best-effort transmission over the radio."""
+        if scene_bytes:
+            with self._lock:
+                self._pending_scene = bytes(scene_bytes)
 
     @property
     def buffered(self):
@@ -186,6 +196,19 @@ class Link:
         wire = data
         if self.sealer is not None:
             data = self.sealer.open(data)  # None for plain, forged, tampered or wrong-key frames
+        if data is not None and len(data) >= 4 and data[0] in (0xAD, 0xAE):
+            self.stats["bytes_rx"] += len(wire)
+            now = time.monotonic()
+            self._last_heard = now
+            if not self.up:
+                self.up = True
+                self.on_event("link_up")
+            try:
+                self._scene_udp.sendto(data, ("127.0.0.1", 9999))
+            except OSError:
+                pass
+            self.on_packet({"type": data[0], "scene_bytes": data, "wire": wire.hex().upper()})
+            return
         packet = p.decode(data) if data is not None else None
         if packet is None:
             self.stats["bad_packets"] += 1
@@ -257,10 +280,20 @@ class Link:
 
         if not self.up:
             return  # hold everything in the buffer until we hear the peer again
+        scene_pkt = None
         with self._lock:
             if not self._outbox:
-                return
-            seq, data = self._outbox[0]
+                if self._pending_scene is not None and (now - self._last_scene_tx) >= 0.25:
+                    scene_pkt = self._pending_scene
+                    self._pending_scene = None
+                    self._last_scene_tx = now
+                else:
+                    return
+            else:
+                seq, data = self._outbox[0]
+        if scene_pkt is not None:
+            self._write(scene_pkt)
+            return
         if seq == self._tx_seq:
             if now - self._last_tx < self._timeout:
                 return

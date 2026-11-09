@@ -13,7 +13,7 @@ tmp/
 # Data & model weights
 data/*
 !data/.gitkeep
-**/static/clips/*.mp4
+drone_node/static/clips/*.mp4
 *.pt
 *.onnx
 *_ncnn_model/

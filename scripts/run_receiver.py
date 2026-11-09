@@ -127,13 +127,22 @@ def _free_port(port: int) -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if s.connect_ex(("127.0.0.1", port)) != 0:
             return
+    my_pid = os.getpid()
     try:
-        out = subprocess.check_output(["lsof", "-ti", f"tcp:{port}"], text=True, stderr=subprocess.DEVNULL)
-        my_pid = os.getpid()
-        for tok in out.split():
-            pid = int(tok)
-            if pid != my_pid:
-                os.kill(pid, signal.SIGTERM)
+        if sys.platform == "win32":
+            out = subprocess.check_output(["netstat", "-ano"], text=True, stderr=subprocess.DEVNULL)
+            for line in out.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.split()
+                    pid = int(parts[-1])
+                    if pid != my_pid and pid > 0:
+                        subprocess.run(["taskkill", "/F", "/PID", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            out = subprocess.check_output(["lsof", "-ti", f"tcp:{port}"], text=True, stderr=subprocess.DEVNULL)
+            for tok in out.split():
+                pid = int(tok)
+                if pid != my_pid:
+                    os.kill(pid, signal.SIGTERM)
         time.sleep(0.4)
     except Exception:
         pass

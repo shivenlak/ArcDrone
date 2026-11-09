@@ -102,21 +102,45 @@ def prompt_for_port(default_port: Optional[str] = None) -> Optional[str]:
 
 
 def find_available_videos() -> List[str]:
-    """Find all mp4 videos in data/ and data/test_cases/."""
+    """Find all mp4 videos in data/clips/, ground_station/static/clips/, and data/."""
     candidates = []
+    visdrone_clips = [
+        "uav0000268_05773_v.mp4",
+        "uav0000086_00000_v.mp4",
+        "uav0000182_00000_v.mp4",
+        "uav0000117_02622_v.mp4",
+        "uav0000339_00001_v.mp4",
+        "uav0000137_00458_v.mp4",
+    ]
+    search_dirs = [
+        os.path.join(_REPO_ROOT, "data", "clips"),
+        os.path.join(_REPO_ROOT, "ground_station", "static", "clips"),
+        os.path.join(_REPO_ROOT, "drone_node", "static", "clips"),
+    ]
+    seen_names = set()
+    for name in visdrone_clips:
+        for d in search_dirs:
+            p = os.path.join(d, name)
+            if os.path.isfile(p) and name not in seen_names:
+                candidates.append(p)
+                seen_names.add(name)
+                break
+
     preferred = [
         os.path.join(_REPO_ROOT, "data", "visdrone_aerial_sample.mp4"),
         os.path.join(_REPO_ROOT, "data", "sample_traffic.mp4"),
         os.path.join(_REPO_ROOT, "data", "ishan_visdrone_side_by_side.mp4"),
     ]
     for p in preferred:
-        if os.path.isfile(p):
+        if os.path.isfile(p) and os.path.basename(p) not in seen_names:
             candidates.append(p)
+            seen_names.add(os.path.basename(p))
 
     all_mp4 = glob.glob(os.path.join(_REPO_ROOT, "data", "**", "*.mp4"), recursive=True)
     for p in all_mp4:
-        if p not in candidates:
+        if os.path.basename(p) not in seen_names:
             candidates.append(p)
+            seen_names.add(os.path.basename(p))
 
     return candidates
 

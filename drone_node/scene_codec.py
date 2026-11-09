@@ -505,7 +505,11 @@ class SceneCodec:
             for trk in self._dec_tracks.values():
                 trk.vel = [trk.vel[0] * 0.4, trk.vel[1] * 0.4]
 
-        return self._build_output(seq, len(data), now)
+        out = self._build_output(seq, len(data), now)
+        if len(data) >= 8 and data[-4] == 0xCF:
+            out["clip_idx"] = int(data[-3])
+            (out["video_frame"],) = struct.unpack(">H", data[-2:])
+        return out
 
     def _apply_decoder_state(
         self,

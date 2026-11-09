@@ -480,7 +480,8 @@
     }
 
     function stepVisDroneClip() {
-      if (state.wsLive) return;
+      if (state.wsLive && (performance.now() - (state.lastLiveRx || 0) < 4000)) return;
+      state.wsLive = false;
       const data = state.clipData;
       if (!data || !data.frames || !data.frames.length) return;
 
@@ -511,6 +512,34 @@
       });
     }
 
+    function handleLiveSceneFrame(frame) {
+      if (!frame) return;
+      state.wsLive = true;
+      state.lastLiveRx = performance.now();
+      if (frame.clip_idx !== undefined) {
+        if (frame.clip_idx >= 1 && frame.clip_idx <= CLIPS.length) {
+          const targetClip = CLIPS[frame.clip_idx - 1];
+          if (state.clipId !== targetClip.id || !clipVideo.classList.contains("on")) {
+            loadClip(targetClip.id);
+          }
+          if (frame.video_frame !== undefined && clipVideo.readyState >= 2 && clipVideo.duration) {
+            const targetSec = ((frame.video_frame % 150) / 10.0) % clipVideo.duration;
+            if (Math.abs(clipVideo.currentTime - targetSec) > 0.7) {
+              try { clipVideo.currentTime = targetSec; } catch (e) {}
+            }
+          }
+        } else if (frame.clip_idx === 0) {
+          clipVideo.classList.remove("on");
+          state.clipCase = "LIVE SENDER";
+          state.clipTitle = "LIVE SENDER EDGE CAMERA STREAM";
+          document.querySelectorAll("#clipBar button").forEach(function (b) {
+            b.classList.remove("on");
+          });
+        }
+      }
+      ingestFrame(frame);
+    }
+
     function connectWs() {
       try {
         const wsHost = location.hostname || "127.0.0.1";
@@ -518,12 +547,10 @@
         ws.onmessage = function (ev) {
           try {
             const frame = JSON.parse(ev.data);
-            if (!state.wsLive) state.wsLive = true;
-            ingestFrame(frame);
+            handleLiveSceneFrame(frame);
           } catch (e) {}
         };
         ws.onclose = function () {
-          state.wsLive = false;
           setTimeout(connectWs, 2500);
         };
       } catch (e) {}
@@ -537,12 +564,17 @@
         rws.onmessage = function (ev) {
           try {
             const msg = JSON.parse(ev.data);
-            if (msg.event === "alert") {
+            if (msg.event === "scene" && msg.frame) {
+              handleLiveSceneFrame(msg.frame);
+            } else if (msg.event === "alert") {
               state.radioLive = true;
               state.radioSeq = msg.seq;
               state.radioAlert = msg;
               if (msg.lat) state.lat = msg.lat;
               if (msg.lon) state.lon = msg.lon;
+              if (!state.wsLive && msg.count >= 60 && state.clipId !== "uav0000137_00458_v") {
+                loadClip("uav0000137_00458_v");
+              }
               render();
             }
           } catch (e) {}
@@ -600,7 +632,7 @@
         b.type = "button";
         b.dataset.seq = c.id;
         b.textContent = "[" + (i + 1) + "] " + c.label;
-        b.onclick = function () { loadClip(c.id); };
+        b.onclick = function () { state.wsLive = false; loadClip(c.id); };
         bar.appendChild(b);
       });
     })();
