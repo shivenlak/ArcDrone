@@ -8,12 +8,16 @@ Drone: python -m drone_node.main ...  (default --scene-port 9999)
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
+import atexit
 import json
+import signal
+import sys
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Set
+from typing import Optional, Set
 
 import websockets
 from websockets.server import serve
@@ -77,38 +81,89 @@ async def _ws_handler(websocket) -> None:
         CLIENTS.discard(websocket)
 
 
+_HTTPD: Optional[ThreadingHTTPServer] = None
+
+
+class ReusableHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
+def _close_http() -> None:
+    global _HTTPD
+    srv = _HTTPD
+    _HTTPD = None
+    if srv is not None:
+        try:
+            srv.shutdown()
+        except Exception:
+            pass
+        try:
+            srv.server_close()
+        except Exception:
+            pass
+
+
 def _serve_http() -> None:
+    global _HTTPD
     static = str(STATIC_DIR)
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=static, **kwargs)
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", HTTP_PORT), Handler)
-    httpd.serve_forever()
+        def log_message(self, format, *args):
+            pass
+
+    _HTTPD = ReusableHTTPServer(("127.0.0.1", HTTP_PORT), Handler)
+    atexit.register(_close_http)
+    try:
+        _HTTPD.serve_forever()
+    finally:
+        _close_http()
 
 
-async def _async_main() -> None:
+async def _async_main(serve_http: bool = True) -> None:
     loop = asyncio.get_running_loop()
-    await loop.create_datagram_endpoint(
+    transport, _ = await loop.create_datagram_endpoint(
         lambda: SceneUdpProtocol(loop),
         local_addr=("0.0.0.0", UDP_PORT),
     )
-    async with serve(_ws_handler, "127.0.0.1", WS_PORT):
-        print(
-            "[SCENE RELAY] UDP :%d -> ws://127.0.0.1:%d (~%.0f Hz from drone)"
-            % (UDP_PORT, WS_PORT, SCENE_HZ_DEFAULT)
-        )
-        print("[SCENE RELAY] UI: http://127.0.0.1:%d/reconstructor.html" % HTTP_PORT)
-        await asyncio.Future()
+    stop_fut = loop.create_future()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, lambda: (not stop_fut.done()) and stop_fut.set_result(None))
+        except NotImplementedError:
+            pass
+    try:
+        async with serve(_ws_handler, "127.0.0.1", WS_PORT):
+            print(
+                "[SCENE RELAY] UDP :%d -> ws://127.0.0.1:%d (~%.0f Hz from drone)"
+                % (UDP_PORT, WS_PORT, SCENE_HZ_DEFAULT)
+            )
+            if serve_http:
+                print("[SCENE RELAY] UI: http://127.0.0.1:%d/reconstructor.html" % HTTP_PORT)
+            await stop_fut
+    finally:
+        transport.close()
+        _close_http()
 
 
 def main() -> None:
-    if not (STATIC_DIR / "reconstructor.html").is_file():
-        print("[WARN] Missing %s/reconstructor.html" % STATIC_DIR)
-    t = threading.Thread(target=_serve_http, daemon=True)
-    t.start()
-    asyncio.run(_async_main())
+    parser = argparse.ArgumentParser(description="UDP scene relay for browser reconstructor")
+    parser.add_argument("--no-http", action="store_true", help="Do not bind HTTP port 8080 (WS :8765 + UDP :9999 only)")
+    args = parser.parse_args()
+
+    if not args.no_http:
+        if not (STATIC_DIR / "reconstructor.html").is_file():
+            print("[WARN] Missing %s/reconstructor.html" % STATIC_DIR)
+        t = threading.Thread(target=_serve_http, daemon=True)
+        t.start()
+    try:
+        asyncio.run(_async_main(serve_http=not args.no_http))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        _close_http()
 
 
 if __name__ == "__main__":

@@ -8,12 +8,15 @@ Spins up:
 """
 
 import argparse
+import atexit
 import collections
 import glob
 import json
 import math
 import os
 import random
+import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -198,13 +201,29 @@ def main():
         threading.Thread(target=_open_browser, daemon=True).start()
 
     relay = None
-    try:
-        urllib.request.urlopen("http://127.0.0.1:8080/reconstructor.html", timeout=0.4)
-        print("[+] Scene reconstructor already running on :8080")
-    except Exception:
-        print("[+] Starting scene reconstructor relay (http://127.0.0.1:8080/reconstructor.html)")
+
+    def _cleanup_relay(*_args):
+        nonlocal relay
+        if relay is not None and relay.poll() is None:
+            try:
+                relay.terminate()
+                relay.wait(timeout=2.0)
+            except Exception:
+                try:
+                    relay.kill()
+                except Exception:
+                    pass
+
+    atexit.register(_cleanup_relay)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        ws_up = s.connect_ex(("127.0.0.1", 8765)) == 0
+    if ws_up:
+        print("[+] Scene WebSocket relay already running on :8765")
+    else:
+        print(f"[+] Starting scene WebSocket relay (:8765, UI served on http://localhost:{args.http_port}/reconstructor.html)")
         relay = subprocess.Popen(
-            [sys.executable, "-u", "-m", "drone_node.scene_ws_relay"],
+            [sys.executable, "-u", "-m", "drone_node.scene_ws_relay", "--no-http"],
             cwd=_REPO_ROOT,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -216,8 +235,7 @@ def main():
         uvicorn.run(app, host=args.host, port=args.http_port, log_level="warning")
     finally:
         stop_event.set()
-        if relay is not None and relay.poll() is None:
-            relay.terminate()
+        _cleanup_relay()
 
 
 if __name__ == "__main__":

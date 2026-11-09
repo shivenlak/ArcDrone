@@ -10,7 +10,9 @@ Handles:
 from __future__ import annotations
 
 import argparse
+import atexit
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -120,20 +122,32 @@ def prompt_for_port(default_port: Optional[str] = None) -> Optional[str]:
 
 
 def start_scene_relay():
-    """Serve reconstructor.html on :8080 and UDP :9999 -> ws :8765. Skip if already up."""
-    try:
-        urllib.request.urlopen("http://127.0.0.1:8080/reconstructor.html", timeout=0.4)
-        print("[*] Scene reconstructor already running on :8080")
-        return None
-    except Exception:
-        pass
-    print("[*] Starting scene reconstructor relay (http://127.0.0.1:8080/reconstructor.html)...")
-    return subprocess.Popen(
-        [sys.executable, "-u", "-m", "drone_node.scene_ws_relay"],
+    """Start UDP :9999 -> ws :8765 relay without occupying HTTP port 8080 (UI is served on :8000)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if s.connect_ex(("127.0.0.1", 8765)) == 0:
+            print("[*] Scene WebSocket relay already running on :8765")
+            return None
+    print("[*] Starting scene WebSocket relay (UDP :9999 -> WS :8765)...")
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "-m", "drone_node.scene_ws_relay", "--no-http"],
         cwd=_REPO_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+    def _stop_proc():
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2.0)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+    atexit.register(_stop_proc)
+    return proc
 
 
 def open_browser_when_ready(url: str, timeout: float = 12.0) -> None:
