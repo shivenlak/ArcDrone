@@ -507,7 +507,9 @@ class SceneCodec:
 
         out = self._build_output(seq, len(data), now)
         if len(data) >= 8 and data[-4] == 0xCF:
-            out["clip_idx"] = int(data[-3])
+            raw_clip = int(data[-3])
+            out["clip_idx"] = raw_clip & 0x7F
+            out["sender_lora_only"] = bool(raw_clip & 0x80)
             (out["video_frame"],) = struct.unpack(">H", data[-2:])
         return out
 

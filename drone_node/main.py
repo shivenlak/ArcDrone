@@ -374,7 +374,17 @@ def main() -> None:
                     slon,
                     scene_hz=args.scene_hz,
                 )
-                scene_bytes = scene_bytes + struct.pack(">BBH", 0xCF, clip_idx, frame_idx & 0xFFFF)
+                sender_radio = link.radio or {}
+                sender_lora_only = (
+                    sender_radio.get("mode") in ("LORA_ONLY", "MUTED")
+                    or (
+                        sender_radio.get("espnow_rx", 0) > 0
+                        and (sender_radio.get("espnow_age", 0) < 0 or sender_radio.get("espnow_age", 0) >= 3500)
+                        and sender_radio.get("lora_age", -1) >= 0
+                    )
+                )
+                clip_byte = (clip_idx & 0x7F) | (0x80 if sender_lora_only else 0x00)
+                scene_bytes = scene_bytes + struct.pack(">BBH", 0xCF, clip_byte, frame_idx & 0xFFFF)
                 state["scene_kbps"] = kbps
                 link.send_scene(scene_bytes)
                 udp_sock.sendto(scene_bytes, (args.scene_host, args.scene_port))

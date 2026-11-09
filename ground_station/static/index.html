@@ -352,6 +352,8 @@
 
     <div class="kpi-strip">
       <div class="kpi-pill"><span class="kpi-label">LINK:</span><span id="link" class="status-wait">WAIT</span></div>
+      <div class="kpi-pill" id="espnow-pill" style="cursor:pointer;" title="Click to toggle ESP-NOW (Video) / LoRa-Only Failover"><span class="kpi-label">ESP-NOW (VIDEO):</span><span id="espnow-status" class="status-up">ON</span></div>
+      <div class="kpi-pill"><span class="kpi-label">LORA 915 (COORDS):</span><span id="lora-status" class="status-up">ON</span></div>
       <div class="kpi-pill"><span class="kpi-label">MODE:</span><span id="mode">--</span></div>
       <div class="kpi-pill"><span class="kpi-label">BUF:</span><span id="buffered">0</span></div>
       <div class="kpi-pill"><span class="kpi-label">RX:</span><span id="received">0</span></div>
@@ -498,7 +500,7 @@
       const localFile = window.location.protocol === "file:";
       // Same-origin copy of demo's reconstructor (ground_station/static/reconstructor.html).
       // Live UDP still comes from scene_ws_relay on ws://127.0.0.1:8765 when the sender is running.
-      const reconstructorUrl = "/reconstructor.html?v=fix3" + (isDemo ? "&demo=1" : "");
+      const reconstructorUrl = "/reconstructor.html?v=fix4" + (isDemo ? "&demo=1" : "");
       const cameraUrl = "http://127.0.0.1:8081/video.mjpg";
 
       // VisDrone class names (index -> name). Server already sends the name for live alerts.
@@ -507,6 +509,7 @@
       const el = (id) => document.getElementById(id);
       const linkEl = el("link"), modeEl = el("mode"), bufEl = el("buffered"),
             rxEl = el("received"), delivEl = el("delivered"), rttEl = el("rtt"),
+            espnowEl = el("espnow-status"), loraEl = el("lora-status"), espnowPillEl = el("espnow-pill"),
             alertsEl = el("alerts"), commandsEl = el("commands"),
             retrievedNoteEl = el("retrieved-note"),
             selectedSummaryEl = el("selected-alert-summary"),
@@ -516,8 +519,50 @@
       let ws = null;
       let receivedCount = 0;
       let selectedAlertSeq = 0;
+      let pathOverride = "AUTO";
+      let lastRadio = null;
+      let senderLoraOnly = false;
       const alertsList = [];
       const cmdRows = new Map();   // cmd_id -> <li>
+
+      function updateRadioPills() {
+        const r = lastRadio;
+        let espOn = true;
+        let loraOn = true;
+        if (pathOverride === "LORA_ONLY") {
+          espOn = false;
+          loraOn = true;
+        } else if (pathOverride === "DUAL") {
+          espOn = true;
+          loraOn = true;
+        } else if (r && r.mode === "MUTED") {
+          espOn = false;
+          loraOn = false;
+        } else if (senderLoraOnly || (r && r.mode === "LORA_ONLY")) {
+          espOn = false;
+          loraOn = true;
+        } else if (r && ((r.espnow_rx || 0) > 0 || (r.lora_rx || 0) > 0)) {
+          espOn = (r.espnow_age !== undefined && r.espnow_age >= 0 && r.espnow_age < 3500);
+          loraOn = (r.lora_age !== undefined && r.lora_age >= 0 && r.lora_age < 6000) || espOn;
+        }
+        if (espnowEl) {
+          espnowEl.textContent = espOn ? "ON" : "OFF (FAILOVER)";
+          espnowEl.className = espOn ? "status-up" : "status-wait";
+        }
+        if (loraEl) {
+          loraEl.textContent = loraOn ? (espOn ? "ON" : "FAILOVER") : "MUTED";
+          loraEl.className = loraOn ? "status-up" : "status-down";
+        }
+      }
+      if (espnowPillEl) {
+        espnowPillEl.addEventListener("click", () => {
+          pathOverride = (pathOverride === "LORA_ONLY") ? "AUTO" : "LORA_ONLY";
+          updateRadioPills();
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ action: "radio_path", path: pathOverride }));
+          }
+        });
+      }
 
       // ---------------- stage router ----------------
       window.switchStage = function (stageId) {
@@ -660,6 +705,17 @@
             if (msg.rtt_ms_avg !== undefined && msg.rtt_ms_avg !== null)
               rttEl.textContent = Math.round(msg.rtt_ms_avg) + " MS";
             if (msg.up !== undefined && linkEl.textContent === "WAIT") setLink(msg.up);
+            if ("radio" in msg) { lastRadio = msg.radio; updateRadioPills(); }
+            break;
+          case "scene":
+            if (msg.radio !== undefined) lastRadio = msg.radio;
+            if (msg.frame && msg.frame.sender_lora_only !== undefined) {
+              senderLoraOnly = Boolean(msg.frame.sender_lora_only);
+            }
+            updateRadioPills();
+            break;
+          case "radio_path":
+            if (msg.path) { pathOverride = msg.path; updateRadioPills(); }
             break;
         }
       }

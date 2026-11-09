@@ -187,8 +187,21 @@ class Link:
             self._handle_line(line.decode(errors="replace"))
 
     def _handle_line(self, line):
-        if line.startswith("# radio "):
-            self._handle_radio(line)
+        stripped = line.strip()
+        if stripped.startswith("# radio "):
+            self._handle_radio(stripped)
+            return
+        if stripped == "# lora only":
+            self.radio["mode"] = "LORA_ONLY"
+            self._radio_at = time.monotonic()
+            return
+        if stripped == "# muted":
+            self.radio["mode"] = "MUTED"
+            self._radio_at = time.monotonic()
+            return
+        if stripped == "# unmuted":
+            self.radio["mode"] = "DUAL"
+            self._radio_at = time.monotonic()
             return
         data = p.from_line(line)
         if data is None:
@@ -280,10 +293,21 @@ class Link:
 
         if not self.up:
             return  # hold everything in the buffer until we hear the peer again
+        espnow_live = (
+            not self.radio
+            or (
+                self.radio.get("mode", "DUAL") == "DUAL"
+                and (
+                    self.radio.get("espnow_rx", 0) == 0
+                    or 0 <= self.radio.get("espnow_age", 0) < 3500
+                )
+            )
+        )
+        scene_interval = 0.25 if espnow_live else 0.80
         scene_pkt = None
         with self._lock:
             if not self._outbox:
-                if self._pending_scene is not None and (now - self._last_scene_tx) >= 0.25:
+                if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
                     scene_pkt = self._pending_scene
                     self._pending_scene = None
                     self._last_scene_tx = now
@@ -291,7 +315,21 @@ class Link:
                     return
             else:
                 seq, data = self._outbox[0]
+                if (
+                    seq == self._tx_seq
+                    and (now - self._last_tx) < self._timeout
+                    and (now - self._last_tx) >= 0.18
+                    and self._pending_scene is not None
+                    and (now - self._last_scene_tx) >= scene_interval
+                ):
+                    scene_pkt = self._pending_scene
+                    self._pending_scene = None
+                    self._last_scene_tx = now
         if scene_pkt is not None:
+            if not espnow_live and len(scene_pkt) >= 8 and scene_pkt[-4] == 0xCF:
+                b = bytearray(scene_pkt)
+                b[-3] |= 0x80
+                scene_pkt = bytes(b)
             self._write(scene_pkt)
             return
         if seq == self._tx_seq:

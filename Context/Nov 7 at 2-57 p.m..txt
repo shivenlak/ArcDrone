@@ -1,0 +1,166 @@
+Summary
+	-	A proposed solution involves using an ESP32 with lower modules to create two APIs: a primary loop for long-range communication and a secondary loop for enhanced capabilities, potentially using 2.4 GHz Wi-Fi for video transmission if the primary method is insufficient. This involves dividing the data capacity to manage control signals and video data effectively.
+	-	Security is identified as a crucial consideration, suggesting the use of public-key cryptography like RSA or Diffie-Hellman for secure communication. The desired dashboard setup involves separate interfaces for the drone (showing video and bounding boxes) and a control center (managing settings and receiving data).
+
+
+So, uh?
+
+[Speaker 1]
+What is the problem? Actually, the problem? Okay, the problem statement specifically mentions that the problem is communication, right? So what, because, I understand, like the Laura modules aren't available right now. So, you guys, whether you choose to use them or not, it's not really your concern right now. The main thing is figuring out the communication where you can get something from one microcontroller or one, like simulated, sort of light controller to the other.
+
+Fire some form of compression or just text based transfer, right? So, which is kind of a big deal like, that's a, that's a pretty hard thing to do for any sort of person. Um, and and that's essentially the problem that data transmission XL. So, you guys are allowed to use the SPS with Wi-Fi as well.
+
+Looks perfectly fine. However, on one of the computers there's does, like the computer vision model, still needs to be there just because, um, the outputs from video and the output conversion models very largely, and it's easier to do the transformation, but also it's part of the problem, right? Um, on the simulated website?
+
+Okay, that's basically,
+
+[Speaker 2]
+Uh, now.
+
+[Speaker 3]
+Uh,
+
+[Speaker 2]
+We have a solutions as a in theory ready, so I've wanted to tackle the hardware problem as well. So, hence, I added the esp32 with lower. Our modules. So, we were gonna make two apis basically.
+
+[Speaker 1]
+Yeah, one would
+
+[Speaker 3]
+Be
+
+[Speaker 2]
+The primary Loop, which would run on the Laura okay, which would have a bandwidth of three kilobytes per second. Okay, and hence, would be a longer range, which would work on the frequency 938 megahertz to 900 megahertz, yeah. Which would solve the problem of long range. Yeah.
+
+[Speaker 1]
+And reliable. Yeah. That's two thirds of our problem. Now that we are made, this is just like, when is the module coming, though that's on there? More detail.
+
+But but, but radio gives you the advantage of distance or life
+
+[Speaker 4]
+And relax,
+
+[Speaker 2]
+So you can't actually use Wi-Fi on a drone, you know, yeah,
+
+[Speaker 1]
+Exactly. That's exactly. That's why I'm using. That's why. That's why radio is part of the problem exactly. If you don't have it, then honestly, why? Just make sure. Okay, I, I forgot, just make sure, uh, what you specifically, like the bandwidth you use on the Wi-Fi, because Wi-Fi is easier to transmit data.
+
+The bandwidth you use make sure it's compressed enough they would support radio, too. So it's a it's a talking point for your band, right? You can use like, for example. For example, if I have, for example, supporter, suppose my Wi-Fi bandwidth class, my Wi-Fi bandwidth is. Whatever, uh, whatever kilo bites per second, right?
+
+Let's say, eight kilobytes a second and for radio. It's three, right? As you say, um, make sure on Wi-Fi. You're doing a maximum of three kilobytes per second of data transmission, so it works perfectly with the radio as well.
+
+[Speaker 2]
+You're saying if the simulation, if you, if you don't have Laura, we can just use, like, simulate it, just
+
+[Speaker 3]
+Make
+
+[Speaker 1]
+Sure.
+
+[Speaker 2]
+Yeah,
+
+[Speaker 1]
+The data itself is compressed enough.
+
+[Speaker 2]
+Yeah, especially the
+
+[Speaker 1]
+Video data. Yeah, because that's the hard part. If you're not
+
+[Speaker 3]
+Like, figure out. It's kind of up to you guys to figure out how.
+
+[Speaker 1]
+Gonna get that video data, whether it's via text or it's by,
+
+[Speaker 2]
+Uh, anything else. Like, anything else any platform, uh,
+
+[Speaker 1]
+Like a hex stream or whatever, you guys want to use. Uh-huh. That it gets to the other controller wirelessly, right? That's what I mean, I did the problem. It's the hardest part. And it's going to be difficult for you guys. Because compression isn't easy with video streams, this large yeah.
+
+[Speaker 2]
+I'm not actually gonna stream the video through that. Three kilobytes, you know?
+
+[Speaker 1]
+Yeah, no, that's. That's, like, I'm just
+
+[Speaker 2]
+Gonna use the output given by the C, the by the from by the model, right? But we would have to include the option of having two-way communication in that. So, actually, dividing the three kilo bytes range for, let's say, the inputs from the model. A small segment for me having to control the Drone here, setting some boundaries.
+
+S***, like that, yeah, so it's
+
+[Speaker 1]
+More about
+
+[Speaker 2]
+Capacity checking the capacity that we can work everything into that 3K into that. That's,
+
+[Speaker 1]
+That's part of that's the main problem. You guys have, um,
+
+[Speaker 2]
+Okay, you're not
+
+[Speaker 1]
+Streaming the video stream, right? Of course. You can stream the bound boxes itself. So, what the, what the coordinates, or um, like, relative to the video with the coordinates of the mailbox would be and then, um, on the other computer. You can have some sort of like supposed algorithm.
+
+To like simulate the movement of the Drone sensitive, right, two-way communication positions.
+
+[Speaker 2]
+It makes sense, although, although, although, what I think? I was also thinking of giving you a second. So, now, the second API comes in hand. Like, if if we get the Laura models fine. Yeah, like when we get the lower modules, that would be our primary Loop for communication and allow a secondary Loop for esp3 without the.
+
+Uh, limitation of the three kilobytes, which would allow the Drone yeah. We allow the video to be transmitted over 2.4 gigahertz as a secondary. If needed
+
+[Speaker 1]
+For sure. Why not? Yeah, yeah, it's as it as an enhancement. Yeah, yes, you can. You're free to build upon the problem. I'm not restricting you to the problem itself. Yep, the problem is just the bare minimum you need to work. Yes, yes, yes, yes. And, um.
+
+[Speaker 2]
+What do you think about security?
+
+[Speaker 1]
+That's something you need to figure out, uh, figure out okay, either you you decided. Decide to use a private key public key approach. That's probably the best way you're gonna do this, so you're gonna. And then it's, it's pretty easy from there to figure out, like the cryptography isn't really a problem for you.
+
+Like, you guys are gonna make a generic any RSA algorithm-based talking. Any Diffie helmet algorithm?
+
+[Speaker 2]
+Uh-Huh. Nations.
+
+Can you please tell me the dashboard what you're looking for? Well, on the dashboard, what do you expect
+
+[Speaker 1]
+I expect? So, on one computer. There's gonna be like supposed two dashboards, right? Because there's two way communication. Yeah, drone dashboard is all that's gonna be is a basic command like type of interface that that has a video stream for that laptop with the bound boxes and what data it's sending the other laptop has the data it's receiving the Drone cord, like the Drone, uh, movement.
+
+Move. Coordinates wardrobe movement. Calculation algorithm is doing output of that, and what it's sending back so and then, and a control center and a control setting. And then, also like a. What do you guys had video in the second laptop or not? I don't care, um? Have a have about have a box where where it has like a have, like a simulated mountain box, but without the video stream.
+
+It's literally just a blank screen with the inbox inside.
+
+[Speaker 2]
+I actually did
+
+[Speaker 1]
+That. That shows you where on the second and on the first one, you have the actual bound box, right? And then, you're, they need to track perfectly. So, they need the same spot this video. And, uh. So, like a heat map kind of. Yeah, I, I do understand, um?
+
+[Speaker 2]
+What do you think about the? Q ground control, right? What do you mean? Have you used it few ground control? Yeah, yeah, we have.
+
+[Speaker 1]
+But right now, we're just using, like, we have our own proprietary from Christian movies. We have to make some some cheese software. Um, but I'm honestly fine with anything. Like, like, right now, the point of the project is to have a perfect concept, right? So, if so, I find, like, whatever software that there's no restriction on software data set is in the file.
+
+So, you're gonna have a data set of drone public downwards drone imagery, uh, I think it's a Chinese data set. I forgot exactly which one it was. It's been a while since there was a problem, uh, but yeah, you're gonna have like a data set that has like the download stream, right?
+
+That's what I want you to use for for talking about boxes. Any other
+
+[Speaker 2]
+Constraints you want to give us,
+
+[Speaker 1]
+Um, not really like everything seems fine, um, as the main constraint, is it being Wireless fully Wireless power delivery is, there's no constraint on that right now. Um, but no other constraint except for it needs to be secure as well. Like to middle man in the middle attacks, right?
+
+And then it needs to be Wireless. That's it. Gotcha, all right. I have to go work on my own project now. Yeah, man.
+
+I didn't get you guys guys.

@@ -78,6 +78,17 @@
     }
     .clip-bar button:hover { border-color: var(--gold); }
     .clip-bar button.on { background: var(--gold); color: #111; border-color: var(--gold); }
+    .clip-bar button.path-btn {
+      margin-left: auto;
+      background: #132a20;
+      color: var(--mint);
+      border-color: var(--mint);
+    }
+    .clip-bar button.path-btn.failover {
+      background: #331c10;
+      color: #ff9e3d;
+      border-color: #ff9e3d;
+    }
     #clipVideo {
       position: absolute;
       inset: 28px 0 0 0;
@@ -302,7 +313,12 @@
       radioLive: false,
       radioSeq: 0,
       radioAlert: null,
+      radio: null,
+      senderLoraOnly: false,
+      linkUp: true,
+      pathOverride: "AUTO",
       hasRgb: false,
+      hasClipVideo: true,
       clipId: CLIPS[0].id,
       clipCase: CLIPS[0].caseLabel,
       clipTitle: CLIPS[0].title,
@@ -421,21 +437,139 @@
       render();
     }
 
+    function getRadioLinkState() {
+      const r = state.radio;
+      let espNowActive = true;
+      let loraActive = true;
+      let muted = false;
+
+      if (state.pathOverride === "LORA_ONLY") {
+        espNowActive = false;
+        loraActive = true;
+      } else if (state.pathOverride === "DUAL") {
+        espNowActive = true;
+        loraActive = true;
+      } else {
+        // AUTO mode: hardware failover between ESP-NOW (2.4 GHz) and LoRa (915 MHz)
+        if (r && r.mode === "MUTED") {
+          espNowActive = false;
+          loraActive = false;
+          muted = true;
+        } else if (state.senderLoraOnly || (r && r.mode === "LORA_ONLY")) {
+          espNowActive = false;
+          loraActive = true;
+        } else if (r && ((r.espnow_rx || 0) > 0 || (r.lora_rx || 0) > 0)) {
+          const espAge = r.espnow_age;
+          const loraAge = r.lora_age;
+          espNowActive = (espAge !== undefined && espAge >= 0 && espAge < 3500);
+          loraActive = (loraAge !== undefined && loraAge >= 0 && loraAge < 6000) || state.wsLive || state.radioLive || espNowActive;
+        } else if (state.linkUp === false && !state.wsLive) {
+          espNowActive = false;
+          loraActive = true;
+        }
+      }
+
+      const failover = !espNowActive && loraActive;
+      const espRssi = (r && r.espnow_rssi !== undefined && espNowActive) ? (" (" + r.espnow_rssi + " dBm)") : "";
+      const loraRssi = (r && r.lora_rssi !== undefined && r.lora_age >= 0) ? (" (" + r.lora_rssi + " dBm / SF" + (r.lora_sf || 9) + ")") : " (915 MHz SF9)";
+      return {
+        espNowActive: espNowActive,
+        loraActive: loraActive,
+        failover: failover,
+        muted: muted,
+        espRssi: espRssi,
+        loraRssi: loraRssi
+      };
+    }
+
+    function drawEspNowOfflineScreen(ctx, W, H, linkState) {
+      drawGrid(ctx, W, H);
+      ctx.save();
+      ctx.fillStyle = "rgba(8, 10, 14, 0.88)";
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.strokeStyle = "#ff8c00";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(48, 76, W - 96, H - 152);
+
+      ctx.fillStyle = "rgba(255, 140, 0, 0.14)";
+      ctx.fillRect(48, 76, W - 96, 56);
+
+      ctx.textAlign = "center";
+      ctx.font = "800 22px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillStyle = "#ff9e3d";
+      ctx.fillText("ESP-NOW (2.4 GHz) OFFLINE // VIDEO STREAM HALTED", W / 2, 112);
+
+      ctx.font = "700 15px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillStyle = "#e7edf3";
+      ctx.fillText("FULL DRONE VIDEO REQUIRES HIGH-BANDWIDTH ESP-NOW (2.4 GHz) LINK", W / 2, 185);
+
+      ctx.fillStyle = "rgba(0, 255, 160, 0.12)";
+      ctx.strokeStyle = "#00ffa0";
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(96, 225, W - 192, 74);
+      ctx.strokeRect(96, 225, W - 192, 74);
+
+      ctx.font = "800 16px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillStyle = "#00ffa0";
+      ctx.fillText("AUTO-SWITCH ACTIVE -> LORA 915 MHz FAILOVER ONLINE", W / 2, 255);
+      ctx.font = "700 13px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillStyle = "#00dcff";
+      ctx.fillText("1:1 COORDINATE & BOX REPRESENTATION STREAMING EXCLUSIVELY OVER LORA (RIGHT PANE) ->", W / 2, 281);
+
+      ctx.font = "700 13px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillStyle = "#aab6c4";
+      ctx.fillText("LEFT PANE (ESP-NOW 2.4 GHz): OFFLINE — HIGH-BW VIDEO PAUSED UNTIL ESP-NOW RECONNECTS", W / 2, 350);
+      ctx.fillText("RIGHT PANE (LORA 915 MHz):   ONLINE" + linkState.loraRssi + " — " + state.objects.length + " ACTIVE COORDINATE INDICES", W / 2, 378);
+      ctx.restore();
+    }
+
+    function updatePathButtonUI() {
+      const btn = document.getElementById("pathToggleBtn");
+      if (!btn) return;
+      const ls = getRadioLinkState();
+      if (state.pathOverride === "LORA_ONLY") {
+        btn.textContent = "[MODE: LORA-ONLY FAILOVER (VIDEO OFF | CLICK FOR AUTO/ESP-NOW)]";
+        btn.classList.add("failover");
+      } else if (ls.failover) {
+        btn.textContent = "[AUTO: LORA FAILOVER ACTIVE (ESP-NOW OFF | CLICK TO FORCE DUAL)]";
+        btn.classList.add("failover");
+      } else {
+        btn.textContent = "[AUTO: ESP-NOW (VIDEO) + LORA (BOX COORDS) | CLICK TO TEST LORA FAILOVER]";
+        btn.classList.remove("failover");
+      }
+    }
+
     function render() {
       const W = left.width, H = left.height;
       const sx = 1, sy = 1;
+      const linkState = getRadioLinkState();
+      updatePathButtonUI();
+
       lctx.clearRect(0, 0, W, H);
-      if (clipVideo.classList.contains("on") && clipVideo.readyState >= 2) {
-        try {
-          lctx.drawImage(clipVideo, 0, 0, W, H);
-        } catch (e) {}
-      } else if (!rgb.classList.contains("on")) {
-        drawGrid(lctx, W, H);
+      if (linkState.espNowActive) {
+        if (state.hasClipVideo && !rgb.classList.contains("on")) {
+          if (!clipVideo.classList.contains("on")) clipVideo.classList.add("on");
+          if (clipVideo.paused) clipVideo.play().catch(function () {});
+        }
+        if (clipVideo.classList.contains("on") && clipVideo.readyState >= 2) {
+          try {
+            lctx.drawImage(clipVideo, 0, 0, W, H);
+          } catch (e) {}
+        } else if (!rgb.classList.contains("on")) {
+          drawGrid(lctx, W, H);
+        }
+      } else {
+        clipVideo.classList.remove("on");
+        rgb.classList.remove("on");
+        drawEspNowOfflineScreen(lctx, W, H, linkState);
       }
+
       drawGrid(rctx, W, H);
-      for (const obj of state.objects) {
-        drawBox(lctx, obj, sx, sy, false);
-        drawBox(rctx, obj, sx, sy, true);
+      if (linkState.loraActive) {
+        for (const obj of state.objects) {
+          drawBox(rctx, obj, sx, sy, true);
+        }
       }
 
       const now = performance.now();
@@ -443,21 +577,35 @@
       const totalB = state.history.reduce(function (s, p) { return s + p.bytes; }, 0);
       const kbps = Math.min(2.85, (totalB / 1000) / span);
       const hz = state.history.length / span;
-      const src = state.wsLive ? "LIVE UDP" : (state.radioLive ? ("LIVE RADIO #" + state.radioSeq) : ("VISDRONE-VID/MOT " + state.clipCase));
+      const pathDesc = linkState.espNowActive
+        ? "DUAL [ESP-NOW VIDEO + LORA COORDS]"
+        : (linkState.loraActive ? "FAILOVER [LORA-ONLY COORDS | ESP-NOW VIDEO OFF]" : "MUTED");
       const pktNum = state.radioLive ? state.radioSeq : state.seq;
       const rxAlertTag = state.radioAlert
         ? (" | RX #" + state.radioSeq + " " + String(state.radioAlert.cls).toUpperCase() + " x" + state.radioAlert.count)
         : "";
       document.getElementById("titleText").textContent =
-        "ARCDRONE TEST BENCH: " + state.clipTitle + " (1:1 RATIO VECTOR LINK)";
+        "ARCDRONE TEST BENCH: " + state.clipTitle + " (" + pathDesc + ")";
       document.getElementById("metaLine").textContent =
-        "SPREAD-OUT LINK: " + hz.toFixed(1) + " FPS (" + state.rx + " pkts, " + state.bytes + " B/pkt) | WIRE RATE: " +
+        "LORA COORD LINK: " + hz.toFixed(1) + " FPS (" + state.rx + " pkts, " + state.bytes + " B/pkt) | WIRE RATE: " +
         kbps.toFixed(2) + " kB/s (CAP <= 3.00 kB/s) | ACTIVE INDICES: " + state.objects.length +
-        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | SRC: " + src + rxAlertTag;
-      document.getElementById("leftTag").textContent =
-        "DRONE [" + state.clipCase + "] RGB + VISDRONE-VID/MOT INDEXED BOXES  |  " + state.objects.length + " OBJECTS";
-      document.getElementById("rightTag").textContent =
-        "GROUND [" + (state.radioLive ? ("RADIO PKT #" + pktNum) : state.clipCase) + "] | NO RGB 1:1 RECONSTRUCTOR | " + state.objects.length + " INDICES" + rxAlertTag;
+        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | AUTO-SWITCH: " + pathDesc + rxAlertTag;
+
+      const leftTagEl = document.getElementById("leftTag");
+      if (linkState.espNowActive) {
+        leftTagEl.style.color = "#54f2b2";
+        leftTagEl.textContent =
+          "DRONE VIDEO [ESP-NOW 2.4 GHz: ONLINE" + linkState.espRssi + "] | " + state.clipCase + " FULL OPTICAL VIDEO STREAM";
+      } else {
+        leftTagEl.style.color = "#ff9e3d";
+        leftTagEl.textContent =
+          "DRONE VIDEO [ESP-NOW 2.4 GHz: OFFLINE] | VIDEO HALTED — AUTO-SWITCHED TO LORA 915 MHz";
+      }
+
+      const rightTagEl = document.getElementById("rightTag");
+      rightTagEl.style.color = linkState.failover ? "#ffc800" : "#54f2b2";
+      rightTagEl.textContent =
+        "GROUND COORDS [LORA 915 MHz: " + (linkState.failover ? "FAILOVER ACTIVE" : "ONLINE") + linkState.loraRssi + "] | 1:1 BOX RECONSTRUCTOR | PKT #" + pktNum + " | " + state.objects.length + " INDICES" + rxAlertTag;
 
       const hdr = "INDEX  CLASS            CONF   POS RATIO (X%, Y%)     SIZE RATIO (W% x H%)    VEC DELTA (dX%, dY%)     MOTION";
       const rows = state.objects.slice().sort(function (a, b) { return a.track_id - b.track_id; });
@@ -516,10 +664,14 @@
       if (!frame) return;
       state.wsLive = true;
       state.lastLiveRx = performance.now();
+      if (frame.sender_lora_only !== undefined) {
+        state.senderLoraOnly = Boolean(frame.sender_lora_only);
+      }
       if (frame.clip_idx !== undefined) {
         if (frame.clip_idx >= 1 && frame.clip_idx <= CLIPS.length) {
+          state.hasClipVideo = true;
           const targetClip = CLIPS[frame.clip_idx - 1];
-          if (state.clipId !== targetClip.id || !clipVideo.classList.contains("on")) {
+          if (state.clipId !== targetClip.id) {
             loadClip(targetClip.id);
           }
           if (frame.video_frame !== undefined && clipVideo.readyState >= 2 && clipVideo.duration) {
@@ -529,10 +681,11 @@
             }
           }
         } else if (frame.clip_idx === 0) {
+          state.hasClipVideo = false;
           clipVideo.classList.remove("on");
           state.clipCase = "LIVE SENDER";
           state.clipTitle = "LIVE SENDER EDGE CAMERA STREAM";
-          document.querySelectorAll("#clipBar button").forEach(function (b) {
+          document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
             b.classList.remove("on");
           });
         }
@@ -556,16 +709,29 @@
       } catch (e) {}
     }
 
+    let radioWsConn = null;
     function connectRadioWs() {
       if (!location.host) return;
       try {
         const proto = location.protocol === "https:" ? "wss://" : "ws://";
         const rws = new WebSocket(proto + location.host + "/ws");
+        radioWsConn = rws;
         rws.onmessage = function (ev) {
           try {
             const msg = JSON.parse(ev.data);
             if (msg.event === "scene" && msg.frame) {
+              if (msg.radio !== undefined) state.radio = msg.radio;
               handleLiveSceneFrame(msg.frame);
+            } else if (msg.event === "stats") {
+              if ("radio" in msg) state.radio = msg.radio;
+              if (msg.up !== undefined) state.linkUp = Boolean(msg.up);
+              render();
+            } else if (msg.event === "link") {
+              state.linkUp = Boolean(msg.up);
+              render();
+            } else if (msg.event === "radio_path" && msg.path) {
+              state.pathOverride = msg.path;
+              render();
             } else if (msg.event === "alert") {
               state.radioLive = true;
               state.radioSeq = msg.seq;
@@ -590,18 +756,23 @@
       state.clipId = meta.id;
       state.clipCase = meta.caseLabel;
       state.clipTitle = meta.title;
+      state.hasClipVideo = true;
       state.prev.clear();
       state.simFrameIdx = 0;
 
       const url = "/clips/" + meta.id + ".mp4?v=h264";
       clipVideo.src = url;
-      clipVideo.classList.add("on");
+      if (getRadioLinkState().espNowActive) {
+        clipVideo.classList.add("on");
+      } else {
+        clipVideo.classList.remove("on");
+      }
       clipVideo.load();
       clipVideo.play().catch(function () {});
       rgb.classList.remove("on");
       state.hasRgb = true;
 
-      document.querySelectorAll("#clipBar button").forEach(function (b) {
+      document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
         b.classList.toggle("on", b.dataset.seq === meta.id);
       });
       document.getElementById("titleText").textContent =
@@ -635,6 +806,30 @@
         b.onclick = function () { state.wsLive = false; loadClip(c.id); };
         bar.appendChild(b);
       });
+      const pathBtn = document.createElement("button");
+      pathBtn.type = "button";
+      pathBtn.id = "pathToggleBtn";
+      pathBtn.className = "path-btn";
+      pathBtn.onclick = function () {
+        const ls = getRadioLinkState();
+        if (state.pathOverride === "LORA_ONLY") {
+          state.pathOverride = "AUTO";
+        } else if (ls.failover && state.pathOverride === "AUTO") {
+          state.pathOverride = "DUAL";
+        } else if (state.pathOverride === "DUAL") {
+          state.pathOverride = "LORA_ONLY";
+        } else {
+          state.pathOverride = "LORA_ONLY";
+        }
+        if (radioWsConn && radioWsConn.readyState === WebSocket.OPEN) {
+          try {
+            radioWsConn.send(JSON.stringify({ action: "radio_path", path: state.pathOverride }));
+          } catch (e) {}
+        }
+        render();
+      };
+      bar.appendChild(pathBtn);
+      updatePathButtonUI();
     })();
 
     rgb.onload = function () {

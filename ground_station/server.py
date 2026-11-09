@@ -100,7 +100,11 @@ class Station:
         elif packet["type"] in (0xAD, 0xAE) and "scene_bytes" in packet:
             frame = self.scene_decoder.decode_frame(packet["scene_bytes"], canvas_w=720, canvas_h=540)
             if frame is not None:
-                await self.broadcast({"event": "scene", "frame": frame})
+                await self.broadcast({
+                    "event": "scene",
+                    "frame": frame,
+                    "radio": self.link.summary().get("radio"),
+                })
 
     async def _handle_event(self, name, info):
         if name in ("link_up", "link_down"):
@@ -118,6 +122,9 @@ class Station:
     # --- browser -> radio ---
 
     async def handle_browser(self, msg):
+        if msg.get("action") == "radio_path":
+            await self.broadcast({"event": "radio_path", "path": msg.get("path", "AUTO")})
+            return
         if msg.get("action") != "command" or msg.get("cmd") not in CMD_CODES:
             return
         ref_seq = int(msg.get("ref_seq", 0)) & 0xFFFF
@@ -142,6 +149,7 @@ class Station:
     async def welcome(self, ws):
         """Current state for a client that just connected."""
         await ws.send_text(json.dumps({"event": "link", "up": self.link.up}))
+        await ws.send_text(json.dumps(dict(self.link.summary(), event="stats")))
         if self.mode is not None:
             await ws.send_text(json.dumps(self.drone_msg()))
         for cmd in self.pending.values():
