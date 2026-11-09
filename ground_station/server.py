@@ -57,7 +57,49 @@ class Station:
         self.loop = asyncio.get_running_loop()
         self.queue = asyncio.Queue()
         self.link = Link(self.port, on_packet=self._on_packet, on_event=self._on_event).start()
-        return [asyncio.create_task(self._consume()), asyncio.create_task(self._stats_loop())]
+        return [
+            asyncio.create_task(self._consume()),
+            asyncio.create_task(self._stats_loop()),
+            asyncio.create_task(self._udp_video_loop()),
+        ]
+
+    async def _udp_video_loop(self):
+        class _VideoUdp(asyncio.DatagramProtocol):
+            def __init__(self, station):
+                self.station = station
+                self.seq = 0
+
+            def datagram_received(self, data: bytes, addr):
+                if not data or len(data) < 64:
+                    return
+                radio = self.station.link.summary().get("radio") if self.station.link else None
+                if radio:
+                    if radio.get("mode") in ("LORA_ONLY", "MUTED"):
+                        return
+                    if radio.get("espnow_rx", 0) > 0 and (radio.get("espnow_age", 0) < 0 or radio.get("espnow_age", 0) >= 3500):
+                        return
+                self.seq = (self.seq + 1) & 0xFF
+                b64 = base64.b64encode(data).decode("ascii")
+                asyncio.create_task(self.station.broadcast({
+                    "event": "video_frame",
+                    "frame_id": self.seq,
+                    "src": "data:image/jpeg;base64," + b64,
+                    "radio": radio,
+                }))
+
+        transport = None
+        try:
+            transport, _ = await self.loop.create_datagram_endpoint(
+                lambda: _VideoUdp(self),
+                local_addr=("0.0.0.0", 9998),
+            )
+            while True:
+                await asyncio.sleep(3600)
+        except Exception:
+            pass
+        finally:
+            if transport is not None:
+                transport.close()
 
     def stop(self):
         if self.link is not None:

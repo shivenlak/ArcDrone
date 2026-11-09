@@ -13,12 +13,15 @@ MAGIC_BYTE = MAGIC_V1  # legacy alias
 
 MSG_KEYFRAME = 0x2
 MSG_DELTA = 0x3
+MSG_COMPACT_KF = 0x4
+MSG_COMPACT_DELTA = 0x5
 
 LINK_MAX_KBPS = 2.0
 RESERVE_KBPS = 0.0
 SCENE_MAX_KBPS = LINK_MAX_KBPS
 SCENE_HZ_DEFAULT = 12.0
 MAX_BYTES_PER_SEC = int(SCENE_MAX_KBPS * 1000 / 8)  # 250 B/s
+MAX_LORA_OBJECTS = 6
 
 # v1 wire labels (reconstructor palette)
 LABEL_TO_CLS = {
@@ -226,7 +229,7 @@ class SceneCodec:
         src_size: Tuple[int, int] = (640, 480),
         dst_size: Tuple[int, int] = (720, 540),
         max_bytes_per_sec: int = MAX_BYTES_PER_SEC,
-        keyframe_interval_ticks: int = 6,
+        keyframe_interval_ticks: int = 3,
         top_k_pinned: int = 4,
         max_kbps: Optional[float] = None,
     ) -> None:
@@ -242,6 +245,7 @@ class SceneCodec:
         self._ticks_since_kf = keyframe_interval_ticks
         self._byte_window: Deque[Tuple[float, int]] = deque()
         self._enc_tracks: Dict[int, _EncoderTrack] = {}
+        self._prev_visible_tids: set = set()
 
         self._dec_lat = 53.5232
         self._dec_lon = -113.5263
@@ -281,11 +285,12 @@ class SceneCodec:
             h6 = _clamp(int(round((bh / self.src_h) * 63)), 1, 63)
 
             best_tid = None
-            best_dist = 30.0
+            best_dist = 42.0
             for tid, trk in self._enc_tracks.items():
-                if tid in matched_tids or trk.cls != cls_id:
+                if tid in matched_tids:
                     continue
-                dist = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q)
+                cls_penalty = 0.0 if trk.cls == cls_id else 14.0
+                dist = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q) + cls_penalty
                 if dist <= best_dist:
                     best_dist = dist
                     best_tid = tid
@@ -293,9 +298,13 @@ class SceneCodec:
             if best_tid is not None:
                 trk = self._enc_tracks[best_tid]
                 trk.speed_q = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q)
-                trk.cx_q, trk.cy_q = cx_q, cy_q
-                trk.w6, trk.h6 = w6, h6
-                trk.conf = conf
+                trk.cx_q = _clamp(int(round(0.72 * cx_q + 0.28 * trk.cx_q)), 0, 255)
+                trk.cy_q = _clamp(int(round(0.72 * cy_q + 0.28 * trk.cy_q)), 0, 255)
+                trk.w6 = _clamp(int(round(0.55 * w6 + 0.45 * trk.w6)), 1, 63)
+                trk.h6 = _clamp(int(round(0.55 * h6 + 0.45 * trk.h6)), 1, 63)
+                if conf >= trk.conf:
+                    trk.cls = cls_id
+                trk.conf = round(0.7 * conf + 0.3 * trk.conf, 2)
                 trk.ticks_unseen = 0
                 matched_tids.add(best_tid)
             else:
@@ -315,7 +324,7 @@ class SceneCodec:
                 matched_tids.add(new_tid)
 
         for tid in list(self._enc_tracks.keys()):
-            if self._enc_tracks[tid].ticks_unseen > 5:
+            if self._enc_tracks[tid].ticks_unseen > 4:
                 del self._enc_tracks[tid]
 
     def _schedule_tracks(self) -> List[_EncoderTrack]:
@@ -333,11 +342,13 @@ class SceneCodec:
         return tier1 + tier2
 
     @staticmethod
-    def _pack_keyframe_obj(trk: _EncoderTrack) -> bytes:
+    def _pack_compact_kf_obj(trk: _EncoderTrack) -> bytes:
+        """Compact 4-byte LoRa object: [tid:4|cls:4, cx_q:8, cy_q:8, w4:4|h4:4]."""
         b0 = ((trk.track_id & 0x0F) << 4) | (trk.cls & 0x0F)
-        conf_q = _clamp(int(round(trk.conf * 15.0)), 0, 15)
-        u16_tail = (conf_q << 12) | ((trk.w6 & 0x3F) << 6) | (trk.h6 & 0x3F)
-        return struct.pack(">BBBH", b0, trk.cx_q, trk.cy_q, u16_tail)
+        w4 = _clamp(int(round((trk.w6 - 2) / 4.0)), 0, 15)
+        h4 = _clamp(int(round((trk.h6 - 2) / 4.0)), 0, 15)
+        wh = ((w4 & 0x0F) << 4) | (h4 & 0x0F)
+        return struct.pack(">BBBB", b0, trk.cx_q, trk.cy_q, wh)
 
     @staticmethod
     def _pack_delta_obj(track_id: int, dcx: int, dcy: int) -> bytes:
@@ -353,36 +364,52 @@ class SceneCodec:
         drone_lat: float,
         drone_lon: float,
         scene_hz: float = SCENE_HZ_DEFAULT,
+        sender_lora_only: bool = False,
     ) -> Tuple[bytes, float]:
-        del scene_hz  # caller sets wall-clock rate; budget is rolling B/s
+        del scene_hz, drone_lat, drone_lon  # GPS already sent in DETECTION alerts; stripped from LoRa scene frames
         h, w = frame_shape[:2]
         self.src_w, self.src_h = max(1, int(w)), max(1, int(h))
 
         now = time.monotonic()
         self._seq = (self._seq + 1) & 0xFFFF
-        avail = self._available_budget(now)
         self._update_encoder_tracks(detections)
-        scheduled = self._schedule_tracks()
+        scheduled = self._schedule_tracks()[:MAX_LORA_OBJECTS]
+        cur_tids = {t.track_id for t in scheduled}
+
+        need_kf = (
+            self._ticks_since_kf >= self.keyframe_interval
+            or cur_tids != self._prev_visible_tids
+            or any(not t.synced_on_wire for t in scheduled)
+        )
+        self._prev_visible_tids = cur_tids
+        flags_seq = (0x80 if sender_lora_only else 0x00) | (self._seq & 0x7F)
+
+        if not need_kf and scheduled:
+            delta_payloads: List[bytes] = []
+            for trk in scheduled:
+                dcx = _clamp(trk.cx_q - trk.sent_cx_q, -31, 31)
+                dcy = _clamp(trk.cy_q - trk.sent_cy_q, -31, 31)
+                if abs(dcx) >= 1 or abs(dcy) >= 1:
+                    delta_payloads.append(self._pack_delta_obj(trk.track_id, dcx, dcy))
+                    trk.sent_cx_q += dcx
+                    trk.sent_cy_q += dcy
+                    trk.ticks_since_sent = 0
+            self._ticks_since_kf += 1
+            type_count = (MSG_COMPACT_DELTA << 4) | (len(delta_payloads) & 0x0F)
+            pkt = struct.pack(">BBB", MAGIC_V2, type_count, flags_seq) + b"".join(delta_payloads)
+            self._byte_window.append((now, len(pkt)))
+            return pkt, self.current_kbps()
 
         obj_payloads: List[bytes] = []
-        used_bytes = 12
-        for trk in scheduled[:12]:
-            obj_payloads.append(self._pack_keyframe_obj(trk))
-            used_bytes += 5
+        for trk in scheduled:
+            obj_payloads.append(self._pack_compact_kf_obj(trk))
             trk.sent_cx_q = trk.cx_q
             trk.sent_cy_q = trk.cy_q
             trk.synced_on_wire = True
             trk.ticks_since_sent = 0
 
-        type_count = (MSG_KEYFRAME << 4) | (len(obj_payloads) & 0x0F)
-        pkt = struct.pack(
-            ">BBHff",
-            MAGIC_V2,
-            type_count,
-            self._seq,
-            float(drone_lat),
-            float(drone_lon),
-        ) + b"".join(obj_payloads)
+        type_count = (MSG_COMPACT_KF << 4) | (len(obj_payloads) & 0x0F)
+        pkt = struct.pack(">BBB", MAGIC_V2, type_count, flags_seq) + b"".join(obj_payloads)
         self._ticks_since_kf = 0
         self._byte_window.append((now, len(pkt)))
         return pkt, self.current_kbps()
@@ -394,7 +421,7 @@ class SceneCodec:
             self.dst_w = canvas_w
         if canvas_h is not None:
             self.dst_h = canvas_h
-        if len(data) < 4:
+        if len(data) < 3:
             return None
         if data[0] == MAGIC_V1:
             return self._decode_v1(data)
@@ -403,70 +430,122 @@ class SceneCodec:
         return self._decode_v2(data, time.monotonic())
 
     def _decode_v2(self, data: bytes, now: float) -> Optional[Dict[str, Any]]:
-        _, type_count, seq = struct.unpack(">BBH", data[:4])
+        type_count = data[1]
         msg_type = (type_count >> 4) & 0x0F
         obj_count = type_count & 0x0F
+        sender_lora_only: Optional[bool] = None
 
-        if msg_type == MSG_KEYFRAME:
-            if len(data) < 12:
-                return None
-            self._dec_lat, self._dec_lon = struct.unpack(">ff", data[4:12])
-            offset = 12
-            seen_in_kf = set()
-            for _ in range(obj_count):
-                if offset + 5 > len(data):
-                    break
-                b0, cx_q, cy_q, u16_tail = struct.unpack(">BBBH", data[offset : offset + 5])
-                offset += 5
-                tid = (b0 >> 4) & 0x0F
-                cls_id = b0 & 0x0F
-                conf = round(((u16_tail >> 12) & 0x0F) / 15.0, 2)
-                w6 = max(1, (u16_tail >> 6) & 0x3F)
-                h6 = max(1, u16_tail & 0x3F)
-                seen_in_kf.add(tid)
-                self._apply_decoder_state(
-                    tid, cls_id, conf, cx_q, cy_q, w6, h6, now, is_kf=True
-                )
-            for tid in list(self._dec_tracks.keys()):
-                if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 2.5:
-                    del self._dec_tracks[tid]
-
-        elif msg_type == MSG_DELTA:
-            offset = 4
-            updated_tids = set()
-            for _ in range(obj_count):
-                if offset + 2 > len(data):
-                    break
-                (word,) = struct.unpack(">H", data[offset : offset + 2])
-                offset += 2
-                tid = (word >> 12) & 0x0F
-                dcx = _unpack_i6((word >> 6) & 0x3F)
-                dcy = _unpack_i6(word & 0x3F)
-                if dcx == -32 and dcy == -32:
-                    self._dec_tracks.pop(tid, None)
-                    continue
-                trk = self._dec_tracks.get(tid)
-                if trk is not None:
-                    new_cx_q = _clamp(trk.cx_q + dcx, 0, 255)
-                    new_cy_q = _clamp(trk.cy_q + dcy, 0, 255)
+        if msg_type in (MSG_COMPACT_KF, MSG_COMPACT_DELTA):
+            flags_seq = data[2]
+            sender_lora_only = bool(flags_seq & 0x80)
+            seq = flags_seq & 0x7F
+            if msg_type == MSG_COMPACT_KF:
+                offset = 3
+                seen_in_kf = set()
+                for _ in range(obj_count):
+                    if offset + 4 > len(data):
+                        break
+                    b0, cx_q, cy_q, wh = struct.unpack(">BBBB", data[offset : offset + 4])
+                    offset += 4
+                    tid = (b0 >> 4) & 0x0F
+                    cls_id = b0 & 0x0F
+                    w6 = max(2, ((wh >> 4) & 0x0F) * 4 + 2)
+                    h6 = max(2, (wh & 0x0F) * 4 + 2)
+                    seen_in_kf.add(tid)
                     self._apply_decoder_state(
-                        tid,
-                        trk.cls,
-                        trk.conf,
-                        new_cx_q,
-                        new_cy_q,
-                        trk.w6,
-                        trk.h6,
-                        now,
-                        is_kf=False,
+                        tid, cls_id, 0.88, cx_q, cy_q, w6, h6, now, is_kf=True
                     )
-                    updated_tids.add(tid)
-            for tid, trk in self._dec_tracks.items():
-                if tid not in updated_tids:
-                    trk.vel = [trk.vel[0] * 0.4, trk.vel[1] * 0.4]
+                for tid in list(self._dec_tracks.keys()):
+                    if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 1.2:
+                        del self._dec_tracks[tid]
+            else:
+                offset = 3
+                updated_tids = set()
+                for _ in range(obj_count):
+                    if offset + 2 > len(data):
+                        break
+                    (word,) = struct.unpack(">H", data[offset : offset + 2])
+                    offset += 2
+                    tid = (word >> 12) & 0x0F
+                    dcx = _unpack_i6((word >> 6) & 0x3F)
+                    dcy = _unpack_i6(word & 0x3F)
+                    trk = self._dec_tracks.get(tid)
+                    if trk is not None:
+                        new_cx_q = _clamp(trk.cx_q + dcx, 0, 255)
+                        new_cy_q = _clamp(trk.cy_q + dcy, 0, 255)
+                        self._apply_decoder_state(
+                            tid, trk.cls, trk.conf, new_cx_q, new_cy_q, trk.w6, trk.h6, now, is_kf=False
+                        )
+                        updated_tids.add(tid)
+                for tid, trk in self._dec_tracks.items():
+                    if tid not in updated_tids:
+                        trk.vel = [trk.vel[0] * 0.6, trk.vel[1] * 0.6]
+        else:
+            if len(data) < 4:
+                return None
+            _, _, seq = struct.unpack(">BBH", data[:4])
+            if msg_type == MSG_KEYFRAME:
+                if len(data) < 12:
+                    return None
+                self._dec_lat, self._dec_lon = struct.unpack(">ff", data[4:12])
+                offset = 12
+                seen_in_kf = set()
+                for _ in range(obj_count):
+                    if offset + 5 > len(data):
+                        break
+                    b0, cx_q, cy_q, u16_tail = struct.unpack(">BBBH", data[offset : offset + 5])
+                    offset += 5
+                    tid = (b0 >> 4) & 0x0F
+                    cls_id = b0 & 0x0F
+                    conf = round(((u16_tail >> 12) & 0x0F) / 15.0, 2)
+                    w6 = max(1, (u16_tail >> 6) & 0x3F)
+                    h6 = max(1, u16_tail & 0x3F)
+                    seen_in_kf.add(tid)
+                    self._apply_decoder_state(
+                        tid, cls_id, conf, cx_q, cy_q, w6, h6, now, is_kf=True
+                    )
+                for tid in list(self._dec_tracks.keys()):
+                    if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 2.5:
+                        del self._dec_tracks[tid]
+
+            elif msg_type == MSG_DELTA:
+                offset = 4
+                updated_tids = set()
+                for _ in range(obj_count):
+                    if offset + 2 > len(data):
+                        break
+                    (word,) = struct.unpack(">H", data[offset : offset + 2])
+                    offset += 2
+                    tid = (word >> 12) & 0x0F
+                    dcx = _unpack_i6((word >> 6) & 0x3F)
+                    dcy = _unpack_i6(word & 0x3F)
+                    if dcx == -32 and dcy == -32:
+                        self._dec_tracks.pop(tid, None)
+                        continue
+                    trk = self._dec_tracks.get(tid)
+                    if trk is not None:
+                        new_cx_q = _clamp(trk.cx_q + dcx, 0, 255)
+                        new_cy_q = _clamp(trk.cy_q + dcy, 0, 255)
+                        self._apply_decoder_state(
+                            tid,
+                            trk.cls,
+                            trk.conf,
+                            new_cx_q,
+                            new_cy_q,
+                            trk.w6,
+                            trk.h6,
+                            now,
+                            is_kf=False,
+                        )
+                        updated_tids.add(tid)
+                for tid, trk in self._dec_tracks.items():
+                    if tid not in updated_tids:
+                        trk.vel = [trk.vel[0] * 0.4, trk.vel[1] * 0.4]
 
         out = self._build_output(seq, len(data), now)
-        if len(data) >= 8 and data[-4] == 0xCF:
+        if sender_lora_only is not None:
+            out["sender_lora_only"] = sender_lora_only
+        elif len(data) >= 8 and data[-4] == 0xCF:
             raw_clip = int(data[-3])
             out["clip_idx"] = raw_clip & 0x7F
             out["sender_lora_only"] = bool(raw_clip & 0x80)

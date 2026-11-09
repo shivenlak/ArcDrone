@@ -309,6 +309,9 @@
       history: [],
       objects: [],
       prev: new Map(),
+      smoothTracks: new Map(),
+      lastAnimTs: performance.now(),
+      lastDomUpdateTs: 0,
       wsLive: false,
       radioLive: false,
       radioSeq: 0,
@@ -401,41 +404,118 @@
       state.lastTs = now;
       state.rx += 1;
       state.seq = frame.seq;
-      state.lat = frame.lat;
-      state.lon = frame.lon;
-      state.bytes = frame.bytes || (12 + Math.min(12, (frame.objects || []).length) * 8);
+      if (frame.lat !== undefined) state.lat = frame.lat;
+      if (frame.lon !== undefined) state.lon = frame.lon;
+      state.bytes = frame.bytes || (3 + Math.min(6, (frame.objects || []).length) * 4);
       state.history.push({ ts: now, bytes: state.bytes });
       while (state.history.length && now - state.history[0].ts > 2000) state.history.shift();
 
-      const objs = (frame.objects || []).map(function (o) {
+      const srcW = 720, srcH = 540;
+      const seenIds = new Set();
+
+      (frame.objects || []).forEach(function (o) {
         const [x1, y1, x2, y2] = o.bbox;
-        const prev = state.prev.get(o.track_id);
-        const cx = o.center[0], cy = o.center[1];
-        const vx = (o.vel && o.vel[0] !== undefined) ? o.vel[0] : (prev ? cx - prev.cx : 0);
-        const vy = (o.vel && o.vel[1] !== undefined) ? o.vel[1] : (prev ? cy - prev.cy : 0);
-        const srcW = 720, srcH = 540;
-        const scaled = {
-          track_id: o.track_id,
-          cls: o.cls,
-          label: (o.label || clsOf(o).name),
-          conf: o.conf,
-          bbox: [x1 / srcW * LW, y1 / srcH * LH, x2 / srcW * LW, y2 / srcH * LH],
-          center: [cx / srcW * LW, cy / srcH * LH],
-          vel: [vx, vy],
-          dx: vx / srcW,
-          dy: vy / srcH,
-          wr: (x2 - x1) / srcW,
-          hr: (y2 - y1) / srcH,
-          xr: cx / srcW,
-          yr: cy / srcH,
-          motion: compass(vx, vy),
-          fresh: true
-        };
-        state.prev.set(o.track_id, { cx: cx, cy: cy });
-        return scaled;
+        const cx = o.center[0] / srcW * LW;
+        const cy = o.center[1] / srcH * LH;
+        const bw = Math.max(14, (x2 - x1) / srcW * LW);
+        const bh = Math.max(14, (y2 - y1) / srcH * LH);
+        const tid = o.track_id;
+        seenIds.add(tid);
+
+        const existing = state.smoothTracks.get(tid);
+        if (existing) {
+          const dt = Math.max(0.04, Math.min(0.6, (now - existing.lastPacketTs) / 1000));
+          const rawVx = (cx - existing.targetX) / dt;
+          const rawVy = (cy - existing.targetY) / dt;
+          const maxSpd = 260;
+          const clVx = Math.max(-maxSpd, Math.min(maxSpd, rawVx));
+          const clVy = Math.max(-maxSpd, Math.min(maxSpd, rawVy));
+          existing.vx = existing.vx * 0.5 + clVx * 0.5;
+          existing.vy = existing.vy * 0.5 + clVy * 0.5;
+          existing.targetX = cx;
+          existing.targetY = cy;
+          existing.targetW = bw;
+          existing.targetH = bh;
+          existing.cls = o.cls;
+          existing.label = o.label || clsOf(o).name;
+          existing.conf = o.conf;
+          existing.lastPacketTs = now;
+        } else {
+          state.smoothTracks.set(tid, {
+            track_id: tid,
+            cls: o.cls,
+            label: o.label || clsOf(o).name,
+            conf: o.conf,
+            x: cx,
+            y: cy,
+            w: bw,
+            h: bh,
+            targetX: cx,
+            targetY: cy,
+            targetW: bw,
+            targetH: bh,
+            vx: 0,
+            vy: 0,
+            lastPacketTs: now
+          });
+        }
       });
-      state.objects = objs;
-      render();
+
+      // In preloaded clip mode, immediately prune tracks not in the current clip frame
+      if (!state.liveHardwareMode) {
+        for (const tid of Array.from(state.smoothTracks.keys())) {
+          if (!seenIds.has(tid)) state.smoothTracks.delete(tid);
+        }
+      }
+      syncObjectsFromSmoothTracks(now, 0);
+      render(true);
+    }
+
+    function syncObjectsFromSmoothTracks(now, dt) {
+      const maxHoldSec = state.liveHardwareMode ? 1.15 : 0.35;
+      const out = [];
+      for (const [tid, trk] of state.smoothTracks.entries()) {
+        const age = (now - trk.lastPacketTs) / 1000;
+        if (age > maxHoldSec) {
+          state.smoothTracks.delete(tid);
+          continue;
+        }
+        if (dt > 0) {
+          const lead = Math.min(age, 0.20) * 0.45;
+          const predX = Math.max(trk.targetW * 0.5, Math.min(LW - trk.targetW * 0.5, trk.targetX + trk.vx * lead));
+          const predY = Math.max(trk.targetH * 0.5, Math.min(LH - trk.targetH * 0.5, trk.targetY + trk.vy * lead));
+          const kPos = 1 - Math.exp(-16 * dt);
+          const kSize = 1 - Math.exp(-12 * dt);
+          trk.x += (predX - trk.x) * kPos;
+          trk.y += (predY - trk.y) * kPos;
+          trk.w += (trk.targetW - trk.w) * kSize;
+          trk.h += (trk.targetH - trk.h) * kSize;
+        }
+        const x1 = trk.x - trk.w * 0.5;
+        const y1 = trk.y - trk.h * 0.5;
+        const x2 = trk.x + trk.w * 0.5;
+        const y2 = trk.y + trk.h * 0.5;
+        const vpfX = trk.vx * 0.08;
+        const vpfY = trk.vy * 0.08;
+        out.push({
+          track_id: trk.track_id,
+          cls: trk.cls,
+          label: trk.label,
+          conf: trk.conf,
+          bbox: [x1, y1, x2, y2],
+          center: [trk.x, trk.y],
+          vel: [vpfX, vpfY],
+          dx: vpfX / LW,
+          dy: vpfY / LH,
+          wr: trk.w / LW,
+          hr: trk.h / LH,
+          xr: trk.x / LW,
+          yr: trk.y / LH,
+          motion: compass(vpfX, vpfY),
+          fresh: age < 0.45
+        });
+      }
+      state.objects = out;
     }
 
     function getRadioLinkState() {
@@ -544,7 +624,7 @@
       }
     }
 
-    function render() {
+    function render(forceDom) {
       const W = left.width, H = left.height;
       const sx = 1, sy = 1;
       const linkState = getRadioLinkState();
@@ -563,7 +643,7 @@
             lctx.textAlign = "center";
             lctx.font = "800 18px " + getComputedStyle(document.body).fontFamily;
             lctx.fillStyle = "#54f2b2";
-            lctx.fillText("ESP-NOW (2.4 GHz) ONLINE — AWAITING LIVE WEBCAM STREAM (:8081)", W / 2, H / 2 - 10);
+            lctx.fillText("ESP-NOW (2.4 GHz) ONLINE — AWAITING SENDER VIDEO STREAM", W / 2, H / 2 - 10);
             lctx.font = "700 13px " + getComputedStyle(document.body).fontFamily;
             lctx.fillStyle = "#aab6c4";
             lctx.fillText("NO PRELOADED VIDEOS IN LIVE HARDWARE MODE", W / 2, H / 2 + 18);
@@ -592,6 +672,10 @@
       }
 
       const now = performance.now();
+      if (!forceDom && (now - state.lastDomUpdateTs) < 120) {
+        return;
+      }
+      state.lastDomUpdateTs = now;
       const span = state.history.length > 1 ? Math.max(0.25, (now - state.history[0].ts) / 1000) : 1 / 12;
       const totalB = state.history.reduce(function (s, p) { return s + p.bytes; }, 0);
       const kbps = Math.min(2.85, (totalB / 1000) / span);
@@ -771,6 +855,7 @@
       state.clipTitle = "LIVE SENDER -> ESP-NOW (VIDEO) + LORA (COORDS)";
       state.objects = [];
       state.prev.clear();
+      state.smoothTracks.clear();
       try { clipVideo.pause(); } catch (e) {}
       clipVideo.removeAttribute("src");
       clipVideo.removeAttribute("data-clip");
@@ -778,11 +863,15 @@
       document.querySelectorAll("#clipBar button[data-seq]").forEach(function (b) {
         b.classList.toggle("on", b.dataset.seq === "LIVE_HARDWARE");
       });
-      render();
+      connectLiveCamera();
+      render(true);
     }
 
     function connectLiveCamera() {
-      // Video frames arrive over ESP-NOW (0xEF packets -> msg.event === "video_frame")
+      if (isDemo || !state.liveHardwareMode) return;
+      if (state.espNowVideoRx && (performance.now() - (state.lastEspNowVideoAt || 0) < 2500)) return;
+      const host = location.hostname || "127.0.0.1";
+      rgb.src = "http://" + host + ":8081/video.mjpg?t=" + Date.now();
     }
 
     async function loadClip(seqId) {
@@ -902,8 +991,24 @@
     if (!isDemo) {
       connectWs();
       connectRadioWs();
+      setInterval(function () {
+        if (state.liveHardwareMode && !state.hasRgb && getRadioLinkState().espNowActive) {
+          connectLiveCamera();
+        }
+      }, 3000);
     }
     setInterval(function () { stepVisDroneClip(); }, Math.round(1000 / 12));
+
+    function animateSmoothLoop(now) {
+      const dt = Math.min(0.06, Math.max(0.001, (now - state.lastAnimTs) / 1000));
+      state.lastAnimTs = now;
+      if (state.smoothTracks.size > 0) {
+        syncObjectsFromSmoothTracks(now, dt);
+        render(false);
+      }
+      requestAnimationFrame(animateSmoothLoop);
+    }
+    requestAnimationFrame(animateSmoothLoop);
   </script>
 </body>
 </html>

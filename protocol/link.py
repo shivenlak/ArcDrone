@@ -259,7 +259,7 @@ class Link:
                 self._rx_video_parts = {}
                 self.on_packet({"type": 0xEF, "frame_id": fid, "jpeg_bytes": full_jpeg})
             return
-        if data is not None and len(data) >= 4 and data[0] in (0xAD, 0xAE):
+        if data is not None and len(data) >= 3 and data[0] in (0xAD, 0xAE):
             self.stats["bytes_rx"] += len(wire)
             now = time.monotonic()
             self._last_heard = now
@@ -329,11 +329,15 @@ class Link:
 
     def _send_due(self):
         now = time.monotonic()
-        if now - self._last_heartbeat >= self._heartbeat_period:
+        # If we just transmitted a scene or data packet within the last 0.8s, the peer already
+        # heard us (updates _last_heard), so stretch heartbeat interval to 2.2s to save LoRa airtime.
+        active_tx = (now - self._last_scene_tx < 0.8) or (now - self._last_tx < 0.8)
+        eff_hb_period = self._heartbeat_period * (2.0 if active_tx else 1.0)
+        if now - self._last_heartbeat >= eff_hb_period:
             self._last_heartbeat = now
             # Jitter keeps the two sides from locking in step: on LoRa (half duplex) two
             # boards that always transmit at the same instant never hear each other.
-            self._heartbeat_period = HEARTBEAT_PERIOD * random.uniform(0.8, 1.2)
+            self._heartbeat_period = HEARTBEAT_PERIOD * random.uniform(0.85, 1.15)
             heartbeat = p.encode(p.HEARTBEAT, 0, ts_ms=p.now_ms(), mode=self.mode, buffered=min(self.buffered, 255))
             self._write(heartbeat)
 
@@ -349,20 +353,14 @@ class Link:
                 )
             )
         )
-        scene_interval = 0.30 if espnow_live else 0.80
+        scene_interval = 0.11 if espnow_live else 0.22
         scene_pkt = None
-        video_pkt = None
         with self._lock:
-            if not espnow_live:
-                self._video_chunks.clear()
             if not self._outbox:
                 if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
                     scene_pkt = self._pending_scene
                     self._pending_scene = None
                     self._last_scene_tx = now
-                elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.030:
-                    video_pkt = self._video_chunks.popleft()
-                    self._last_video_tx = now
                 else:
                     return
             else:
@@ -370,24 +368,19 @@ class Link:
                 if (
                     seq == self._tx_seq
                     and (now - self._last_tx) < self._timeout
-                    and (now - self._last_tx) >= 0.12
+                    and (now - self._last_tx) >= 0.08
+                    and self._pending_scene is not None
+                    and (now - self._last_scene_tx) >= scene_interval
                 ):
-                    if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
-                        scene_pkt = self._pending_scene
-                        self._pending_scene = None
-                        self._last_scene_tx = now
-                    elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.030:
-                        video_pkt = self._video_chunks.popleft()
-                        self._last_video_tx = now
+                    scene_pkt = self._pending_scene
+                    self._pending_scene = None
+                    self._last_scene_tx = now
         if scene_pkt is not None:
-            if not espnow_live and len(scene_pkt) >= 8 and scene_pkt[-4] == 0xCF:
+            if not espnow_live and len(scene_pkt) >= 3 and scene_pkt[0] == 0xAE:
                 b = bytearray(scene_pkt)
-                b[-3] |= 0x80
+                b[2] |= 0x80
                 scene_pkt = bytes(b)
             self._write(scene_pkt)
-            return
-        if video_pkt is not None:
-            self._write(video_pkt)
             return
         if seq == self._tx_seq:
             if now - self._last_tx < self._timeout:

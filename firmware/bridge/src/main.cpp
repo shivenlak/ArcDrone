@@ -409,7 +409,7 @@ void sendLine(const char *hex, int hexLen) {
     else txCount[PATH_ESPNOW]++;
   }
 #ifdef HAS_LORA
-  if (loraOn() && loraReady) {
+  if (loraOn() && loraReady && out[0] != 0xEF) {
     loraQueue(out, len);
     txCount[PATH_LORA]++;
   }

@@ -167,7 +167,7 @@ def parse_args():
         default=25.0,
         help="Suppress repeat alerts for the same contact while it stays in view (sec)",
     )
-    parser.add_argument("--fps", type=float, default=6.0, help="Camera / YOLO inference rate")
+    parser.add_argument("--fps", type=float, default=10.0, help="Camera / YOLO inference rate")
     parser.add_argument(
         "--scene-hz",
         type=float,
@@ -181,9 +181,9 @@ def parse_args():
     parser.add_argument(
         "--preview-port",
         type=int,
-        default=0,
+        default=8081,
         help="Serve the HUD video over Wi-Fi (MJPEG) for the dashboard's Wi-Fi camera tab, "
-        "e.g. 8081. Off by default; never sent over the radio.",
+        "default 8081. Never sent over LoRa.",
     )
     parser.add_argument("--headless", action="store_true", help="Run without local video window (Pi/Blind demo)")
     return parser.parse_args()
@@ -254,19 +254,8 @@ def main() -> None:
 
     source = open_frame_source(args.video)
     use_camera = source.is_live_camera()
-    _clip_order = [
-        "uav0000268_05773_v",
-        "uav0000086_00000_v",
-        "uav0000182_00000_v",
-        "uav0000117_02622_v",
-        "uav0000339_00001_v",
-        "uav0000137_00458_v",
-    ]
-    clip_idx = 0
-    for _i, _cid in enumerate(_clip_order, start=1):
-        if _cid in str(args.video):
-            clip_idx = _i
-            break
+    if use_camera and args.imgsz > 640:
+        detector.imgsz = 640
     if not source.isOpened():
         if use_camera:
             print(
@@ -325,8 +314,17 @@ def main() -> None:
 
             # 2. Capture fresh frame (webcam or video) for ESP-NOW transmission & preview;
             #    run YOLO at --fps (skipped in HOLD once a frame exists).
+            sender_radio = link.radio or {}
+            sender_lora_only = (
+                sender_radio.get("mode") in ("LORA_ONLY", "MUTED")
+                or (
+                    sender_radio.get("espnow_rx", 0) > 0
+                    and (sender_radio.get("espnow_age", 0) < 0 or sender_radio.get("espnow_age", 0) >= 3500)
+                    and sender_radio.get("lora_age", -1) >= 0
+                )
+            )
             if link.mode != p.MODE_HOLD or last_frame is None:
-                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.095)):
+                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.080)):
                     last_video_read = now_mono
                     ret, frame = source.read()
                     if not ret and not use_camera:
@@ -338,15 +336,16 @@ def main() -> None:
                         if preview is not None:
                             preview.update(last_frame)
 
-                if last_frame is not None and (now_mono - last_espnow_video_tx >= 0.22):
+                if last_frame is not None and not sender_lora_only and (now_mono - last_espnow_video_tx >= 0.085):
                     last_espnow_video_tx = now_mono
                     try:
-                        thumb = cv2.resize(last_frame, (160, 96), interpolation=cv2.INTER_AREA)
+                        thumb = cv2.resize(last_frame, (480, 270), interpolation=cv2.INTER_AREA)
                         ok_jpg, jpg_buf = cv2.imencode(
-                            ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 26]
+                            ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 55]
                         )
                         if ok_jpg:
-                            link.send_video_frame(jpg_buf.tobytes())
+                            raw_jpg = jpg_buf.tobytes()
+                            udp_sock.sendto(raw_jpg, (args.scene_host, 9998))
                     except Exception:
                         pass
 
@@ -379,7 +378,7 @@ def main() -> None:
                 state["last_frame_t"] = now_mono
                 state["new_frame"] = True
 
-            # 3. Scene vectors at --scene-hz (default 12/s); uses latest boxes, not full link cap
+            # 3. Compact LoRa Scene vectors at --scene-hz (default 12/s): 3-byte header + 4B/obj KF or 2B/obj delta
             if (
                 last_frame is not None
                 and link.mode != p.MODE_HOLD
@@ -394,18 +393,8 @@ def main() -> None:
                     slat,
                     slon,
                     scene_hz=args.scene_hz,
+                    sender_lora_only=sender_lora_only,
                 )
-                sender_radio = link.radio or {}
-                sender_lora_only = (
-                    sender_radio.get("mode") in ("LORA_ONLY", "MUTED")
-                    or (
-                        sender_radio.get("espnow_rx", 0) > 0
-                        and (sender_radio.get("espnow_age", 0) < 0 or sender_radio.get("espnow_age", 0) >= 3500)
-                        and sender_radio.get("lora_age", -1) >= 0
-                    )
-                )
-                clip_byte = (clip_idx & 0x7F) | (0x80 if sender_lora_only else 0x00)
-                scene_bytes = scene_bytes + struct.pack(">BBH", 0xCF, clip_byte, frame_idx & 0xFFFF)
                 state["scene_kbps"] = kbps
                 link.send_scene(scene_bytes)
                 udp_sock.sendto(scene_bytes, (args.scene_host, args.scene_port))

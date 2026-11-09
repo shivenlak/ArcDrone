@@ -35,7 +35,7 @@ _DECODER = SceneCodec(dst_size=(FOV_W, FOV_H))
 
 
 def _decode_udp(data: bytes):
-    if len(data) < 4 or data[0] not in (MAGIC_V1, MAGIC_V2):
+    if len(data) < 3 or data[0] not in (MAGIC_V1, MAGIC_V2):
         return None
     return _DECODER.decode_frame(data, canvas_w=FOV_W, canvas_h=FOV_H)
 
