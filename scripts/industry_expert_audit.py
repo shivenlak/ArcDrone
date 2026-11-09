@@ -77,7 +77,7 @@ def audit_solution() -> Dict[str, Any]:
     # Run integration suite
     test_integration = run_test_module([
         "uv", "run", "--with", "pytest", "--with", "pyserial", "--with", "cryptography",
-        "python", "-m", "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "-q"
+        "python", "-m", "pytest", "protocol/test_packets.py", "scripts/test_integration_suite.py", "scripts/test_lora_image_transfer.py", "-q"
     ])
 
     report["test_results"]["encryption_suite"] = test_crypto
@@ -150,6 +150,11 @@ def audit_solution() -> Dict[str, Any]:
         "down to the 5th floor (486 alerts over 8 min, LoRa SF7 at 10 dBm). On the 6th floor, 2.4 GHz ESP-NOW died after 2 s (-99 dBm) "
         "while 915 MHz LoRa continued carrying alerts below the noise floor (-114 dBm, -8.8 dB SNR). Upon walking back up, all 64 "
         "buffered alerts flushed in order with 0 duplicate alerts shown."
+    )
+    report["doing_right"].append(
+        "On-Demand LoRa Target Crop Transfer (scripts/lora_image_transfer.py): Enables ground operators to request a 64x64 ROI "
+        "visual confirmation thumbnail (<= 960 B, 5-8 chunks of 131 B plain / 139 B AES-128-CCM) over LoRa using a 4-gate "
+        "Scavenger Protocol (Link-Up, Buffered==0 Zero-Blocking, SNR >= -6.0 dB Cliff, and <= 3 kB/s Pacing)."
     )
 
     # 4. Analyze Weaknesses, Gaps & Tactical Risks ("What We Are Doing Wrong / Missing")
