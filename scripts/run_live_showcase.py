@@ -7,12 +7,15 @@ Spins up:
 4. UAARG telemetry logging in tmp/log/.
 """
 
+import argparse
 import math
 import os
 import random
 import sys
 import threading
 import time
+import urllib.request
+import webbrowser
 import uvicorn
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -116,6 +119,12 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
 
 
 def main():
+    parser = argparse.ArgumentParser(description="ArcDrone End-to-End Live Simulation Showcase")
+    parser.add_argument("--http-port", type=int, default=8000, help="Web dashboard port (default: 8000)")
+    parser.add_argument("--host", default="0.0.0.0", help="HTTP server host (default: 0.0.0.0)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not auto-open browser")
+    args = parser.parse_args()
+
     print("=" * 70)
     print("  ARCDRONE LIVE INTERACTIVE SHOWCASE")
     print("  natHacks 2026 Defense & Security Challenge")
@@ -139,14 +148,31 @@ def main():
     print("[+] Airborne Drone Patrol Active: Transmitting detections every 2s")
     print("[+] UAARG Event Logger Active: Logging to tmp/log/")
     print("\n" + "*" * 70)
-    print("  >>> OPEN THIS URL IN YOUR BROWSER:")
-    print("      http://localhost:8000")
+    print(f"  >>> DASHBOARD URL: http://localhost:{args.http_port}")
+    print("      (Opening automatically in your default browser...)")
     print("*" * 70 + "\n")
 
-    # 3. Start Ground Station Web Server on port 8000
+    def _open_browser():
+        url = f"http://localhost:{args.http_port}"
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{args.http_port}", timeout=0.8):
+                    pass
+                time.sleep(0.3)
+                webbrowser.open(url)
+                return
+            except Exception:
+                time.sleep(0.4)
+        webbrowser.open(url)
+
+    if not args.no_browser:
+        threading.Thread(target=_open_browser, daemon=True).start()
+
+    # 3. Start Ground Station Web Server
     app = make_app("sim://ground")
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
+        uvicorn.run(app, host=args.host, port=args.http_port, log_level="warning")
     finally:
         stop_event.set()
 
