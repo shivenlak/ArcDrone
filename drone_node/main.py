@@ -167,12 +167,12 @@ def parse_args():
         default=25.0,
         help="Suppress repeat alerts for the same contact while it stays in view (sec)",
     )
-    parser.add_argument("--fps", type=float, default=10.0, help="Camera / YOLO inference rate")
+    parser.add_argument("--fps", type=float, default=15.0, help="Camera / YOLO inference rate")
     parser.add_argument(
         "--scene-hz",
         type=float,
-        default=SCENE_HZ_DEFAULT,
-        help="Scene vector UDP rate (default 12/s); shares %.1f kbps link cap"
+        default=15.0,
+        help="Scene vector UDP rate (default 15/s); shares %.1f kbps link cap"
         % LINK_MAX_KBPS,
     )
     parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to YOLO weights (.pt)")
@@ -318,13 +318,13 @@ def main() -> None:
             sender_lora_only = (
                 sender_radio.get("mode") in ("LORA_ONLY", "MUTED")
                 or (
-                    sender_radio.get("espnow_rx", 0) > 0
-                    and (sender_radio.get("espnow_age", 0) < 0 or sender_radio.get("espnow_age", 0) >= 3500)
+                    (sender_radio.get("espnow_rx", 0) > 0 or sender_radio.get("lora_rx", 0) > 0)
+                    and (sender_radio.get("espnow_age", -1) < 0 or sender_radio.get("espnow_age", -1) >= 3500)
                     and sender_radio.get("lora_age", -1) >= 0
                 )
             )
             if link.mode != p.MODE_HOLD or last_frame is None:
-                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.080)):
+                if source.isOpened() and (use_camera or (now_mono - last_video_read >= 0.065)):
                     last_video_read = now_mono
                     ret, frame = source.read()
                     if not ret and not use_camera:
@@ -336,16 +336,16 @@ def main() -> None:
                         if preview is not None:
                             preview.update(last_frame)
 
-                if last_frame is not None and not sender_lora_only and (now_mono - last_espnow_video_tx >= 0.14):
+                if last_frame is not None and not sender_lora_only and (now_mono - last_espnow_video_tx >= 0.24):
                     last_espnow_video_tx = now_mono
                     try:
-                        thumb = cv2.resize(last_frame, (112, 64), interpolation=cv2.INTER_AREA)
+                        thumb = cv2.resize(last_frame, (96, 54), interpolation=cv2.INTER_AREA)
                         ok_img, img_buf = cv2.imencode(
-                            ".webp", thumb, [int(cv2.IMWRITE_WEBP_QUALITY), 10]
+                            ".webp", thumb, [int(cv2.IMWRITE_WEBP_QUALITY), 8]
                         )
                         if not ok_img:
                             ok_img, img_buf = cv2.imencode(
-                                ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 20]
+                                ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 18]
                             )
                         if ok_img:
                             raw_bytes = img_buf.tobytes()

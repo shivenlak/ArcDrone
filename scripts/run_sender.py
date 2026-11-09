@@ -207,7 +207,7 @@ def main() -> None:
     parser.add_argument("--video", default=None, help="Video path or camera index")
     parser.add_argument("--model", default=None, help="YOLO model path")
     parser.add_argument("--imgsz", type=int, default=None, help="Inference resolution")
-    parser.add_argument("--fps", type=float, default=6.0, help="Camera / YOLO inference rate")
+    parser.add_argument("--fps", type=float, default=15.0, help="Camera / YOLO inference rate")
     parser.add_argument("--preview-port", type=int, default=8081, help="Wi-Fi MJPEG preview port (default: 8081)")
     parser.add_argument("--headless", action="store_true", help="Run without OpenCV GUI window")
     args = parser.parse_args()
@@ -223,7 +223,7 @@ def main() -> None:
         return
 
     model = args.model if args.model else find_best_model(is_webcam=(video == "0"))
-    imgsz = args.imgsz if args.imgsz else (640 if video == "0" else 1280)
+    imgsz = args.imgsz if args.imgsz else 640
 
     print("\n" + "=" * 65)
     print("  Starting ArcDrone Airborne Edge Node (Sender)")

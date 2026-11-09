@@ -80,6 +80,7 @@ class Link:
         self.radio = {}  # last "# radio ..." status line from the bridge, parsed
         self._radio_at = 0.0
         self._pending_scene = None
+        self._latest_scene = b""
         self._last_scene_tx = 0.0
         self._video_chunks = collections.deque()
         self._last_video_tx = 0.0
@@ -111,15 +112,17 @@ class Link:
         """Queue the latest SceneCodec (0xAD/0xAE) frame for best-effort transmission over the radio."""
         if scene_bytes:
             with self._lock:
-                self._pending_scene = bytes(scene_bytes)
+                b = bytes(scene_bytes)
+                self._pending_scene = b
+                self._latest_scene = b
 
     def send_video_frame(self, jpeg_bytes):
         """Queue a compact WebP/JPEG frame as 0xEF chunks for ESP-NOW transmission to the receiver."""
         if not jpeg_bytes:
             return
-        chunk_size = 114
+        chunk_size = 96
         total = (len(jpeg_bytes) + chunk_size - 1) // chunk_size
-        if total <= 0 or total > 12:
+        if total <= 0 or total > 10:
             return
         with self._lock:
             if self._video_chunks:
@@ -211,8 +214,13 @@ class Link:
                     time.sleep(0.004)
 
     def _read(self):
-        # Accumulate bytes and split on newlines ourselves: a read can stop mid-line.
-        self._rx += self._ser.read(self._ser.in_waiting or 1)
+        # Non-blocking read when bytes are waiting; tiny 1ms sleep when idle so _send_due runs at high rate.
+        waiting = self._ser.in_waiting
+        if waiting:
+            self._rx += self._ser.read(waiting)
+        else:
+            time.sleep(0.001)
+            return
         while b"\n" in self._rx:
             line, self._rx = self._rx.split(b"\n", 1)
             self._handle_line(line.decode(errors="replace"))
@@ -247,8 +255,18 @@ class Link:
             if not self.up:
                 self.up = True
                 self.on_event("link_up")
-            fid, idx, total = data[1], data[2], data[3]
-            payload = data[4:]
+            fid = data[1] & 0x7F
+            has_piggyback_scene = bool(data[1] & 0x80)
+            idx, total = data[2], data[3]
+            offset = 4
+            if has_piggyback_scene and len(data) > 5:
+                slen = data[4]
+                offset = 5 + slen
+                if slen >= 3 and 5 + slen <= len(data):
+                    sbytes = data[5 : 5 + slen]
+                    if sbytes[0] in (0xAD, 0xAE):
+                        self.on_packet({"type": sbytes[0], "scene_bytes": sbytes, "wire": sbytes.hex().upper()})
+            payload = data[offset:]
             if fid != self._rx_video_id or total != self._rx_video_total:
                 self._rx_video_id = fid
                 self._rx_video_total = total
@@ -348,12 +366,12 @@ class Link:
             or (
                 self.radio.get("mode", "DUAL") == "DUAL"
                 and (
-                    self.radio.get("espnow_rx", 0) == 0
-                    or 0 <= self.radio.get("espnow_age", 0) < 3500
+                    (self.radio.get("espnow_rx", 0) == 0 and self.radio.get("lora_rx", 0) == 0)
+                    or 0 <= self.radio.get("espnow_age", -1) < 3500
                 )
             )
         )
-        scene_interval = 0.11 if espnow_live else 0.22
+        scene_interval = 0.065 if espnow_live else 0.12
         scene_pkt = None
         video_pkt = None
         with self._lock:
@@ -364,8 +382,15 @@ class Link:
                     scene_pkt = self._pending_scene
                     self._pending_scene = None
                     self._last_scene_tx = now
-                elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.014:
-                    video_pkt = self._video_chunks.popleft()
+                elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.025:
+                    raw_v = self._video_chunks.popleft()
+                    if self._latest_scene and len(self._latest_scene) <= 27:
+                        s_b = self._latest_scene
+                        video_pkt = bytes([0xEF, (raw_v[1] & 0x7F) | 0x80, raw_v[2], raw_v[3], len(s_b)]) + s_b + raw_v[4:]
+                        self._pending_scene = None
+                        self._last_scene_tx = now
+                    else:
+                        video_pkt = raw_v
                     self._last_video_tx = now
                 else:
                     return
@@ -374,14 +399,21 @@ class Link:
                 if (
                     seq == self._tx_seq
                     and (now - self._last_tx) < self._timeout
-                    and (now - self._last_tx) >= 0.06
+                    and (now - self._last_tx) >= 0.04
                 ):
                     if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
                         scene_pkt = self._pending_scene
                         self._pending_scene = None
                         self._last_scene_tx = now
-                    elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.014:
-                        video_pkt = self._video_chunks.popleft()
+                    elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.025:
+                        raw_v = self._video_chunks.popleft()
+                        if self._latest_scene and len(self._latest_scene) <= 27:
+                            s_b = self._latest_scene
+                            video_pkt = bytes([0xEF, (raw_v[1] & 0x7F) | 0x80, raw_v[2], raw_v[3], len(s_b)]) + s_b + raw_v[4:]
+                            self._pending_scene = None
+                            self._last_scene_tx = now
+                        else:
+                            video_pkt = raw_v
                         self._last_video_tx = now
         if scene_pkt is not None:
             if not espnow_live and len(scene_pkt) >= 3 and scene_pkt[0] == 0xAE:

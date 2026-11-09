@@ -298,13 +298,10 @@ class SceneCodec:
             if best_tid is not None:
                 trk = self._enc_tracks[best_tid]
                 trk.speed_q = math.hypot(cx_q - trk.cx_q, cy_q - trk.cy_q)
-                trk.cx_q = _clamp(int(round(0.72 * cx_q + 0.28 * trk.cx_q)), 0, 255)
-                trk.cy_q = _clamp(int(round(0.72 * cy_q + 0.28 * trk.cy_q)), 0, 255)
-                trk.w6 = _clamp(int(round(0.55 * w6 + 0.45 * trk.w6)), 1, 63)
-                trk.h6 = _clamp(int(round(0.55 * h6 + 0.45 * trk.h6)), 1, 63)
-                if conf >= trk.conf:
-                    trk.cls = cls_id
-                trk.conf = round(0.7 * conf + 0.3 * trk.conf, 2)
+                trk.cx_q, trk.cy_q = cx_q, cy_q
+                trk.w6, trk.h6 = w6, h6
+                trk.cls = cls_id
+                trk.conf = conf
                 trk.ticks_unseen = 0
                 matched_tids.add(best_tid)
             else:
@@ -324,7 +321,7 @@ class SceneCodec:
                 matched_tids.add(new_tid)
 
         for tid in list(self._enc_tracks.keys()):
-            if self._enc_tracks[tid].ticks_unseen > 4:
+            if self._enc_tracks[tid].ticks_unseen > 1:
                 del self._enc_tracks[tid]
 
     def _schedule_tracks(self) -> List[_EncoderTrack]:
@@ -374,31 +371,7 @@ class SceneCodec:
         self._seq = (self._seq + 1) & 0xFFFF
         self._update_encoder_tracks(detections)
         scheduled = self._schedule_tracks()[:MAX_LORA_OBJECTS]
-        cur_tids = {t.track_id for t in scheduled}
-
-        need_kf = (
-            self._ticks_since_kf >= self.keyframe_interval
-            or cur_tids != self._prev_visible_tids
-            or any(not t.synced_on_wire for t in scheduled)
-        )
-        self._prev_visible_tids = cur_tids
         flags_seq = (0x80 if sender_lora_only else 0x00) | (self._seq & 0x7F)
-
-        if not need_kf and scheduled:
-            delta_payloads: List[bytes] = []
-            for trk in scheduled:
-                dcx = _clamp(trk.cx_q - trk.sent_cx_q, -31, 31)
-                dcy = _clamp(trk.cy_q - trk.sent_cy_q, -31, 31)
-                if abs(dcx) >= 1 or abs(dcy) >= 1:
-                    delta_payloads.append(self._pack_delta_obj(trk.track_id, dcx, dcy))
-                    trk.sent_cx_q += dcx
-                    trk.sent_cy_q += dcy
-                    trk.ticks_since_sent = 0
-            self._ticks_since_kf += 1
-            type_count = (MSG_COMPACT_DELTA << 4) | (len(delta_payloads) & 0x0F)
-            pkt = struct.pack(">BBB", MAGIC_V2, type_count, flags_seq) + b"".join(delta_payloads)
-            self._byte_window.append((now, len(pkt)))
-            return pkt, self.current_kbps()
 
         obj_payloads: List[bytes] = []
         for trk in scheduled:
@@ -456,7 +429,7 @@ class SceneCodec:
                         tid, cls_id, 0.88, cx_q, cy_q, w6, h6, now, is_kf=True
                     )
                 for tid in list(self._dec_tracks.keys()):
-                    if tid not in seen_in_kf and (now - self._dec_tracks[tid].last_keyframe_ts) > 1.2:
+                    if tid not in seen_in_kf:
                         del self._dec_tracks[tid]
             else:
                 offset = 3
