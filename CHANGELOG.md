@@ -28,3 +28,4 @@ Append one line at the bottom when your work lands: `- YYYY-MM-DD (name): what c
 - Both Heltecs now on SF9 (heltec_v3_sf9). Desk: 60/60 both radios; LoRa-only failover 80/80 at 1 alert/s, RTT 379 ms; 2/s is too fast for SF9.
 - 2026-11-09 (Manan): One-click Windows setup and launchers: setup.bat, run_receiver.bat (ground station + auto-browser), run_sender.bat (airborne node + video/port discovery), and run_simulation.bat.
 - 2026-11-09 (Manan): macOS one-click scripts (.sh and double-clickable .command for Finder) with /dev/cu.* serial priority and Darwin auto-detection.
+- 2026-11-09 (Ishan): Rebuilt dashboard in a brutalist/monospace engineering theme (hard corners, flat buttons, no animation/blur); 3 stages (init/ops/aux), reconstructor iframe embed, kept the frozen WS schema (event-based, {action:"command",cmd,ref_seq}) and ?demo=1 schema-valid simulator.
