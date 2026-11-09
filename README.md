@@ -67,9 +67,9 @@ export ARCDRONE_KEY=$(python -m protocol.crypto)    # use the SAME value on both
 
 **Demo button (PRG on Heltec, SW38 on Feather):** Heltec cycles DUAL → LORA ONLY → MUTED; Feather toggles MUTED.
 
-**Wi-Fi camera (optional):** add `--preview-port 8081` to the drone command. The dashboard's tab [03] shows the drone's HUD video only while the ground laptop can reach the drone over Wi-Fi; with two laptops open the dashboard as `http://localhost:8001/?drone=<drone laptop IP>`. The video is shown inline on tab [02] next to live numbers (YOLO ms/frame, frames/s, objects, alerts sent vs received, radio vs video bit/s). It goes over Wi-Fi, never over the radio. Measured (one viewer, 1280×720 HUD, JPEG q60): ~5.1 Mbit/s for the video vs ~500 bit/s for the radio link; YOLO 67 ms/frame, 5.7 frames/s with the HUD and preview running.
+**Wi-Fi camera (optional):** add `--preview-port 8081` to the drone command. The dashboard shows the drone's HUD video only while the ground laptop can reach the drone over Wi-Fi; with two laptops open the dashboard as `http://localhost:8001/?drone=<drone laptop IP>`. The video is shown inline on tab [02] next to live numbers (YOLO ms/frame, frames/s, objects, alerts sent vs received, radio vs video bit/s). It goes over Wi-Fi, never over the radio. Measured (one viewer, 1280×720 HUD, JPEG q60): ~5.1 Mbit/s for the video vs ~500 bit/s for the radio link; YOLO 67 ms/frame, 5.7 frames/s with the HUD and preview running.
 
-**Radio paths on the dashboard:** the three tiles under the status row show what the ground board hears on each radio (live with dBm, or "No signal") and which path is carrying traffic. Walk the drone board away and ESP-NOW goes red while LoRa stays green. For more LoRa range, flash **both** boards with `pio run -e heltec_v3_sf9 -t upload` (about 2× range, about 4× airtime).
+**Radio paths on the dashboard:** the three tiles under the status row show what the ground board hears on each radio (live with dBm, or "No signal") and which path is carrying traffic. Walk the drone board away and ESP-NOW goes red while LoRa stays green. For more LoRa range, flash **both** boards with `pio run -e heltec_v3_sf9 -t upload` (in theory about 2× range for about 4× airtime; not measured yet).
 
 **Without hardware:** `python -m protocol.fake_bridge` prints two virtual serial ports. Pass one to each side as `--port`. It's for development only; the demo uses the real radios.
 
@@ -77,7 +77,7 @@ export ARCDRONE_KEY=$(python -m protocol.crypto)    # use the SAME value on both
 
 ## Scene reconstructor (operator view)
 
-Alongside reliable DETECTION alerts, the drone streams a compact scene vector feed (SceneCodec v2, UDP, 12 Hz, ≤ 2.0 kbps). A browser page rebuilds the tactical view, shows what each target is doing, logs behavior changes, and lets you trace and replay one target’s movement.
+Alongside reliable DETECTION alerts, the drone streams a compact scene vector feed (SceneCodec v2, UDP, 12 Hz, budgeted at ≤ 2.0 kbps; real rate not measured yet). It goes over Wi-Fi, not the radio. A browser page rebuilds the tactical view, shows what each target is doing, logs behavior changes, and lets you trace and replay one target’s movement.
 
 **Quick UI check (no camera or radio):**
 
