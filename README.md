@@ -28,7 +28,7 @@ drone_node: video → YOLO → gate                 ground_station: FastAPI + We
 | `firmware/bridge/` | ESP32 serial↔radio bridge (PlatformIO) | C++ (Arduino) |
 | `drone_node/` | YOLO detection, simulated GPS, command handling | Python |
 | `ground_station/` | FastAPI server + dashboard (`static/`) | Python + HTML/JS |
-| `scripts/` | Cross-platform sim bridge, bandwidth auditor, UAARG adapter, test harness, live demo | Python |
+| `scripts/` | Cross-platform sim bridge, bandwidth auditor, test harness, live demo | Python |
 | `data/` | VisDrone clips (gitignored) | — |
 
 ## Hardware
@@ -180,7 +180,7 @@ Live link traffic, both directions, measured by the ground station: about 200 bi
 | CV / drone node | Ishan |
 | Ground server | Samar |
 | Dashboard UI | Marriam |
-| Test harness, LoRa, bandwidth compliance, UAARG adapters, demo/pitch | Manan |
+| Test harness, LoRa, bandwidth compliance, demo/pitch | Manan |
 
 ## Changelog
 

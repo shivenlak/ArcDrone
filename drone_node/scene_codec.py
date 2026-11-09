@@ -11,7 +11,6 @@ MAGIC_V1 = 0xAD
 MAGIC_V2 = 0xAE
 MAGIC_BYTE = MAGIC_V1  # legacy alias
 
-MSG_HEARTBEAT = 0x1
 MSG_KEYFRAME = 0x2
 MSG_DELTA = 0x3
 
@@ -365,58 +364,26 @@ class SceneCodec:
         self._update_encoder_tracks(detections)
         scheduled = self._schedule_tracks()
 
-        has_unsynced = any(not t.synced_on_wire for t in scheduled)
-        want_keyframe = True
+        obj_payloads: List[bytes] = []
+        used_bytes = 12
+        for trk in scheduled[:12]:
+            obj_payloads.append(self._pack_keyframe_obj(trk))
+            used_bytes += 5
+            trk.sent_cx_q = trk.cx_q
+            trk.sent_cy_q = trk.cy_q
+            trk.synced_on_wire = True
+            trk.ticks_since_sent = 0
 
-        if want_keyframe:
-            obj_payloads: List[bytes] = []
-            used_bytes = 12
-            for trk in scheduled[:12]:
-                obj_payloads.append(self._pack_keyframe_obj(trk))
-                used_bytes += 5
-                trk.sent_cx_q = trk.cx_q
-                trk.sent_cy_q = trk.cy_q
-                trk.synced_on_wire = True
-                trk.ticks_since_sent = 0
-
-            type_count = (MSG_KEYFRAME << 4) | (len(obj_payloads) & 0x0F)
-            pkt = struct.pack(
-                ">BBHff",
-                MAGIC_V2,
-                type_count,
-                self._seq,
-                float(drone_lat),
-                float(drone_lon),
-            ) + b"".join(obj_payloads)
-            self._ticks_since_kf = 0
-            self._byte_window.append((now, len(pkt)))
-            return pkt, self.current_kbps()
-
-        delta_payloads: List[bytes] = []
-        used_bytes = 4
-        for trk in scheduled:
-            if not trk.synced_on_wire or len(delta_payloads) >= 15:
-                continue
-            dcx = _clamp(trk.cx_q - trk.sent_cx_q, -31, 31)
-            dcy = _clamp(trk.cy_q - trk.sent_cy_q, -31, 31)
-            if abs(dcx) >= 1 or abs(dcy) >= 1:
-                if used_bytes + 2 <= avail:
-                    delta_payloads.append(self._pack_delta_obj(trk.track_id, dcx, dcy))
-                    used_bytes += 2
-                    trk.sent_cx_q += dcx
-                    trk.sent_cy_q += dcy
-                    trk.ticks_since_sent = 0
-
-        self._ticks_since_kf += 1
-        if not delta_payloads:
-            type_count = (MSG_HEARTBEAT << 4) | 0
-            pkt = struct.pack(">BBH", MAGIC_V2, type_count, self._seq)
-        else:
-            type_count = (MSG_DELTA << 4) | (len(delta_payloads) & 0x0F)
-            pkt = struct.pack(">BBH", MAGIC_V2, type_count, self._seq) + b"".join(
-                delta_payloads
-            )
-
+        type_count = (MSG_KEYFRAME << 4) | (len(obj_payloads) & 0x0F)
+        pkt = struct.pack(
+            ">BBHff",
+            MAGIC_V2,
+            type_count,
+            self._seq,
+            float(drone_lat),
+            float(drone_lon),
+        ) + b"".join(obj_payloads)
+        self._ticks_since_kf = 0
         self._byte_window.append((now, len(pkt)))
         return pkt, self.current_kbps()
 
@@ -497,10 +464,6 @@ class SceneCodec:
             for tid, trk in self._dec_tracks.items():
                 if tid not in updated_tids:
                     trk.vel = [trk.vel[0] * 0.4, trk.vel[1] * 0.4]
-
-        elif msg_type == MSG_HEARTBEAT:
-            for trk in self._dec_tracks.values():
-                trk.vel = [trk.vel[0] * 0.4, trk.vel[1] * 0.4]
 
         out = self._build_output(seq, len(data), now)
         if len(data) >= 8 and data[-4] == 0xCF:

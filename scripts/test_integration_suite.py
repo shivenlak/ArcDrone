@@ -29,9 +29,6 @@ from protocol import packets as p
 from protocol.link import Link
 from scripts.bandwidth_monitor import BandwidthMonitor, BUDGET_BYTES_PER_SEC
 from scripts.sim_link_bridge import SimLinkBridge, VirtualSerialPort, VirtualSerialPair
-from scripts.uaarg_adapter.event_logger import EventLogger
-from scripts.uaarg_adapter.ground_client import GroundClient
-from scripts.uaarg_adapter.mission_monitor import MissionMonitor
 
 
 # ==============================================================================
@@ -118,114 +115,6 @@ def test_bandwidth_monitor_sliding_window_and_budget():
     summary = monitor.summary()
     assert not summary["within_budget"]
     assert summary["peak_serial_bps"] >= 3100.0
-
-
-def test_uaarg_event_logger_structure_and_schema(tmp_path):
-    """Verify EventLogger session hierarchy (tmp/log/<id>/) and <seq>.json schema."""
-    log_dir = str(tmp_path / "uaarg_log")
-    logger = EventLogger(base_dir=log_dir)
-
-    assert os.path.exists(logger.run_dir)
-    assert os.path.exists(logger.img_dir)
-    assert os.path.exists(logger.bb_dir)
-
-    # Log structured event
-    snapshot = logger.log_event(
-        seq=42,
-        detection={"cls": "van", "conf": 0.89, "count": 2},
-        location={"lat": 53.5232, "lon": -113.5263},
-        altitude_m=18.5,
-        mode="PATROL",
-        link_status={"up": True, "buffered": 0, "rtt_ms": 8.5},
-    )
-
-    # Verify disk files
-    img_file = os.path.join(logger.img_dir, "42.png")
-    bb_file = os.path.join(logger.bb_dir, "42.png")
-    json_file = os.path.join(logger.run_dir, "42.json")
-
-    assert os.path.exists(img_file)
-    assert os.path.exists(bb_file)
-    assert os.path.exists(json_file)
-
-    # Verify JSON content
-    stored = logger.read_event(42)
-    assert stored is not None
-    assert stored["seq"] == 42
-    assert stored["detection"]["cls"] == "van"
-    assert stored["detection"]["conf"] == 0.89
-    assert stored["location"]["lat"] == 53.5232
-    assert stored["location"]["lon"] == -113.5263
-    assert stored["altitude_m"] == 18.5
-    assert stored["mode"] == "PATROL"
-    assert stored["link"]["up"] is True
-
-
-def test_uaarg_mission_monitor_liveness_and_severities():
-    """Verify MissionMonitor liveness timer (timeSinceMessage) and 3-tier severity logs."""
-    monitor = MissionMonitor(heartbeat_timeout=3.0)
-
-    # Initial state
-    assert monitor.time_since_message >= 0
-    status = monitor.get_status()
-    assert status["mode"] == "PATROL"
-
-    # Incoming message resets liveness
-    monitor.record_message(mode="HOLD", buffered=2)
-    assert monitor.time_since_message == 0
-    assert monitor.get_status()["mode"] == "HOLD"
-    assert monitor.get_status()["bufferedCount"] == 2
-
-    # 3-tier severity logs
-    normal_entry = monitor.send_log("System operational", severity="normal", subsystem="ARCDRONE_EDGE")
-    warn_entry = monitor.send_log("Buffer filling up", severity="warning", subsystem="ARCDRONE_LINK")
-    err_entry = monitor.send_log("Telemetry timeout", severity="error", subsystem="ARCDRONE_GROUND")
-
-    assert normal_entry["severity"] == "normal"
-    assert warn_entry["severity"] == "warning"
-    assert err_entry["severity"] == "error"
-
-    # Filtered queries
-    warnings = monitor.get_logs(severity="warning")
-    assert len(warnings) == 1
-    assert warnings[0]["message"] == "Buffer filling up"
-
-    edge_logs = monitor.get_logs(subsystem="ARCDRONE_EDGE")
-    assert len(edge_logs) == 1
-
-
-def test_uaarg_ground_client_observer():
-    """Verify GroundClient non-invasively processes incoming JSON broadcasts."""
-    monitor = MissionMonitor()
-    client = GroundClient(mission_monitor=monitor)
-
-    # Process simulated alert
-    alert_json = json.dumps({
-        "event": "alert",
-        "seq": 105,
-        "cls": "car",
-        "conf": 0.95,
-        "count": 1,
-        "lat": 53.52,
-        "lon": -113.52,
-        "ts_ms": p.now_ms(),
-        "delayed": False,
-    })
-    client.handle_incoming_json(alert_json)
-    assert len(client.alerts) == 1
-    assert client.alerts[0]["seq"] == 105
-
-    # Process simulated drone heartbeat
-    drone_json = json.dumps({"event": "drone", "mode": "HOLD", "buffered": 3})
-    client.handle_incoming_json(drone_json)
-    assert client.drone_status["mode"] == "HOLD"
-    assert client.drone_status["buffered"] == 3
-
-    # Process command status
-    cmd_json = json.dumps({"event": "cmd_status", "cmd_id": 501, "cmd": "HOLD", "status": "CONFIRMED"})
-    client.handle_incoming_json(cmd_json)
-    assert client.commands[501]["status"] == "CONFIRMED"
-    assert client.wait_for_command_status(501, status="CONFIRMED", timeout=0.1)
 
 
 # ==============================================================================
@@ -383,9 +272,6 @@ def run_all_tests() -> Dict[str, Any]:
         ("Virtual Serial Pair Basic I/O", test_virtual_serial_pair_basic_io),
         ("Sim Link Bridge Cut & Restore", test_sim_link_bridge_cut_and_restore),
         ("Bandwidth Monitor Sliding Window & Budget", test_bandwidth_monitor_sliding_window_and_budget),
-        ("UAARG Event Logger Structure & Schema", lambda: test_uaarg_event_logger_structure_and_schema(_get_temp_dir())),
-        ("UAARG Mission Monitor Liveness & Severities", test_uaarg_mission_monitor_liveness_and_severities),
-        ("UAARG Ground Client Observer", test_uaarg_ground_client_observer),
         ("Integrated Two-Way Command State Loop", test_integrated_two_way_command_state_loop),
         ("Integrated Link Loss, Outage & Recovery Flush", test_integrated_link_loss_buffer_accumulation_and_recovery),
         ("Integrated Bandwidth Compliance (<= 3 kB/s)", test_integrated_bandwidth_compliance),

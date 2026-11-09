@@ -28,8 +28,6 @@ from protocol import packets as p
 from protocol.link import Link
 from scripts.bandwidth_monitor import BandwidthMonitor, BUDGET_BYTES_PER_SEC
 from scripts.sim_link_bridge import SimLinkBridge
-from scripts.uaarg_adapter.event_logger import EventLogger
-from scripts.uaarg_adapter.mission_monitor import MissionMonitor
 
 
 def print_banner(text: str) -> None:
@@ -47,14 +45,11 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
     time.sleep(0.5 * delay_scale)
 
     # 1. Initialize Subsystems
-    print_step(1, "Initializing Cross-Platform Radio Bridge & UAARG Adapters")
+    print_step(1, "Initializing Cross-Platform Radio Bridge")
     bridge = SimLinkBridge(name_a="sim://drone_demo", name_b="sim://ground_demo")
     bw_monitor = BandwidthMonitor(budget_limit=BUDGET_BYTES_PER_SEC, window_size_sec=1.0)
     bw_monitor.attach_to_bridge(bridge)
 
-    event_logger = EventLogger(base_dir="tmp/log")
-    mission_monitor = MissionMonitor()
-    print(f"  UAARG Session Log Directory: {event_logger.run_dir}")
     print(f"  Primary Link Bandwidth Cap:  {BUDGET_BYTES_PER_SEC} B/s (3 kB/s)")
 
     # 2. Spin up endpoints
@@ -64,32 +59,16 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
     def on_drone_packet(pkt: Dict[str, Any]) -> None:
         if pkt.get("type") == p.COMMAND:
             drone_received_cmds.append(pkt)
-            cmd_name = p.CMD_NAMES.get(pkt.get("cmd"), str(pkt.get("cmd")))
-            mission_monitor.send_log(
-                f"Drone received operator command: {cmd_name} (ref_seq={pkt.get('ref_seq')})",
-                severity="normal",
-                subsystem="ARCDRONE_EDGE",
-            )
             if pkt.get("cmd") == p.CMD_HOLD:
                 drone_link.mode = p.MODE_HOLD
-                mission_monitor.update_mode("HOLD")
             elif pkt.get("cmd") == p.CMD_RESUME:
                 drone_link.mode = p.MODE_PATROL
-                mission_monitor.update_mode("PATROL")
             elif pkt.get("cmd") == p.CMD_RTB:
                 drone_link.mode = p.MODE_RTB
-                mission_monitor.update_mode("RTB")
 
     def on_ground_packet(pkt: Dict[str, Any]) -> None:
         if pkt.get("type") == p.DETECTION:
             ground_received_alerts.append(pkt)
-            cls_name = p.CLASS_NAMES[pkt["cls"]] if pkt["cls"] < len(p.CLASS_NAMES) else str(pkt["cls"])
-            mission_monitor.record_message(seq=pkt["seq"])
-            mission_monitor.send_log(
-                f"Tactical alert received: #{pkt['seq']} {cls_name} (conf={pkt['conf']:.2f}) at ({pkt['lat']:.4f}, {pkt['lon']:.4f})",
-                severity="normal",
-                subsystem="ARCDRONE_GROUND",
-            )
 
     drone_link = Link(
         "sim://drone_demo",
@@ -105,7 +84,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
     ).start()
 
     time.sleep(0.4 * delay_scale)
-    mission_monitor.mark_link_up()
 
     try:
         # Step 2: Drone in MODE_PATROL detects security targets
@@ -130,14 +108,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
                 lon=target["lon"],
             )
             sent_alerts.append((seq, target))
-            # Log to UAARG hierarchical format
-            event_logger.log_event(
-                seq=seq,
-                detection={"cls": target["cls_name"], "conf": target["conf"], "count": 1},
-                location={"lat": target["lat"], "lon": target["lon"]},
-                altitude_m=15.0,
-                mode="PATROL",
-            )
             print(f"  [EDGE CV] Detected {target['cls_name']} (conf={target['conf']}) -> Packet #{seq} (21 bytes binary)")
             time.sleep(0.2 * delay_scale)
 
@@ -176,7 +146,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
         bridge.cut()
         time.sleep(3.2)  # Wait for 3.0s timeout
         assert not ground_link.up, "Ground station should detect link down at 3.0s"
-        mission_monitor.mark_link_down()
         print("  [GROUND GS] Status badge updated to: LINK LOST (after 3.0s silence).")
 
         print("  Airborne drone detects new target during blackout...")
@@ -189,14 +158,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
             lat=53.5240,
             lon=-113.5250,
         )
-        event_logger.log_event(
-            seq=blackout_seq,
-            detection={"cls": "truck", "conf": 0.94, "count": 1},
-            location={"lat": 53.5240, "lon": -113.5250},
-            altitude_m=15.0,
-            mode="PATROL",
-            link_status={"up": False, "buffered": 1},
-        )
         print(f"  [EDGE CV] Alert #{blackout_seq} generated during blackout -> Safely held in ring buffer (buffered: {drone_link.buffered}).")
 
         print("  Clearing radio jammer: Restoring communication link...")
@@ -205,7 +166,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
         while not ground_link.up and time.monotonic() < t_deadline:
             time.sleep(0.1)
         assert ground_link.up, "Ground station should detect link up after recovery"
-        mission_monitor.mark_link_up()
 
         # Wait for buffer flush
         t_deadline = time.monotonic() + 3.0
@@ -226,10 +186,9 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
         print("  Drone received RTB command. Mode transitioned to: MODE_RTB.")
 
         # Step 8: Telemetry and Bandwidth Audit Verification
-        print_step(8, "Verifying Telemetry, Logging & Bandwidth Compliance")
+        print_step(8, "Verifying Telemetry & Bandwidth Compliance")
         bw_monitor.assert_within_budget()
         bw_summary = bw_monitor.summary()
-        status_card = mission_monitor.get_status()
 
         print("\n" + "=" * 76)
         print(" NATHACKS SHOWCASE DEMONSTRATION VERIFICATION AUDIT")
@@ -238,9 +197,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
         print(f"  Peak Observed Wire Rate:  {bw_summary['peak_wire_bps']} B/s")
         print(f"  Peak Observed Serial Rate:{bw_summary['peak_serial_bps']} B/s")
         print(f"  Budget Utilization Peak:  {bw_summary['utilization_peak_pct']}% (Well within <= 3 kB/s)")
-        print(f"  UAARG Run Directory:      {event_logger.run_dir}")
-        print(f"  UAARG Logged Snapshots:   {len(event_logger.logged_seqs)} frames/JSONs")
-        print(f"  UAARG Liveness Status:    {status_card}")
         print(f"  Two-Way Control Loop:     100% Commands Confirmed & State-Verified")
         print(f"  Link Outage Recovery:     Passed (Oldest-First Flush, 0 Duplicates)")
         print("=" * 76)
@@ -248,9 +204,6 @@ def run_demo(auto: bool = True, delay_scale: float = 0.5) -> Dict[str, Any]:
         return {
             "success": True,
             "bandwidth": bw_summary,
-            "uaarg_run_dir": event_logger.run_dir,
-            "logged_events_count": len(event_logger.logged_seqs),
-            "status": status_card,
         }
 
     finally:

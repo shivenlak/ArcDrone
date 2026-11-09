@@ -23,7 +23,6 @@ if _REPO_ROOT not in sys.path:
 from protocol import packets as p
 from protocol.link import Link
 from scripts.sim_link_bridge import SimLinkBridge
-from scripts.uaarg_adapter.mission_monitor import MissionMonitor
 
 
 class SimulatedDroneAgent:
@@ -175,7 +174,6 @@ def run_control_loop_tests() -> Dict[str, Any]:
     bridge = SimLinkBridge("sim://drone_ctrl", "sim://ground_ctrl")
     drone = SimulatedDroneAgent("sim://drone_ctrl").start()
     ground = SimulatedGroundAgent("sim://ground_ctrl").start()
-    monitor = MissionMonitor()
 
     time.sleep(0.3)
     results = []

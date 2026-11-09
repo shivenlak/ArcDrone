@@ -29,7 +29,6 @@ from protocol import packets as p
 from protocol.link import Link
 from scripts.bandwidth_monitor import BandwidthMonitor, BUDGET_BYTES_PER_SEC
 from scripts.sim_link_bridge import SimLinkBridge
-from scripts.uaarg_adapter.event_logger import EventLogger
 
 
 def render_tactical_ground_panel(
@@ -187,8 +186,6 @@ def run_side_by_side_showcase(
     bw_monitor = BandwidthMonitor(budget_limit=BUDGET_BYTES_PER_SEC)
     bw_monitor.attach_to_bridge(bridge)
 
-    event_logger = EventLogger(base_dir="tmp/log")
-
     received_alerts: List[Dict[str, Any]] = []
 
     def on_ground_packet(pkt: Dict[str, Any]) -> None:
@@ -274,12 +271,6 @@ def run_side_by_side_showcase(
                 count=1,
                 lat=drone_lat + 0.0001,
                 lon=drone_lon + 0.0001,
-            )
-            event_logger.log_event(
-                seq=seq,
-                detection={"cls": p.CLASS_NAMES[cls_code], "conf": conf_score},
-                location={"lat": drone_lat, "lon": drone_lon},
-                mode="PATROL",
             )
             cv2.putText(left_frame, f"TRANSMITTING ALERT #{seq} (21B)", (panel_w - 240, 24),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)

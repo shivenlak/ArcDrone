@@ -34,8 +34,6 @@ from protocol import packets as p
 from protocol.link import Link
 from scripts.bandwidth_monitor import BandwidthMonitor
 from scripts.sim_link_bridge import SimLinkBridge
-from scripts.uaarg_adapter.event_logger import EventLogger
-from scripts.uaarg_adapter.mission_monitor import MissionMonitor
 
 CLASSES = ["pedestrian", "car", "van", "truck", "bus", "motor"]
 
@@ -57,8 +55,6 @@ def _load_visdrone_frames():
 
 
 def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threading.Event):
-    event_logger = EventLogger(base_dir="tmp/log")
-    mission_monitor = MissionMonitor()
     visdrone_samples = _load_visdrone_frames()
 
     drone_state = {"mode": p.MODE_PATROL, "lat": 53.5232, "lon": -113.5263, "heading": 45.0}
@@ -73,17 +69,14 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
             if cmd == p.CMD_HOLD:
                 drone_link.mode = p.MODE_HOLD
                 drone_state["mode"] = p.MODE_HOLD
-                mission_monitor.update_mode("HOLD")
                 print(">>> [DRONE FLIGHT MODE] Paused in HOLD - Operator Override")
             elif cmd == p.CMD_RESUME:
                 drone_link.mode = p.MODE_PATROL
                 drone_state["mode"] = p.MODE_PATROL
-                mission_monitor.update_mode("PATROL")
                 print(">>> [DRONE FLIGHT MODE] Resumed PATROL")
             elif cmd == p.CMD_RTB:
                 drone_link.mode = p.MODE_RTB
                 drone_state["mode"] = p.MODE_RTB
-                mission_monitor.update_mode("RTB")
                 print(">>> [DRONE FLIGHT MODE] Executing RETURN TO BASE (RTB)")
             elif cmd == p.CMD_OPERATOR_ACK:
                 print(f">>> [OPERATOR ACKNOWLEDGED] Alert #{ref_seq}")
@@ -137,14 +130,6 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
 
         cls_name = p.CLASS_NAMES[cls_idx]
         print(f"[DRONE TX] Alert #{seq}: {cls_name} x{count} (conf={conf}) at ({alert_lat:.4f}, {alert_lon:.4f})")
-
-        # Log event with UAARG event logger
-        event_logger.log_event(
-            seq=seq,
-            detection={"cls": cls_name, "conf": conf, "count": count},
-            location={"lat": alert_lat, "lon": alert_lon},
-            mode=p.MODE_NAMES.get(drone_state["mode"], "UNKNOWN"),
-        )
 
     drone_link.stop()
 
@@ -207,7 +192,6 @@ def main():
 
     print("\n[+] Virtual Radio Link Connected: sim://drone <-> sim://ground")
     print("[+] Airborne Drone Patrol Active: Transmitting detections every 2s")
-    print("[+] UAARG Event Logger Active: Logging to tmp/log/")
     print("\n" + "*" * 70)
     print(f"  >>> DASHBOARD URL: http://localhost:{args.http_port}")
     print("      (Opening automatically in your default browser...)")
