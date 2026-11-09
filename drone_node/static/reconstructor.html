@@ -19,6 +19,8 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
+      width: 100%;
+      max-width: 100vw;
       height: 100%;
       background: var(--bg);
       color: var(--text);
@@ -26,23 +28,30 @@
       overflow: hidden;
     }
     .shell {
+      width: 100%;
+      max-width: 100vw;
       height: 100%;
       display: grid;
-      grid-template-rows: auto 1fr 210px;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) 195px;
+      overflow: hidden;
     }
     .topbar {
+      min-width: 0;
+      width: 100%;
       background: var(--header);
       border-bottom: 1px solid #1e2833;
-      padding: 8px 14px 8px;
+      padding: 6px 10px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 4px;
+      gap: 3px;
+      overflow: hidden;
     }
     .topbar h1 {
-      font-size: 13px;
+      font-size: clamp(10px, 1.2vw, 13px);
       font-weight: 800;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
       color: var(--gold);
       text-transform: uppercase;
       white-space: nowrap;
@@ -50,21 +59,21 @@
       text-overflow: ellipsis;
     }
     .topbar .meta {
-      font-size: 11px;
+      font-size: clamp(9px, 1.0vw, 11px);
       color: var(--mint);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .clip-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+    .clip-bar { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; min-width: 0; }
     .clip-bar button {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: clamp(9px, 0.95vw, 10px);
       font-weight: 700;
       background: #1a222c;
       color: var(--text);
       border: 1px solid #3a4654;
-      padding: 2px 7px;
+      padding: 2px 6px;
       cursor: pointer;
     }
     .clip-bar button:hover { border-color: var(--gold); }
@@ -81,14 +90,20 @@
     }
     #clipVideo.on { display: block; }
     .stage {
+      width: 100%;
+      min-width: 0;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       min-height: 0;
       border-bottom: 1px solid var(--line);
+      overflow: hidden;
     }
     .pane {
       position: relative;
+      min-width: 0;
       min-height: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
       border-right: 1px solid var(--line);
       background: #05080b;
@@ -100,12 +115,12 @@
       height: 28px;
       background: rgba(16, 20, 26, 0.92);
       color: var(--mint);
-      font-size: 10px;
+      font-size: clamp(8.5px, 0.95vw, 10px);
       font-weight: 700;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.02em;
       display: flex;
       align-items: center;
-      padding: 0 10px;
+      padding: 0 8px;
       z-index: 3;
       white-space: nowrap;
       overflow: hidden;
@@ -115,7 +130,9 @@
       position: absolute;
       inset: 28px 0 0 0;
       width: 100%;
+      max-width: 100%;
       height: calc(100% - 28px);
+      max-height: calc(100% - 28px);
       object-fit: contain;
     }
     #rightCanvas {
@@ -132,43 +149,59 @@
       background: transparent;
     }
     .manifest {
+      min-width: 0;
+      width: 100%;
       background: #0f1218;
       display: flex;
       flex-direction: column;
       min-height: 0;
+      overflow: hidden;
     }
     .manifest-head {
-      height: 28px;
+      height: 26px;
       background: #181e28;
       color: var(--cyan);
-      font-size: 11px;
+      font-size: clamp(9px, 1.0vw, 11px);
       font-weight: 800;
       display: flex;
       align-items: center;
-      padding: 0 12px;
-      letter-spacing: 0.03em;
+      padding: 0 10px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .manifest-cols {
       flex: 1;
+      width: 100%;
+      min-width: 0;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       min-height: 0;
       overflow: hidden;
     }
     .mcol {
-      overflow: auto;
-      padding: 6px 10px 8px;
+      min-width: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 5px 8px 6px;
       border-right: 1px solid #2a3544;
-      font-size: 11px;
-      line-height: 1.45;
+      font-size: clamp(8.5px, 0.88vw, 10.5px);
+      line-height: 1.42;
     }
     .mcol:last-child { border-right: none; }
     .mhdr {
       color: #aab6c4;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .mrow { white-space: nowrap; }
+    .mrow {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .mrow.fresh { color: #fff; background: #1c3024; }
   </style>
 </head>
@@ -266,6 +299,9 @@
       objects: [],
       prev: new Map(),
       wsLive: false,
+      radioLive: false,
+      radioSeq: 0,
+      radioAlert: null,
       hasRgb: false,
       clipId: CLIPS[0].id,
       clipCase: CLIPS[0].caseLabel,
@@ -407,17 +443,21 @@
       const totalB = state.history.reduce(function (s, p) { return s + p.bytes; }, 0);
       const kbps = Math.min(2.85, (totalB / 1000) / span);
       const hz = state.history.length / span;
-      const src = state.wsLive ? "LIVE UDP" : ("VISDRONE-VID/MOT " + state.clipCase);
+      const src = state.wsLive ? "LIVE UDP" : (state.radioLive ? ("LIVE RADIO #" + state.radioSeq) : ("VISDRONE-VID/MOT " + state.clipCase));
+      const pktNum = state.radioLive ? state.radioSeq : state.seq;
+      const rxAlertTag = state.radioAlert
+        ? (" | RX #" + state.radioSeq + " " + String(state.radioAlert.cls).toUpperCase() + " x" + state.radioAlert.count)
+        : "";
       document.getElementById("titleText").textContent =
         "ARCDRONE TEST BENCH: " + state.clipTitle + " (1:1 RATIO VECTOR LINK)";
       document.getElementById("metaLine").textContent =
         "SPREAD-OUT LINK: " + hz.toFixed(1) + " FPS (" + state.rx + " pkts, " + state.bytes + " B/pkt) | WIRE RATE: " +
         kbps.toFixed(2) + " kB/s (CAP <= 3.00 kB/s) | ACTIVE INDICES: " + state.objects.length +
-        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | SRC: " + src;
+        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | SRC: " + src + rxAlertTag;
       document.getElementById("leftTag").textContent =
-        "DRONE [" + src + "] RGB + VISDRONE-VID/MOT INDEXED BOXES  |  " + state.objects.length + " OBJECTS";
+        "DRONE [" + state.clipCase + "] RGB + VISDRONE-VID/MOT INDEXED BOXES  |  " + state.objects.length + " OBJECTS";
       document.getElementById("rightTag").textContent =
-        "GROUND [" + state.clipCase + "] | NO RGB RATIO RECONSTRUCTOR | PKT #" + state.seq + " | " + state.objects.length + " INDICES";
+        "GROUND [" + (state.radioLive ? ("RADIO PKT #" + pktNum) : state.clipCase) + "] | NO RGB 1:1 RECONSTRUCTOR | " + state.objects.length + " INDICES" + rxAlertTag;
 
       const hdr = "INDEX  CLASS            CONF   POS RATIO (X%, Y%)     SIZE RATIO (W% x H%)    VEC DELTA (dX%, dY%)     MOTION";
       const rows = state.objects.slice().sort(function (a, b) { return a.track_id - b.track_id; });
@@ -473,7 +513,8 @@
 
     function connectWs() {
       try {
-        const ws = new WebSocket("ws://127.0.0.1:8765");
+        const wsHost = location.hostname || "127.0.0.1";
+        const ws = new WebSocket("ws://" + wsHost + ":8765");
         ws.onmessage = function (ev) {
           try {
             const frame = JSON.parse(ev.data);
@@ -484,6 +525,30 @@
         ws.onclose = function () {
           state.wsLive = false;
           setTimeout(connectWs, 2500);
+        };
+      } catch (e) {}
+    }
+
+    function connectRadioWs() {
+      if (!location.host) return;
+      try {
+        const proto = location.protocol === "https:" ? "wss://" : "ws://";
+        const rws = new WebSocket(proto + location.host + "/ws");
+        rws.onmessage = function (ev) {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.event === "alert") {
+              state.radioLive = true;
+              state.radioSeq = msg.seq;
+              state.radioAlert = msg;
+              if (msg.lat) state.lat = msg.lat;
+              if (msg.lon) state.lon = msg.lon;
+              render();
+            }
+          } catch (e) {}
+        };
+        rws.onclose = function () {
+          setTimeout(connectRadioWs, 2500);
         };
       } catch (e) {}
     }
@@ -550,7 +615,10 @@
     loadClip(qClip);
     if (!isDemo) rgb.src = cameraUrl;
 
-    if (!isDemo) connectWs();
+    if (!isDemo) {
+      connectWs();
+      connectRadioWs();
+    }
     setInterval(function () { if (!state.wsLive) stepVisDroneClip(); }, Math.round(1000 / 12));
   </script>
 </body>

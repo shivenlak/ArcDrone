@@ -239,6 +239,10 @@ def main() -> None:
     sim_gps = SimGps()
     scene_codec = SceneCodec(max_kbps=SCENE_MAX_KBPS, dst_size=(720, 540))
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    except Exception:
+        pass
     preview = PreviewStream(port=args.preview_port).start() if args.preview_port > 0 else None
     if preview is not None:
         print("[MAIN] Wi-Fi camera preview on http://0.0.0.0:%d/video.mjpg (not over the radio)" % args.preview_port)
@@ -358,6 +362,11 @@ def main() -> None:
                 )
                 state["scene_kbps"] = kbps
                 udp_sock.sendto(scene_bytes, (args.scene_host, args.scene_port))
+                if args.scene_host == "127.0.0.1":
+                    try:
+                        udp_sock.sendto(scene_bytes, ("255.255.255.255", args.scene_port))
+                    except Exception:
+                        pass
 
             # 4. Reliable DETECTION on serial/radio (separate from scene UDP budget)
             if alert is not None and last_frame is not None:
