@@ -1,0 +1,55 @@
+{
+  "timestamp": 1794091375.1229684,
+  "total": 9,
+  "passed": 9,
+  "failed": 0,
+  "all_passed": true,
+  "duration_sec": 6.33,
+  "tests": [
+    {
+      "test": "Virtual Serial Pair Basic I/O",
+      "status": "PASSED",
+      "duration_sec": 0.0
+    },
+    {
+      "test": "Sim Link Bridge Cut & Restore",
+      "status": "PASSED",
+      "duration_sec": 0.0
+    },
+    {
+      "test": "Bandwidth Monitor Sliding Window & Budget",
+      "status": "PASSED",
+      "duration_sec": 0.0
+    },
+    {
+      "test": "UAARG Event Logger Structure & Schema",
+      "status": "PASSED",
+      "duration_sec": 0.172
+    },
+    {
+      "test": "UAARG Mission Monitor Liveness & Severities",
+      "status": "PASSED",
+      "duration_sec": 0.0
+    },
+    {
+      "test": "UAARG Ground Client Observer",
+      "status": "PASSED",
+      "duration_sec": 0.0
+    },
+    {
+      "test": "Integrated Two-Way Command State Loop",
+      "status": "PASSED",
+      "duration_sec": 0.452
+    },
+    {
+      "test": "Integrated Link Loss, Outage & Recovery Flush",
+      "status": "PASSED",
+      "duration_sec": 4.102
+    },
+    {
+      "test": "Integrated Bandwidth Compliance (<= 3 kB/s)",
+      "status": "PASSED",
+      "duration_sec": 1.603
+    }
+  ]
+}

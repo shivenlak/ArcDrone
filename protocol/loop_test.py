@@ -6,7 +6,7 @@ Run one side per bridge (real ESP32s, or the two fake_bridge ports):
     python -m protocol.loop_test --role drone  --port /dev/cu.usbserial-0001 --count 100
 
 Phase 1 passes when the drone prints delivered=100 and the ground received 100.
-For Phase 3, press the BOOT button (mute) or cut the fake bridge mid-run: the
+For Phase 3, press the mute button (PRG on Heltec, SW38 on Feather) or cut the fake bridge mid-run: the
 drone should buffer, and every alert should still arrive exactly once.
 """
 

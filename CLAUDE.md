@@ -5,7 +5,8 @@
 - **Keep code simple, clean, minimal.** No over-engineering, no speculative abstractions.
 - **ESP32 firmware is a dumb serial<->radio bridge.** All protocol logic (seq, ACK, retry, dedup, heartbeat, buffering) lives in `protocol/` (Python), shared by drone and ground.
 - **Packet spec in §4 is frozen.** Change it only deliberately, and update this file + README together.
-- **Honest wording:** say "resistant to narrowband interference", "no LoRaWAN network overhead", "no router/AP required". Never "jam-resistant", "bypasses duty cycle", or "encrypted" (unless enabled).
+- **Honest wording:** say "resistant to narrowband interference", "no LoRaWAN network overhead", "no router/AP required". Never "jam-resistant", "bypasses duty cycle", or "military-grade". Say "encrypted and authenticated (AES-128-CCM)" only for a run with `ARCDRONE_KEY` set, and mention that replay of old frames is not covered.
+- **Real numbers only:** every figure in a doc or the pitch must come from a run on our hardware (README "Measured results"). If it wasn't measured, say "not measured yet".
 - Shiven is using this hackathon to build embedded/hardware skills — explain firmware/serial/radio decisions rather than hiding them.
 - Keep `README.md` progress checklist updated and add a line to `CHANGELOG.md` as work lands.
 - Possible future: a real drone. It only changes the frame source (+ optional real GPS); protocol/firmware/ground station stay unchanged. Don't buy until Phase 4 passes.
@@ -55,9 +56,11 @@ seq = link.send(p.DETECTION, ts_ms=p.now_ms(), cls=3, conf=0.91, count=2, lat=53
 seq = link.send(p.COMMAND, cmd=p.CMD_HOLD, ref_seq=alert_seq)
 link.mode = p.MODE_HOLD      # drone: reported in heartbeats
 link.up, link.buffered       # current state
-link.summary()               # {"up","buffered","sent","delivered","retries","duplicates","bad_packets","dropped","rtt_ms_avg","rtt_ms_p95"}
+# Encryption: on automatically when ARCDRONE_KEY (32 hex chars) is set; same key on both sides.
+link.summary()               # {"up","buffered","sent","delivered","retries","duplicates","bad_packets","dropped","rtt_ms_avg","rtt_ms_p95","bytes_tx","bytes_rx"}
+# bytes_tx/bytes_rx count frame bytes as they cross the radio (encrypted size when a key is set).
 ```
-- `on_packet(packet)` receives each **new** DETECTION/COMMAND (already deduped) plus every HEARTBEAT, as a dict like `{"type": p.DETECTION, "seq": 7, "ts_ms": ..., "cls": 3, "conf": 0.91, "count": 2, "lat": ..., "lon": ...}`.
+- `on_packet(packet)` receives each **new** DETECTION/COMMAND (already deduped) plus every HEARTBEAT, as a dict like `{"type": p.DETECTION, "seq": 7, "ts_ms": ..., "cls": 3, "conf": 0.91, "count": 2, "lat": ..., "lon": ..., "wire": "D201..."}`. `wire` is the frame's exact received bytes as hex.
 - `on_event(name, **info)` receives `"link_up"`, `"link_down"`, or `"delivered"` with `seq=` and `rtt_ms=`. A COMMAND is CONFIRMED when its `seq` is delivered.
 - Callbacks run on the link thread. Keep them fast (push to a `queue.Queue`).
 - Names for the UI: `p.CLASS_NAMES[cls]`, `p.CMD_NAMES[cmd]`, `p.MODE_NAMES[mode]`.
@@ -67,12 +70,13 @@ Endpoint: `ws://localhost:8000/ws`. Messages are JSON objects.
 
 Server → browser:
 ```json
-{"event": "alert", "seq": 4711, "cls": "car", "conf": 0.91, "count": 2, "lat": 53.52, "lon": -113.52, "ts_ms": 1730918400123, "delayed": false}
+{"event": "alert", "seq": 4711, "cls": "car", "conf": 0.91, "count": 2, "lat": 53.52, "lon": -113.52, "ts_ms": 1730918400123, "delayed": false, "raw": "D201..."}
 {"event": "link", "up": true}
 {"event": "drone", "mode": "PATROL", "buffered": 0}
 {"event": "cmd_status", "cmd_id": 812, "cmd": "HOLD", "ref_seq": 4711, "status": "PENDING"}
-{"event": "stats", "up": true, "buffered": 0, "sent": 40, "delivered": 40, "retries": 3, "duplicates": 1, "bad_packets": 0, "dropped": 0, "rtt_ms_avg": 9.2, "rtt_ms_p95": 14.0}
+{"event": "stats", "up": true, "buffered": 0, "sent": 40, "delivered": 40, "retries": 3, "duplicates": 1, "bad_packets": 0, "dropped": 0, "rtt_ms_avg": 9.2, "rtt_ms_p95": 14.0, "bytes_tx": 4200, "bytes_rx": 3900}
 ```
+- `alert.raw` is the frame's exact bytes as uppercase hex: 21 bytes plain (`D2…`), 29 bytes encrypted (`D3…`). `stats.bytes_tx`/`bytes_rx` count binary packet bytes over the radio (from `Link.summary()`).
 - `alert.delayed` is true when it arrives more than 3 s after `ts_ms`, meaning it was buffered during link loss.
 - `cmd_status.status` is `"PENDING"` when the command is sent and `"CONFIRMED"` when the drone ACKs it. `cmd_id` is the link seq.
 - `drone` comes from heartbeats (1 Hz). `stats` is sent every 1 s.
@@ -99,6 +103,7 @@ Browser → server:
 ArcDrone brief: detect person/vehicle in VisDrone footage with an existing model → send a compact alert over a **real physical radio link** → show it in ground control → survive drops/link loss → operator acknowledges or sends an override back to the "drone." Judges score the **detection→operator-action loop and its reliability**, not the CV.
 
 What you have: **1× Raspberry Pi 4, 2× ESP32 (ESP-NOW capable), M4 Pro MacBooks, LoRa radios TBD.** 5 people, 64 hours. Repo is empty.
+*(Update, Nov 8: we now run 2× Heltec WiFi LoRa 32 V3 at 915 MHz as the demo radios, with 2× Feather V2 as backup. Measured results are in README.)*
 
 That hardware reality changes the team's stated plan. Here's the corrected plan.
 
@@ -203,6 +208,13 @@ Common header (4 B): `magic u8 (0xD2)` · `type u8` · `seq u16`. Trailer: `crc1
 | COMMAND | 0x04 | `cmd u8` (0=OPERATOR_ACK, 1=HOLD, 2=RESUME, 3=RTB) · `ref_seq u16` (alert being answered, or 0) | 9 B |
 
 COMMAND is your OVERRIDE type, widened so the operator's *acknowledge* and the *override* share one reliable path.
+
+**Encrypted frames (optional, `protocol/crypto.py`).** With `ARCDRONE_KEY` set on both sides, every frame becomes:
+`magic u8 (0xD3)` · `type u8` · `seq u16` · `nonce 6 B (random per transmission)` · `AES-128-CCM ciphertext of the body` · `tag 4 B` (replaces the CRC16).
+- That's +8 bytes per packet: DETECTION 29 B, COMMAND 17 B, HEARTBEAT 20 B, ACK 14 B.
+- The header stays readable (the bridge and OLED use type/seq) but is authenticated: any changed bit fails the tag.
+- With a key set, plain `0xD2` frames are rejected, so unencrypted commands can't be injected.
+- Not covered: replay of a recorded frame older than the 64-seq dedup window.
 
 **Rules:**
 - **Reliable types:** DETECTION and COMMAND. The sender keeps one message in flight (stop-and-wait). Timeout is 300 ms + 0–100 ms jitter on ESP-NOW (1 s on LoRa), with up to 5 retries.

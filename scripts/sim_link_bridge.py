@@ -1,0 +1,327 @@
+"""Cross-platform simulated radio bridge for ArcDrone Link layer.
+
+Replaces POSIX pseudo-terminals (openpty/termios) with pure in-memory, thread-safe
+virtual serial ports fully compatible with pyserial. Runs on Windows, Linux, and macOS.
+"""
+
+from __future__ import annotations
+
+import collections
+import random
+import threading
+import time
+from typing import Any, Dict, List, Optional, Tuple
+import serial
+
+# Global registry for named virtual ports (e.g., "sim://drone", "sim://ground")
+_VIRTUAL_REGISTRY: Dict[str, VirtualSerialPort] = {}
+_REGISTRY_LOCK = threading.Lock()
+
+# Preserve original serial.Serial for unmocked/hardware ports
+_ORIGINAL_SERIAL = serial.Serial
+_SERIAL_PATCHED = False
+
+
+class VirtualSerialPort:
+    """In-memory virtual serial port conforming to the pyserial Serial interface.
+
+    Connected to a peer VirtualSerialPort or SimLinkBridge.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        bridge: Optional[SimLinkBridge] = None,
+        timeout: float = 0.05,
+        baudrate: int = 115200,
+    ) -> None:
+        self.name = name
+        self.portstr = name
+        self.bridge = bridge
+        self.timeout = timeout
+        self.baudrate = baudrate
+        self.is_open = True
+
+        self._rx_buf = bytearray()
+        self._cond = threading.Condition()
+        self.stats = collections.Counter()
+
+    @property
+    def in_waiting(self) -> int:
+        with self._cond:
+            return len(self._rx_buf)
+
+    def read(self, size: int = 1) -> bytes:
+        """Read up to `size` bytes, blocking up to `self.timeout` seconds."""
+        if not self.is_open:
+            raise serial.SerialException(f"Virtual port '{self.name}' is closed.")
+        if size <= 0:
+            return b""
+
+        deadline = time.monotonic() + (self.timeout if self.timeout is not None else 0.0)
+        with self._cond:
+            while len(self._rx_buf) == 0 and self.is_open:
+                remaining = deadline - time.monotonic()
+                if self.timeout is None:
+                    self._cond.wait()
+                elif remaining <= 0:
+                    break
+                else:
+                    self._cond.wait(timeout=max(remaining, 0.001))
+
+            if not self.is_open:
+                raise serial.SerialException(f"Virtual port '{self.name}' was closed during read.")
+            if len(self._rx_buf) == 0:
+                return b""
+
+            chunk = bytes(self._rx_buf[:size])
+            del self._rx_buf[:size]
+            self.stats["bytes_read"] += len(chunk)
+            return chunk
+
+    def write(self, data: bytes) -> int:
+        """Transmit data through the bridge to the peer port."""
+        if not self.is_open:
+            raise serial.SerialException(f"Virtual port '{self.name}' is closed.")
+        if not data:
+            return 0
+
+        self.stats["bytes_written"] += len(data)
+
+        if self.bridge is not None:
+            return self.bridge.route_data(self, data)
+        return len(data)
+
+    def deliver_bytes(self, data: bytes) -> None:
+        """Called by bridge to deliver bytes into this port's RX buffer."""
+        if not self.is_open or not data:
+            return
+        with self._cond:
+            self._rx_buf.extend(data)
+            self._cond.notify_all()
+
+    def reset_input_buffer(self) -> None:
+        """Clear the input RX buffer."""
+        with self._cond:
+            self._rx_buf.clear()
+            self._cond.notify_all()
+
+    def reset_output_buffer(self) -> None:
+        """No-op for virtual serial."""
+        pass
+
+    def flush(self) -> None:
+        """No-op for virtual serial."""
+        pass
+
+    def close(self) -> None:
+        """Close the virtual port."""
+        with self._cond:
+            self.is_open = False
+            self._cond.notify_all()
+
+    def open(self) -> None:
+        """Reopen the virtual port."""
+        with self._cond:
+            self.is_open = True
+
+    def __repr__(self) -> str:
+        return f"<VirtualSerialPort '{self.name}' open={self.is_open} in_waiting={self.in_waiting}>"
+
+
+class SimLinkBridge:
+    """Bidirectional simulated radio link connecting two VirtualSerialPort instances.
+
+    Supports:
+    - cut() and restore() for deterministic radio blackout simulation.
+    - packet_loss_rate (0.0 to 1.0) simulating wireless packet drops.
+    - latency (seconds) simulating radio airtime / propagation delay.
+    - Wire byte and line transfer statistics.
+    """
+
+    def __init__(
+        self,
+        name_a: str = "sim://drone",
+        name_b: str = "sim://ground",
+        packet_loss_rate: float = 0.0,
+        latency: float = 0.0,
+        timeout: float = 0.05,
+    ) -> None:
+        self.name_a = name_a
+        self.name_b = name_b
+        self.packet_loss_rate = packet_loss_rate
+        self.latency = latency
+        self._is_cut = False
+        self._lock = threading.Lock()
+
+        self.stats = collections.Counter()
+        self.tx_hooks: List[Any] = []
+
+        self.port_a = VirtualSerialPort(name=name_a, bridge=self, timeout=timeout)
+        self.port_b = VirtualSerialPort(name=name_b, bridge=self, timeout=timeout)
+
+        # Register named ports globally
+        with _REGISTRY_LOCK:
+            _VIRTUAL_REGISTRY[name_a] = self.port_a
+            _VIRTUAL_REGISTRY[name_b] = self.port_b
+
+        patch_serial()
+
+    @property
+    def is_cut(self) -> bool:
+        with self._lock:
+            return self._is_cut
+
+    def cut(self) -> None:
+        """Cut the simulated radio link (all radio transmissions are dropped)."""
+        with self._lock:
+            self._is_cut = True
+
+    def restore(self) -> None:
+        """Restore the simulated radio link."""
+        with self._lock:
+            self._is_cut = False
+
+    def set_packet_loss_rate(self, rate: float) -> None:
+        """Update simulated packet loss rate (0.0 - 1.0)."""
+        with self._lock:
+            self.packet_loss_rate = max(0.0, min(1.0, float(rate)))
+
+    def set_latency(self, latency_s: float) -> None:
+        """Update simulated latency in seconds."""
+        with self._lock:
+            self.latency = max(0.0, float(latency_s))
+
+    def add_tx_hook(self, hook) -> None:
+        """Register a callback for every transmission: hook(sender_port, data)."""
+        self.tx_hooks.append(hook)
+
+    def route_data(self, sender: VirtualSerialPort, data: bytes) -> int:
+        """Route data from sender to receiver, applying cut, loss, and latency."""
+        with self._lock:
+            cut = self._is_cut
+            loss = self.packet_loss_rate
+            delay = self.latency
+
+        # Notify hooks (useful for bandwidth monitors)
+        for hook in self.tx_hooks:
+            try:
+                hook(sender, data)
+            except Exception:
+                pass
+
+        if cut:
+            self.stats["dropped_cut"] += 1
+            return len(data)
+
+        # In ArcDrone, packets are sent as hex lines ending with \n.
+        # We process line-by-line for realistic packet-loss simulation.
+        chunks = data.split(b"\n")
+        delivered_bytes = bytearray()
+
+        for idx, chunk in enumerate(chunks):
+            # Include newline back if not the last segment or if data ended with \n
+            is_line = idx < len(chunks) - 1 or (idx == len(chunks) - 1 and data.endswith(b"\n"))
+            payload = chunk + (b"\n" if is_line and chunk else b"")
+            if not payload:
+                continue
+
+            if loss > 0.0 and random.random() < loss:
+                self.stats["dropped_loss"] += 1
+                continue
+
+            delivered_bytes.extend(payload)
+            self.stats["packets_transferred"] += 1
+
+        self.stats["bytes_transferred"] += len(delivered_bytes)
+        receiver = self.port_b if sender is self.port_a else self.port_a
+
+        if delay > 0:
+            def delayed_delivery():
+                time.sleep(delay)
+                receiver.deliver_bytes(bytes(delivered_bytes))
+            threading.Thread(target=delayed_delivery, daemon=True).start()
+        else:
+            receiver.deliver_bytes(bytes(delivered_bytes))
+
+        return len(data)
+
+    def close(self) -> None:
+        """Close ports and unregister from global registry."""
+        self.port_a.close()
+        self.port_b.close()
+        with _REGISTRY_LOCK:
+            _VIRTUAL_REGISTRY.pop(self.name_a, None)
+            _VIRTUAL_REGISTRY.pop(self.name_b, None)
+
+    def __enter__(self) -> Tuple[VirtualSerialPort, VirtualSerialPort]:
+        return self.port_a, self.port_b
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+
+class VirtualSerialPair(SimLinkBridge):
+    """Alias for SimLinkBridge matching PROJECT.md interface contract."""
+    pass
+
+
+def create_linked_pair(
+    name_a: str = "sim://drone",
+    name_b: str = "sim://ground",
+    packet_loss_rate: float = 0.0,
+    latency: float = 0.0,
+    timeout: float = 0.05,
+) -> Tuple[VirtualSerialPort, VirtualSerialPort]:
+    """Factory creating a connected pair of VirtualSerialPorts registered globally."""
+    bridge = SimLinkBridge(
+        name_a=name_a,
+        name_b=name_b,
+        packet_loss_rate=packet_loss_rate,
+        latency=latency,
+        timeout=timeout,
+    )
+    return bridge.port_a, bridge.port_b
+
+
+def patch_serial() -> None:
+    """Monkey-patch serial.Serial to transparently intercept VirtualSerialPort and sim:// names."""
+    global _SERIAL_PATCHED
+    if _SERIAL_PATCHED:
+        return
+
+    def patched_serial_factory(port: Any, *args, **kwargs) -> Any:
+        # If passed an existing VirtualSerialPort instance, return it directly
+        if isinstance(port, VirtualSerialPort):
+            if "timeout" in kwargs and kwargs["timeout"] is not None:
+                port.timeout = kwargs["timeout"]
+            if "baudrate" in kwargs and kwargs["baudrate"] is not None:
+                port.baudrate = kwargs["baudrate"]
+            port.open()
+            return port
+
+        # If passed a registered virtual string name, return the port
+        if isinstance(port, str):
+            with _REGISTRY_LOCK:
+                if port in _VIRTUAL_REGISTRY:
+                    virtual_port = _VIRTUAL_REGISTRY[port]
+                    if "timeout" in kwargs and kwargs["timeout"] is not None:
+                        virtual_port.timeout = kwargs["timeout"]
+                    if "baudrate" in kwargs and kwargs["baudrate"] is not None:
+                        virtual_port.baudrate = kwargs["baudrate"]
+                    virtual_port.open()
+                    return virtual_port
+
+        # Otherwise delegate to standard serial.Serial
+        return _ORIGINAL_SERIAL(port, *args, **kwargs)
+
+    serial.Serial = patched_serial_factory  # type: ignore
+    _SERIAL_PATCHED = True
+
+
+def unpatch_serial() -> None:
+    """Restore original serial.Serial."""
+    global _SERIAL_PATCHED
+    if _SERIAL_PATCHED:
+        serial.Serial = _ORIGINAL_SERIAL  # type: ignore
+        _SERIAL_PATCHED = False
