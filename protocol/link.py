@@ -114,15 +114,15 @@ class Link:
                 self._pending_scene = bytes(scene_bytes)
 
     def send_video_frame(self, jpeg_bytes):
-        """Queue a compact JPEG frame as 0xEF chunks for ESP-NOW transmission to the receiver."""
+        """Queue a compact WebP/JPEG frame as 0xEF chunks for ESP-NOW transmission to the receiver."""
         if not jpeg_bytes:
             return
-        chunk_size = 156
+        chunk_size = 114
         total = (len(jpeg_bytes) + chunk_size - 1) // chunk_size
-        if total <= 0 or total > 14:
+        if total <= 0 or total > 12:
             return
         with self._lock:
-            if len(self._video_chunks) > 2:
+            if self._video_chunks:
                 return
             self._video_frame_seq = (self._video_frame_seq + 1) & 0xFF
             fid = self._video_frame_seq
@@ -173,7 +173,7 @@ class Link:
 
     def _open(self):
         try:
-            self._ser = serial.Serial(self.port, BAUD, timeout=0.05)
+            self._ser = serial.Serial(self.port, BAUD, timeout=0.005)
             # Release DTR/RTS (the ESP32 "run" state). Opening asserts both, and on boards
             # that wire DTR to GPIO0 (Heltec V3) that holds the PRG/mute button down.
             # Releasing them resets the ESP32 once, which boot_wait covers.
@@ -202,13 +202,13 @@ class Link:
             data = self.sealer.seal(data)  # fresh nonce on every transmission, retries included
         self.stats["bytes_tx"] += len(data)
         raw_line = p.to_line(data).encode()
-        if len(raw_line) <= 120:
+        if len(raw_line) <= 240:
             self._ser.write(raw_line)
         else:
-            for i in range(0, len(raw_line), 110):
-                self._ser.write(raw_line[i : i + 110])
-                if i + 110 < len(raw_line):
-                    time.sleep(0.006)
+            for i in range(0, len(raw_line), 120):
+                self._ser.write(raw_line[i : i + 120])
+                if i + 120 < len(raw_line):
+                    time.sleep(0.004)
 
     def _read(self):
         # Accumulate bytes and split on newlines ourselves: a read can stop mid-line.
@@ -355,12 +355,18 @@ class Link:
         )
         scene_interval = 0.11 if espnow_live else 0.22
         scene_pkt = None
+        video_pkt = None
         with self._lock:
+            if not espnow_live:
+                self._video_chunks.clear()
             if not self._outbox:
                 if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
                     scene_pkt = self._pending_scene
                     self._pending_scene = None
                     self._last_scene_tx = now
+                elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.014:
+                    video_pkt = self._video_chunks.popleft()
+                    self._last_video_tx = now
                 else:
                     return
             else:
@@ -368,19 +374,24 @@ class Link:
                 if (
                     seq == self._tx_seq
                     and (now - self._last_tx) < self._timeout
-                    and (now - self._last_tx) >= 0.08
-                    and self._pending_scene is not None
-                    and (now - self._last_scene_tx) >= scene_interval
+                    and (now - self._last_tx) >= 0.06
                 ):
-                    scene_pkt = self._pending_scene
-                    self._pending_scene = None
-                    self._last_scene_tx = now
+                    if self._pending_scene is not None and (now - self._last_scene_tx) >= scene_interval:
+                        scene_pkt = self._pending_scene
+                        self._pending_scene = None
+                        self._last_scene_tx = now
+                    elif espnow_live and self._video_chunks and (now - self._last_video_tx) >= 0.014:
+                        video_pkt = self._video_chunks.popleft()
+                        self._last_video_tx = now
         if scene_pkt is not None:
             if not espnow_live and len(scene_pkt) >= 3 and scene_pkt[0] == 0xAE:
                 b = bytearray(scene_pkt)
                 b[2] |= 0x80
                 scene_pkt = bytes(b)
             self._write(scene_pkt)
+            return
+        if video_pkt is not None:
+            self._write(video_pkt)
             return
         if seq == self._tx_seq:
             if now - self._last_tx < self._timeout:

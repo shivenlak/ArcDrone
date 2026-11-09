@@ -868,10 +868,7 @@
     }
 
     function connectLiveCamera() {
-      if (isDemo || !state.liveHardwareMode) return;
-      if (state.espNowVideoRx && (performance.now() - (state.lastEspNowVideoAt || 0) < 2500)) return;
-      const host = location.hostname || "127.0.0.1";
-      rgb.src = "http://" + host + ":8081/video.mjpg?t=" + Date.now();
+      // Video frames arrive over ESP-NOW (0xEF packets -> msg.event === "video_frame")
     }
 
     async function loadClip(seqId) {
@@ -991,11 +988,6 @@
     if (!isDemo) {
       connectWs();
       connectRadioWs();
-      setInterval(function () {
-        if (state.liveHardwareMode && !state.hasRgb && getRadioLinkState().espNowActive) {
-          connectLiveCamera();
-        }
-      }, 3000);
     }
     setInterval(function () { stepVisDroneClip(); }, Math.round(1000 / 12));
 

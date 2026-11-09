@@ -79,11 +79,12 @@ class Station:
                     if radio.get("espnow_rx", 0) > 0 and (radio.get("espnow_age", 0) < 0 or radio.get("espnow_age", 0) >= 3500):
                         return
                 self.seq = (self.seq + 1) & 0xFF
+                mime = "image/webp" if data[:4] == b"RIFF" else "image/jpeg"
                 b64 = base64.b64encode(data).decode("ascii")
                 asyncio.create_task(self.station.broadcast({
                     "event": "video_frame",
                     "frame_id": self.seq,
-                    "src": "data:image/jpeg;base64," + b64,
+                    "src": f"data:{mime};base64," + b64,
                     "radio": radio,
                 }))
 
@@ -149,11 +150,13 @@ class Station:
                     "radio": self.link.summary().get("radio"),
                 })
         elif packet["type"] == 0xEF and "jpeg_bytes" in packet:
-            b64 = base64.b64encode(packet["jpeg_bytes"]).decode("ascii")
+            raw = packet["jpeg_bytes"]
+            mime = "image/webp" if raw[:4] == b"RIFF" else "image/jpeg"
+            b64 = base64.b64encode(raw).decode("ascii")
             await self.broadcast({
                 "event": "video_frame",
                 "frame_id": packet.get("frame_id", 0),
-                "src": "data:image/jpeg;base64," + b64,
+                "src": f"data:{mime};base64," + b64,
                 "radio": self.link.summary().get("radio"),
             })
 

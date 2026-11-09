@@ -336,16 +336,24 @@ def main() -> None:
                         if preview is not None:
                             preview.update(last_frame)
 
-                if last_frame is not None and not sender_lora_only and (now_mono - last_espnow_video_tx >= 0.085):
+                if last_frame is not None and not sender_lora_only and (now_mono - last_espnow_video_tx >= 0.14):
                     last_espnow_video_tx = now_mono
                     try:
-                        thumb = cv2.resize(last_frame, (480, 270), interpolation=cv2.INTER_AREA)
-                        ok_jpg, jpg_buf = cv2.imencode(
-                            ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 55]
+                        thumb = cv2.resize(last_frame, (112, 64), interpolation=cv2.INTER_AREA)
+                        ok_img, img_buf = cv2.imencode(
+                            ".webp", thumb, [int(cv2.IMWRITE_WEBP_QUALITY), 10]
                         )
-                        if ok_jpg:
-                            raw_jpg = jpg_buf.tobytes()
-                            udp_sock.sendto(raw_jpg, (args.scene_host, 9998))
+                        if not ok_img:
+                            ok_img, img_buf = cv2.imencode(
+                                ".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 20]
+                            )
+                        if ok_img:
+                            raw_bytes = img_buf.tobytes()
+                            link.send_video_frame(raw_bytes)
+                            try:
+                                udp_sock.sendto(raw_bytes, (args.scene_host, 9998))
+                            except Exception:
+                                pass
                     except Exception:
                         pass
 
