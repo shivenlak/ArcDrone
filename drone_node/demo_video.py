@@ -31,6 +31,12 @@ def _first_vid_sequence() -> Optional[str]:
 
 # Same names as Manan's test suite + the main aerial sample used across scripts.
 DEMO_CLIP_NAMES: List[str] = [
+    "clips/uav0000268_05773_v.mp4",
+    "clips/uav0000086_00000_v.mp4",
+    "clips/uav0000182_00000_v.mp4",
+    "clips/uav0000117_02622_v.mp4",
+    "clips/uav0000339_00001_v.mp4",
+    "clips/uav0000137_00458_v.mp4",
     "demo_aerial.mp4",
     "visdrone_aerial_sample.mp4",
     "case6_aerial_traffic_1080p.mp4",

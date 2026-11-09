@@ -334,7 +334,7 @@
       font-size: 14px;
     }
     .viewer-body { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; border: 2px solid #333; overflow: hidden; }
-    .viewer-body iframe, .viewer-body img { width: 100%; height: 100%; border: none; object-fit: contain; }
+    .viewer-body iframe, .viewer-body img, .viewer-body video { width: 100%; height: 100%; border: none; object-fit: contain; }
   </style>
 </head>
 <body>
@@ -415,9 +415,9 @@
           <iframe id="ops-reconstructor-iframe" class="reconstructor-iframe" title="Live Tactical Twin" allow="fullscreen"></iframe>
 
           <div id="reconstructor-offline-msg" class="reconstructor-fallback">
-            <div style="font-size:16px; font-weight:bold; color:var(--danger);">RECONSTRUCTOR OFFLINE</div>
-            <div style="font-size:12px;">EXECUTE RELAY SCRIPT:</div>
-            <code>python -m drone_node.scene_ws_relay</code>
+            <div style="font-size:16px; font-weight:bold; color:var(--danger);">RECONSTRUCTOR FAILED TO LOAD</div>
+            <div style="font-size:12px;">SERVED FROM THIS DASHBOARD — RELOAD THE PAGE</div>
+            <code>/reconstructor.html</code>
             <button type="button" class="btn-subtle" onclick="checkReconstructorEmbed(true)">RETRY CONNECTION</button>
           </div>
 
@@ -496,7 +496,9 @@
       const params = new URLSearchParams(window.location.search);
       const isDemo = params.get("demo") === "1";
       const localFile = window.location.protocol === "file:";
-      const reconstructorUrl = "http://127.0.0.1:8080/reconstructor.html" + (isDemo ? "?demo=1" : "");
+      // Same-origin copy of demo's reconstructor (ground_station/static/reconstructor.html).
+      // Live UDP still comes from scene_ws_relay on ws://127.0.0.1:8765 when the sender is running.
+      const reconstructorUrl = "/reconstructor.html" + (isDemo ? "?demo=1" : "");
       const cameraUrl = "http://127.0.0.1:8081/video.mjpg";
 
       // VisDrone class names (index -> name). Server already sends the name for live alerts.
@@ -558,7 +560,23 @@
           const img = document.createElement("img");
           img.src = cameraUrl;
           img.alt = "Local Wi-Fi camera stream";
-          img.onerror = () => { img.src = "http://127.0.0.1:8082/video.mjpg"; };
+          let tried8082 = false;
+          img.onerror = () => {
+            if (!tried8082) {
+              tried8082 = true;
+              img.src = "http://127.0.0.1:8082/video.mjpg";
+              return;
+            }
+            content.innerHTML = "";
+            const vid = document.createElement("video");
+            vid.src = "/clips/uav0000268_05773_v.mp4";
+            vid.muted = true;
+            vid.loop = true;
+            vid.autoplay = true;
+            vid.playsInline = true;
+            vid.controls = true;
+            content.appendChild(vid);
+          };
           content.appendChild(img);
         }
         el("viewer-overlay").classList.add("active");

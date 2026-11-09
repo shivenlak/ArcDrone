@@ -8,9 +8,13 @@ Spins up:
 """
 
 import argparse
+import collections
+import glob
+import json
 import math
 import os
 import random
+import subprocess
 import sys
 import threading
 import time
@@ -33,9 +37,26 @@ from scripts.uaarg_adapter.mission_monitor import MissionMonitor
 CLASSES = ["pedestrian", "car", "van", "truck", "bus", "motor"]
 
 
+def _load_visdrone_frames():
+    frames = []
+    clips_dir = os.path.join(_REPO_ROOT, "data", "clips")
+    for jf in sorted(glob.glob(os.path.join(clips_dir, "uav*.json"))):
+        try:
+            with open(jf, "r") as f:
+                data = json.load(f)
+            seq_id = data.get("id", os.path.basename(jf))
+            for fr in data.get("frames", [])[::10]:
+                if fr:
+                    frames.append((seq_id, fr))
+        except Exception:
+            pass
+    return frames
+
+
 def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threading.Event):
     event_logger = EventLogger(base_dir="tmp/log")
     mission_monitor = MissionMonitor()
+    visdrone_samples = _load_visdrone_frames()
 
     drone_state = {"mode": p.MODE_PATROL, "lat": 53.5232, "lon": -113.5263, "heading": 45.0}
 
@@ -85,13 +106,20 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
             drone_state["lat"] += (53.5232 - drone_state["lat"]) * 0.2
             drone_state["lon"] += (-113.5263 - drone_state["lon"]) * 0.2
 
-        # Generate a simulated detection
-        cls_idx = random.choice([0, 1, 1, 1, 2, 3])  # bias to cars & pedestrians
-        conf = round(random.uniform(0.75, 0.96), 2)
-        count = random.randint(1, 3)
+        if visdrone_samples:
+            seq_id, objs = visdrone_samples[(frame_idx - 1) % len(visdrone_samples)]
+            counts = collections.Counter(max(0, min(9, int(o.get("cls", 4)) - 1)) for o in objs)
+            cls_idx, count = counts.most_common(1)[0]
+            matching_confs = [float(o.get("conf", 0.88)) for o in objs if max(0, min(9, int(o.get("cls", 4)) - 1)) == cls_idx]
+            conf = round(max(matching_confs) if matching_confs else 0.88, 2)
+            count = min(255, count)
+        else:
+            cls_idx = random.choice([0, 3, 3, 4, 5, 9])
+            conf = round(random.uniform(0.78, 0.95), 2)
+            count = random.randint(1, 5)
 
-        alert_lat = drone_state["lat"] + random.uniform(-0.0003, 0.0003)
-        alert_lon = drone_state["lon"] + random.uniform(-0.0003, 0.0003)
+        alert_lat = drone_state["lat"] + random.uniform(-0.0002, 0.0002)
+        alert_lon = drone_state["lon"] + random.uniform(-0.0002, 0.0002)
 
         ts = p.now_ms()
         seq = drone_link.send(
@@ -105,7 +133,7 @@ def start_drone_node(drone_port: str, bridge: SimLinkBridge, stop_event: threadi
         )
 
         cls_name = p.CLASS_NAMES[cls_idx]
-        print(f"[DRONE TX] Alert #{seq}: {cls_name} (conf={conf}) at ({alert_lat:.4f}, {alert_lon:.4f})")
+        print(f"[DRONE TX] Alert #{seq}: {cls_name} x{count} (conf={conf}) at ({alert_lat:.4f}, {alert_lon:.4f})")
 
         # Log event with UAARG event logger
         event_logger.log_event(
@@ -169,12 +197,27 @@ def main():
     if not args.no_browser:
         threading.Thread(target=_open_browser, daemon=True).start()
 
+    relay = None
+    try:
+        urllib.request.urlopen("http://127.0.0.1:8080/reconstructor.html", timeout=0.4)
+        print("[+] Scene reconstructor already running on :8080")
+    except Exception:
+        print("[+] Starting scene reconstructor relay (http://127.0.0.1:8080/reconstructor.html)")
+        relay = subprocess.Popen(
+            [sys.executable, "-u", "-m", "drone_node.scene_ws_relay"],
+            cwd=_REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
     # 3. Start Ground Station Web Server
     app = make_app("sim://ground")
     try:
         uvicorn.run(app, host=args.host, port=args.http_port, log_level="warning")
     finally:
         stop_event.set()
+        if relay is not None and relay.poll() is None:
+            relay.terminate()
 
 
 if __name__ == "__main__":

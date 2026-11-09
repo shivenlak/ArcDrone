@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executes the ArcDrone 1:1 side-by-side test suite across all 6 test cases."""
+"""Executes the ArcDrone 1:1 side-by-side test suite across all 6 real VisDrone-VID/MOT test cases."""
 
 import os
 import sys
@@ -16,57 +16,69 @@ from scripts.ishan_side_by_side import run_pipeline
 TEST_CASES = [
     {
         "id": "case1",
-        "file": "case1_urban_intersection.mp4",
-        "title": "Case 1: Urban Intersection (Dense Cross-Traffic)",
+        "seq": "uav0000268_05773_v",
+        "file": "uav0000268_05773_v.mp4",
+        "title": "Case 1: VisDrone-VID/MOT uav0000268_05773_v (Highway Corridor & Cruisers)",
         "frames": 150,
     },
     {
         "id": "case2",
-        "file": "case2_dynamic_flight.mp4",
-        "title": "Case 2: Dynamic Flight (Active Yaw & Camera Drift)",
+        "seq": "uav0000086_00000_v",
+        "file": "uav0000086_00000_v.mp4",
+        "title": "Case 2: VisDrone-VID/MOT uav0000086_00000_v (Urban Pedestrian Plaza)",
         "frames": 150,
     },
     {
         "id": "case3",
-        "file": "case3_perimeter_airport.mp4",
-        "title": "Case 3: Perimeter Staging (Airfield Tarmac & Trucks)",
+        "seq": "uav0000182_00000_v",
+        "file": "uav0000182_00000_v.mp4",
+        "title": "Case 3: VisDrone-VID/MOT uav0000182_00000_v (Arterial Intersection & Motors)",
         "frames": 150,
     },
     {
         "id": "case4",
-        "file": "case4_high_altitude_sahi.mp4",
-        "title": "Case 4: High Altitude Roundabout (Multi-Class Circulation)",
+        "seq": "uav0000117_02622_v",
+        "file": "uav0000117_02622_v.mp4",
+        "title": "Case 4: VisDrone-VID/MOT uav0000117_02622_v (Mixed Urban Street & Crosswalk)",
         "frames": 150,
     },
     {
         "id": "case5",
-        "file": "case5_parking_staging.mp4",
-        "title": "Case 5: Checkpoint Queue (Compound Perimeter Inspection)",
+        "seq": "uav0000339_00001_v",
+        "file": "uav0000339_00001_v.mp4",
+        "title": "Case 5: VisDrone-VID/MOT uav0000339_00001_v (Dusk Avenue Multi-Lane Patrol)",
         "frames": 150,
     },
     {
         "id": "case6",
-        "file": "case6_aerial_traffic_1080p.mp4",
-        "title": "Case 6: Arterial Transit (Corridor Cruisers & Buses)",
+        "seq": "uav0000137_00458_v",
+        "file": "uav0000137_00458_v.mp4",
+        "title": "Case 6: VisDrone-VID/MOT uav0000137_00458_v (High-Density Multi-Class Junction)",
         "frames": 150,
     },
 ]
 
 
 def main() -> None:
+    clips_dir = os.path.join(_REPO_ROOT, "data", "clips")
     data_dir = os.path.join(_REPO_ROOT, "data", "test_cases")
+    os.makedirs(data_dir, exist_ok=True)
     model_path = os.path.join(_REPO_ROOT, "yolov8n-visdrone.pt")
+    if not os.path.isfile(model_path):
+        model_path = os.path.join(_REPO_ROOT, "yolov8n.pt")
     results = []
 
     print("=" * 80)
-    print("ARCDRONE TEST SUITE: EXECUTING 6 SIDE-BY-SIDE VIDEO BENCHMARKS")
+    print("ARCDRONE TEST SUITE: EXECUTING 6 REAL VISDRONE-VID/MOT SIDE-BY-SIDE BENCHMARKS")
     print("=" * 80)
 
     start_total = time.monotonic()
     for idx, tc in enumerate(TEST_CASES, 1):
-        in_path = os.path.join(data_dir, tc["file"])
-        out_mp4 = os.path.join(data_dir, f"{tc['id']}_side_by_side.mp4")
-        out_png = os.path.join(data_dir, f"{tc['id']}_side_by_side.png")
+        in_path = os.path.join(clips_dir, tc["file"])
+        if not os.path.isfile(in_path):
+            in_path = os.path.join(data_dir, tc["file"])
+        out_mp4 = os.path.join(data_dir, f"{tc['id']}_{tc['seq']}_side_by_side.mp4")
+        out_png = os.path.join(data_dir, f"{tc['id']}_{tc['seq']}_side_by_side.png")
 
         print(f"\n[{idx}/6] RUNNING BENCHMARK: {tc['title']}")
         print(f"      Input Video: {in_path}")
@@ -84,6 +96,7 @@ def main() -> None:
         )
         elapsed = time.monotonic() - t0
         metrics["case_id"] = tc["id"]
+        metrics["seq"] = tc["seq"]
         metrics["title"] = tc["title"]
         metrics["elapsed_sec"] = elapsed
         results.append(metrics)
@@ -96,7 +109,7 @@ def main() -> None:
         json.dump(results, f, indent=2)
 
     print("\n" + "=" * 80)
-    print("BENCHMARK EXECUTION SUMMARY (ALL 6 CASES COMPLETED)")
+    print("BENCHMARK EXECUTION SUMMARY (ALL 6 VISDRONE-VID/MOT CASES COMPLETED)")
     print("=" * 80)
     print(f"{'Case':<8} | {'Scenario Title':<40} | {'Indices':<8} | {'Pkts':<6} | {'Peak Rate':<10} | {'Time':<6}")
     print("-" * 80)

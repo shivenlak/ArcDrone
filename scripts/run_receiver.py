@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -118,6 +119,23 @@ def prompt_for_port(default_port: Optional[str] = None) -> Optional[str]:
     return user_input
 
 
+def start_scene_relay():
+    """Serve reconstructor.html on :8080 and UDP :9999 -> ws :8765. Skip if already up."""
+    try:
+        urllib.request.urlopen("http://127.0.0.1:8080/reconstructor.html", timeout=0.4)
+        print("[*] Scene reconstructor already running on :8080")
+        return None
+    except Exception:
+        pass
+    print("[*] Starting scene reconstructor relay (http://127.0.0.1:8080/reconstructor.html)...")
+    return subprocess.Popen(
+        [sys.executable, "-u", "-m", "drone_node.scene_ws_relay"],
+        cwd=_REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def open_browser_when_ready(url: str, timeout: float = 12.0) -> None:
     """Poll URL until server responds, then open default web browser."""
     deadline = time.time() + timeout
@@ -149,25 +167,35 @@ def main() -> None:
         return
 
     dashboard_url = f"http://localhost:{args.http_port}"
+    relay = start_scene_relay()
 
     if selected_port == "SIM":
         print("\n[*] Starting Live Simulation Showcase with virtual radio bridge...")
         from scripts.run_live_showcase import main as run_showcase
         if not args.no_browser:
             threading.Thread(target=open_browser_when_ready, args=(dashboard_url,), daemon=True).start()
-        run_showcase()
+        try:
+            run_showcase()
+        finally:
+            if relay is not None and relay.poll() is None:
+                relay.terminate()
         return
 
     print("\n" + "=" * 65)
     print(f"  ArcDrone Ground Station starting on {selected_port}")
     print(f"  Dashboard URL: {dashboard_url}")
+    print("  Reconstructor: http://127.0.0.1:8080/reconstructor.html")
     print("=" * 65 + "\n")
 
     if not args.no_browser:
         threading.Thread(target=open_browser_when_ready, args=(dashboard_url,), daemon=True).start()
 
-    app = make_app(selected_port)
-    uvicorn.run(app, host=args.host, port=args.http_port, log_level="info")
+    try:
+        app = make_app(selected_port)
+        uvicorn.run(app, host=args.host, port=args.http_port, log_level="info")
+    finally:
+        if relay is not None and relay.poll() is None:
+            relay.terminate()
 
 
 if __name__ == "__main__":

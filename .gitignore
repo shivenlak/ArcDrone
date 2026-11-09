@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
+tmp/
 .pytest_cache/
 
 # PlatformIO
@@ -11,6 +13,7 @@ __pycache__/
 # Data & model weights
 data/*
 !data/.gitkeep
+**/static/clips/*.mp4
 *.pt
 *.onnx
 *_ncnn_model/

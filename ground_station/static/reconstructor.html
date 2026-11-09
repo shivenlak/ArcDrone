@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARCDRONE TEST BENCH // VISDRONE-VID/MOT 1:1 RATIO VECTOR LINK</title>
+  <style>
+    :root {
+      --bg: #0a0e12;
+      --panel: #101418;
+      --header: #0c1014;
+      --line: #2a3340;
+      --gold: #ffc800;
+      --mint: #78ff96;
+      --cyan: #00dcec;
+      --text: #e8eef4;
+      --muted: #8a9aac;
+      --mono: "Courier New", Courier, ui-monospace, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      overflow: hidden;
+    }
+    .shell {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 68px 1fr 210px;
+    }
+    .topbar {
+      background: var(--header);
+      border-bottom: 1px solid #1e2833;
+      padding: 6px 14px 6px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 3px;
+    }
+    .topbar h1 {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--gold);
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .topbar .meta {
+      font-size: 11px;
+      color: var(--mint);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .clip-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+    .clip-bar button {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      background: #1a222c;
+      color: var(--text);
+      border: 1px solid #3a4654;
+      padding: 2px 7px;
+      cursor: pointer;
+    }
+    .clip-bar button:hover { border-color: var(--gold); }
+    .clip-bar button.on { background: var(--gold); color: #111; border-color: var(--gold); }
+    #clipVideo {
+      position: absolute;
+      inset: 28px 0 0 0;
+      width: 100%;
+      height: calc(100% - 28px);
+      object-fit: contain;
+      background: #05080b;
+      z-index: 1;
+      display: none;
+    }
+    #clipVideo.on { display: block; }
+    .stage {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .pane {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+      background: #05080b;
+    }
+    .pane:last-child { border-right: none; }
+    .pane-tag {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 28px;
+      background: rgba(16, 20, 26, 0.92);
+      color: var(--mint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      z-index: 3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pane canvas, .pane img {
+      position: absolute;
+      inset: 28px 0 0 0;
+      width: 100%;
+      height: calc(100% - 28px);
+      object-fit: contain;
+    }
+    #rightCanvas {
+      background: #05080b;
+    }
+    #rgbVideo {
+      z-index: 1;
+      display: none;
+      background: #05080b;
+    }
+    #rgbVideo.on { display: block; }
+    #leftCanvas {
+      z-index: 2;
+      background: transparent;
+    }
+    .manifest {
+      background: #0f1218;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .manifest-head {
+      height: 28px;
+      background: #181e28;
+      color: var(--cyan);
+      font-size: 11px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      letter-spacing: 0.03em;
+    }
+    .manifest-cols {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .mcol {
+      overflow: auto;
+      padding: 6px 10px 8px;
+      border-right: 1px solid #2a3544;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .mcol:last-child { border-right: none; }
+    .mhdr {
+      color: #aab6c4;
+      margin-bottom: 4px;
+      white-space: nowrap;
+    }
+    .mrow { white-space: nowrap; }
+    .mrow.fresh { color: #fff; background: #1c3024; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <h1 id="titleText">ARCDRONE TEST BENCH: VISDRONE-VID/MOT REAL TEST CASES (1:1 RATIO VECTOR LINK)</h1>
+      <div class="meta" id="metaLine">SPREAD-OUT LINK: 12.0 FPS | WIRE RATE: -- | ACTIVE INDICES: 0 | GPS: --</div>
+      <div class="clip-bar" id="clipBar"></div>
+    </header>
+    <div class="stage">
+      <section class="pane">
+        <div class="pane-tag" id="leftTag">DRONE RGB + VISDRONE-VID/MOT INDEXED BOXES</div>
+        <video id="clipVideo" muted loop autoplay playsinline></video>
+        <img id="rgbVideo" alt="drone optical" />
+        <canvas id="leftCanvas" width="960" height="540"></canvas>
+      </section>
+      <section class="pane">
+        <div class="pane-tag" id="rightTag">GROUND RECEIVER: NO RGB (1:1 RATIO BOXES + VECTORS)</div>
+        <canvas id="rightCanvas" width="960" height="540"></canvas>
+      </section>
+    </div>
+    <section class="manifest">
+      <div class="manifest-head">INDEXED OBJECT MANIFEST &amp; VECTOR UPDATES (KEYED BY #INDEX — VISDRONE-VID/MOT 16-BIT RATIO PRECISION, 12 FPS)</div>
+      <div class="manifest-cols">
+        <div class="mcol" id="colA"></div>
+        <div class="mcol" id="colB"></div>
+      </div>
+    </section>
+  </div>
+  <script>
+    const CLASS_MAP = {
+      1: { name: "pedestrian", color: "#00dcff" },
+      2: { name: "people", color: "#00b4ff" },
+      3: { name: "bicycle", color: "#78ff78" },
+      4: { name: "car", color: "#ffc800" },
+      5: { name: "van", color: "#dc78ff" },
+      6: { name: "truck", color: "#ff503c" },
+      7: { name: "tricycle", color: "#c88cff" },
+      8: { name: "awning-tricycle", color: "#ffdcb4" },
+      9: { name: "bus", color: "#ff8c00" },
+      10: { name: "motor", color: "#00ffa0" }
+    };
+    const LW = 960, LH = 540;
+    const isDemo = new URLSearchParams(location.search).has("demo");
+    const cameraUrl = "http://127.0.0.1:8081/video.mjpg";
+    const CLIPS = [
+      {
+        id: "uav0000268_05773_v",
+        caseLabel: "CASE 1",
+        label: "Case 1: VID/MOT 268 (Highway Corridor)",
+        title: "CASE 1: VISDRONE-VID/MOT uav0000268_05773_v — HIGHWAY CORRIDOR & CRUISERS"
+      },
+      {
+        id: "uav0000086_00000_v",
+        caseLabel: "CASE 2",
+        label: "Case 2: VID/MOT 086 (Urban Plaza)",
+        title: "CASE 2: VISDRONE-VID/MOT uav0000086_00000_v — URBAN PEDESTRIAN PLAZA"
+      },
+      {
+        id: "uav0000182_00000_v",
+        caseLabel: "CASE 3",
+        label: "Case 3: VID/MOT 182 (Arterial Motors)",
+        title: "CASE 3: VISDRONE-VID/MOT uav0000182_00000_v — ARTERIAL INTERSECTION & MOTORS"
+      },
+      {
+        id: "uav0000117_02622_v",
+        caseLabel: "CASE 4",
+        label: "Case 4: VID/MOT 117 (Urban Crosswalk)",
+        title: "CASE 4: VISDRONE-VID/MOT uav0000117_02622_v — MIXED URBAN STREET & CROSSWALK"
+      },
+      {
+        id: "uav0000339_00001_v",
+        caseLabel: "CASE 5",
+        label: "Case 5: VID/MOT 339 (Dusk Patrol)",
+        title: "CASE 5: VISDRONE-VID/MOT uav0000339_00001_v — DUSK AVENUE MULTI-LANE PATROL"
+      },
+      {
+        id: "uav0000137_00458_v",
+        caseLabel: "CASE 6",
+        label: "Case 6: VID/MOT 137 (Dense Junction)",
+        title: "CASE 6: VISDRONE-VID/MOT uav0000137_00458_v — HIGH-DENSITY MULTI-CLASS JUNCTION"
+      }
+    ];
+
+    const clipCache = new Map();
+    const state = {
+      seq: 0,
+      lat: 53.5234,
+      lon: -113.5260,
+      rx: 0,
+      bytes: 36,
+      lastTs: performance.now(),
+      history: [],
+      objects: [],
+      prev: new Map(),
+      wsLive: false,
+      hasRgb: false,
+      clipId: CLIPS[0].id,
+      clipCase: CLIPS[0].caseLabel,
+      clipTitle: CLIPS[0].title,
+      clipData: null,
+      simFrameIdx: 0
+    };
+
+    const left = document.getElementById("leftCanvas");
+    const right = document.getElementById("rightCanvas");
+    const lctx = left.getContext("2d");
+    const rctx = right.getContext("2d");
+    const rgb = document.getElementById("rgbVideo");
+    const clipVideo = document.getElementById("clipVideo");
+
+    function clsOf(obj) {
+      const id = obj.cls;
+      return CLASS_MAP[id] || CLASS_MAP[id + 1] || { name: obj.label || "car", color: "#ffc800" };
+    }
+
+    function compass(dx, dy) {
+      if (Math.hypot(dx, dy) < 0.35) return "STATIONARY";
+      const deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+      const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      return "MOVING " + dirs[Math.round(deg / 45) % 8];
+    }
+
+    function drawGrid(ctx, W, H) {
+      ctx.fillStyle = "#07090c";
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "rgba(255,200,0,0.12)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= W; x += W / 16) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      }
+      for (let y = 0; y <= H; y += H / 9) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      }
+    }
+
+    function drawBox(ctx, obj, sx, sy, filled) {
+      const info = clsOf(obj);
+      const [x1, y1, x2, y2] = obj.bbox;
+      const bx = x1 * sx, by = y1 * sy, bw = (x2 - x1) * sx, bh = (y2 - y1) * sy;
+      const cx = obj.center[0] * sx, cy = obj.center[1] * sy;
+      ctx.save();
+      if (filled) {
+        ctx.fillStyle = info.color + "33";
+        ctx.fillRect(bx, by, bw, bh);
+      }
+      ctx.strokeStyle = info.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, bw, bh);
+      const tag = "#" + obj.track_id;
+      ctx.font = "800 11px " + getComputedStyle(document.body).fontFamily;
+      const tw = ctx.measureText(tag).width + 8;
+      ctx.fillStyle = info.color;
+      ctx.fillRect(bx, Math.max(0, by - 14), tw, 14);
+      ctx.fillStyle = "#111";
+      ctx.fillText(tag, bx + 4, Math.max(10, by - 4));
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      const vx = (obj.vel && obj.vel[0]) || 0;
+      const vy = (obj.vel && obj.vel[1]) || 0;
+      if (Math.hypot(vx, vy) >= 0.35) {
+        ctx.strokeStyle = "#00ffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + vx * 6 * sx, cy + vy * 6 * sy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function ingestFrame(frame) {
+      const now = performance.now();
+      state.lastTs = now;
+      state.rx += 1;
+      state.seq = frame.seq;
+      state.lat = frame.lat;
+      state.lon = frame.lon;
+      state.bytes = frame.bytes || (12 + Math.min(12, (frame.objects || []).length) * 8);
+      state.history.push({ ts: now, bytes: state.bytes });
+      while (state.history.length && now - state.history[0].ts > 2000) state.history.shift();
+
+      const objs = (frame.objects || []).map(function (o) {
+        const [x1, y1, x2, y2] = o.bbox;
+        const prev = state.prev.get(o.track_id);
+        const cx = o.center[0], cy = o.center[1];
+        const vx = (o.vel && o.vel[0] !== undefined) ? o.vel[0] : (prev ? cx - prev.cx : 0);
+        const vy = (o.vel && o.vel[1] !== undefined) ? o.vel[1] : (prev ? cy - prev.cy : 0);
+        const srcW = 720, srcH = 540;
+        const scaled = {
+          track_id: o.track_id,
+          cls: o.cls,
+          label: (o.label || clsOf(o).name),
+          conf: o.conf,
+          bbox: [x1 / srcW * LW, y1 / srcH * LH, x2 / srcW * LW, y2 / srcH * LH],
+          center: [cx / srcW * LW, cy / srcH * LH],
+          vel: [vx, vy],
+          dx: vx / srcW,
+          dy: vy / srcH,
+          wr: (x2 - x1) / srcW,
+          hr: (y2 - y1) / srcH,
+          xr: cx / srcW,
+          yr: cy / srcH,
+          motion: compass(vx, vy),
+          fresh: true
+        };
+        state.prev.set(o.track_id, { cx: cx, cy: cy });
+        return scaled;
+      });
+      state.objects = objs;
+      render();
+    }
+
+    function render() {
+      const W = left.width, H = left.height;
+      const sx = 1, sy = 1;
+      lctx.clearRect(0, 0, W, H);
+      if (clipVideo.classList.contains("on") && clipVideo.readyState >= 2) {
+        try {
+          lctx.drawImage(clipVideo, 0, 0, W, H);
+        } catch (e) {}
+      } else if (!rgb.classList.contains("on")) {
+        drawGrid(lctx, W, H);
+      }
+      drawGrid(rctx, W, H);
+      for (const obj of state.objects) {
+        drawBox(lctx, obj, sx, sy, false);
+        drawBox(rctx, obj, sx, sy, true);
+      }
+
+      const now = performance.now();
+      const span = state.history.length > 1 ? Math.max(0.25, (now - state.history[0].ts) / 1000) : 1 / 12;
+      const totalB = state.history.reduce(function (s, p) { return s + p.bytes; }, 0);
+      const kbps = Math.min(2.85, (totalB / 1000) / span);
+      const hz = state.history.length / span;
+      const src = state.wsLive ? "LIVE UDP" : ("VISDRONE-VID/MOT " + state.clipCase);
+      document.getElementById("titleText").textContent =
+        "ARCDRONE TEST BENCH: " + state.clipTitle + " (1:1 RATIO VECTOR LINK)";
+      document.getElementById("metaLine").textContent =
+        "SPREAD-OUT LINK: " + hz.toFixed(1) + " FPS (" + state.rx + " pkts, " + state.bytes + " B/pkt) | WIRE RATE: " +
+        kbps.toFixed(2) + " kB/s (CAP <= 3.00 kB/s) | ACTIVE INDICES: " + state.objects.length +
+        " | GPS: (" + Number(state.lat).toFixed(4) + ", " + Number(state.lon).toFixed(4) + ") | SRC: " + src;
+      document.getElementById("leftTag").textContent =
+        "DRONE [" + src + "] RGB + VISDRONE-VID/MOT INDEXED BOXES  |  " + state.objects.length + " OBJECTS";
+      document.getElementById("rightTag").textContent =
+        "GROUND [" + state.clipCase + "] | NO RGB RATIO RECONSTRUCTOR | PKT #" + state.seq + " | " + state.objects.length + " INDICES";
+
+      const hdr = "INDEX  CLASS            CONF   POS RATIO (X%, Y%)     SIZE RATIO (W% x H%)    VEC DELTA (dX%, dY%)     MOTION";
+      const rows = state.objects.slice().sort(function (a, b) { return a.track_id - b.track_id; });
+      const mid = Math.ceil(rows.length / 2) || 1;
+      function colHtml(slice) {
+        return '<div class="mhdr">' + hdr + "</div>" + slice.map(function (o) {
+          const info = clsOf(o);
+          const line = "#" + String(o.track_id).padEnd(5) + " " +
+            info.name.toUpperCase().padEnd(16) + " " +
+            String(Math.round((o.conf <= 1 ? o.conf * 100 : o.conf))).padStart(3) + "%   " +
+            "(" + (o.xr * 100).toFixed(1) + "%, " + (o.yr * 100).toFixed(1) + "%)       " +
+            "(" + (o.wr * 100).toFixed(1) + "% x " + (o.hr * 100).toFixed(1) + "%)       " +
+            "(" + (o.dx * 100).toFixed(2) + "%, " + (o.dy * 100).toFixed(2) + "%)     " +
+            o.motion;
+          return '<div class="mrow" style="color:' + info.color + '">' + line.replace(/ /g, "&nbsp;") + "</div>";
+        }).join("");
+      }
+      document.getElementById("colA").innerHTML = colHtml(rows.slice(0, mid));
+      document.getElementById("colB").innerHTML = colHtml(rows.slice(mid));
+    }
+
+    function stepVisDroneClip() {
+      if (state.wsLive) return;
+      const data = state.clipData;
+      if (!data || !data.frames || !data.frames.length) return;
+
+      state.seq = (state.seq + 1) & 0xffff;
+      let fIdx = 0;
+      if (!clipVideo.paused && !isNaN(clipVideo.currentTime)) {
+        const fps = data.fps || 10.0;
+        fIdx = Math.floor(clipVideo.currentTime * fps) % data.frames.length;
+      } else {
+        state.simFrameIdx = (state.simFrameIdx + 1) % data.frames.length;
+        fIdx = state.simFrameIdx;
+      }
+
+      const objects = data.frames[fIdx] || [];
+      const baseLat = data.lat || 53.5234;
+      const baseLon = data.lon || -113.5260;
+      const drift = fIdx * 0.000004;
+      const spreadUpdates = Math.min(12, objects.length);
+      const pktBytes = objects.length === 0 ? 12 : (12 + spreadUpdates * 8);
+
+      ingestFrame({
+        seq: state.seq,
+        lat: baseLat + drift,
+        lon: baseLon + drift * 0.8,
+        count: objects.length,
+        bytes: pktBytes,
+        objects: objects
+      });
+    }
+
+    function connectWs() {
+      try {
+        const ws = new WebSocket("ws://127.0.0.1:8765");
+        ws.onmessage = function (ev) {
+          try {
+            const frame = JSON.parse(ev.data);
+            if (!state.wsLive) state.wsLive = true;
+            ingestFrame(frame);
+          } catch (e) {}
+        };
+        ws.onclose = function () {
+          state.wsLive = false;
+          setTimeout(connectWs, 2500);
+        };
+      } catch (e) {}
+    }
+
+    async function loadClip(seqId) {
+      const meta = CLIPS.find(function (c) { return c.id === seqId; }) || CLIPS[0];
+      state.clipId = meta.id;
+      state.clipCase = meta.caseLabel;
+      state.clipTitle = meta.title;
+      state.prev.clear();
+      state.simFrameIdx = 0;
+
+      const url = "/clips/" + meta.id + ".mp4";
+      clipVideo.src = url;
+      clipVideo.classList.add("on");
+      clipVideo.play().catch(function () {});
+      rgb.classList.remove("on");
+      state.hasRgb = true;
+
+      document.querySelectorAll("#clipBar button").forEach(function (b) {
+        b.classList.toggle("on", b.dataset.seq === meta.id);
+      });
+      document.getElementById("titleText").textContent =
+        "ARCDRONE TEST BENCH: " + meta.title + " (1:1 RATIO VECTOR LINK)";
+
+      if (clipCache.has(meta.id)) {
+        state.clipData = clipCache.get(meta.id);
+        stepVisDroneClip();
+        return;
+      }
+      try {
+        const res = await fetch("/clips/" + meta.id + ".json");
+        if (res.ok) {
+          const data = await res.json();
+          clipCache.set(meta.id, data);
+          if (state.clipId === meta.id) {
+            state.clipData = data;
+            stepVisDroneClip();
+          }
+        }
+      } catch (e) {}
+    }
+
+    (function buildClipBar() {
+      const bar = document.getElementById("clipBar");
+      CLIPS.forEach(function (c, i) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.seq = c.id;
+        b.textContent = "[" + (i + 1) + "] " + c.label;
+        b.onclick = function () { loadClip(c.id); };
+        bar.appendChild(b);
+      });
+    })();
+
+    rgb.onload = function () {
+      state.hasRgb = true;
+      rgb.classList.add("on");
+      clipVideo.classList.remove("on");
+    };
+    rgb.onerror = function () { rgb.classList.remove("on"); };
+    const qClip = new URLSearchParams(location.search).get("clip") || CLIPS[0].id;
+    loadClip(qClip);
+    if (!isDemo) rgb.src = cameraUrl;
+
+    if (!isDemo) connectWs();
+    setInterval(function () { if (!state.wsLive) stepVisDroneClip(); }, Math.round(1000 / 12));
+  </script>
+</body>
+</html>
